@@ -10,8 +10,8 @@ read_label_offsets(path)
 \item{path}{Path to a CSV with \code{label_id}, \code{region}, \code{dx_m}, and \code{dy_m}.}
 }
 \value{
-A data frame with normalized label offset columns.
+A normalized label state data frame.
 }
 \description{
-Read label offsets from CSV
+\code{read_label_offsets()} is retained as an alias for \code{\link[=read_label_state]{read_label_state()}}.
 }

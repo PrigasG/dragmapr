@@ -15,8 +15,12 @@ button + button { margin-left: 6px; }
 textarea { width: 100%; height: 28vh; margin-top: 8px; font: 12px/1.35 ui-monospace, Consolas, monospace; }
 h2 { font-size: 13px; margin: 16px 0 0; }
 .region path { stroke: white; stroke-width: 0.8; vector-effect: non-scaling-stroke; }
+.connector { fill: none; stroke: #334155; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.82; pointer-events: none; }
 .label circle { fill: white; stroke: #111827; stroke-width: 1.2; }
+.label circle.drag-hit { fill: transparent; stroke: transparent; }
+.label rect { fill: white; stroke: #111827; stroke-width: 1.1; filter: drop-shadow(0 2px 5px rgba(15, 23, 42, 0.16)); }
 .label text { font-size: 11px; font-weight: 800; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.label.box text { font-weight: 650; text-anchor: start; dominant-baseline: hanging; }
 </style>
 </head>
 <body>
@@ -32,24 +36,41 @@ h2 { font-size: 13px; margin: 16px 0 0; }
     <button id="reset">Reset</button>
     <h2>Region offsets</h2>
     <textarea id="region-csv" spellcheck="false"></textarea>
-    <h2>Label offsets</h2>
+    <h2 id="label-heading">Label offsets</h2>
     <textarea id="label-csv" spellcheck="false"></textarea>
   </aside>
 </main>
 <script>
-const geojsonText = __GEOJSON__;
-const geojson = JSON.parse(geojsonText);
-const labelRows = __LABELS__;
+const geojson = __GEOJSON__;
+let labelRows = __LABELS__;
+const initialRegionOffsets = __REGION_OFFSETS__;
+const initialLabelOffsets = __LABEL_OFFSETS__;
+const options = __OPTIONS__;
 const svg = d3.select("#map");
 const palette = ["#2166ac", "#d73027", "#1a9850", "#984ea3", "#ff7f00", "#a65628", "#f781bf", "#999999"];
 const regions = Array.from(new Set(geojson.features.map(d => String(d.properties.drag_region)))).sort();
 const regionOffsets = new Map(regions.map(d => [d, {dx_m: 0, dy_m: 0}]));
-const labelOffsets = new Map(labelRows.map(d => [String(d.label_id), {dx_m: 0, dy_m: 0}]));
+for (const row of initialRegionOffsets || []) {
+  const region = String(row.region);
+  if (regionOffsets.has(region)) {
+    regionOffsets.set(region, cleanOffset(row));
+  }
+}
+let labelOffsets = new Map(labelRows.map(d => [String(d.label_id), {dx_m: 0, dy_m: 0}]));
+for (const row of initialLabelOffsets || []) {
+  const labelId = String(row.label_id);
+  if (labelOffsets.has(labelId)) {
+    labelOffsets.set(labelId, cleanOffset(row));
+  }
+}
 const grouped = d3.group(geojson.features, d => String(d.properties.drag_region));
 const bounds = coordBounds(geojson);
 let projection, path, metricScale, root, labelLayer;
 
 function color(region) {
+  if (options.regionPalette && options.regionPalette[region]) {
+    return options.regionPalette[region];
+  }
   return palette[regions.indexOf(region) % palette.length];
 }
 
@@ -114,9 +135,42 @@ function csvCell(value) {
   return text;
 }
 
+function cleanOffset(row) {
+  const dx = Number(row.dx_m);
+  const dy = Number(row.dy_m);
+  return {
+    dx_m: Number.isFinite(dx) ? dx : 0,
+    dy_m: Number.isFinite(dy) ? dy : 0
+  };
+}
+
 function updateCsv() {
-  document.querySelector("#region-csv").value = regionCsv();
-  document.querySelector("#label-csv").value = labelCsv();
+  const regionText = regionCsv();
+  const labelText = labelCsv();
+  document.querySelector("#region-csv").value = regionText;
+  document.querySelector("#label-csv").value = labelText;
+  schedulePostState(regionText, labelText);
+}
+
+let postStateTimer = null;
+function schedulePostState(regionText = regionCsv(), labelText = labelCsv()) {
+  if (!window.parent || window.parent === window) return;
+  window.clearTimeout(postStateTimer);
+  postStateTimer = window.setTimeout(() => {
+    window.parent.postMessage({
+      type: "dragmapr-offsets",
+      regionCsv: regionText,
+      labelCsv: labelText
+    }, "*");
+  }, 150);
+}
+
+function syncLabelControls() {
+  const hidden = !options.labels;
+  document.querySelector("#copy-labels").hidden = hidden;
+  document.querySelector("#download-labels").hidden = hidden;
+  document.querySelector("#label-heading").hidden = hidden;
+  document.querySelector("#label-csv").hidden = hidden;
 }
 
 function offsetTransform(region) {
@@ -140,19 +194,56 @@ function render() {
     .attr("fill", d => color(String(d.properties.drag_region)))
     .attr("d", path);
 
+  const connectorLayer = svg.append("g");
+  connectorLayer.selectAll("path.connector")
+    .data(options.labels ? labelRows.filter(d => truthy(d.connector) && hasConnectorLength(d)) : [])
+    .join("path")
+    .attr("class", d => `connector ${connectorType(d)}`)
+    .style("stroke-width", d => `${positiveNumber(d.connector_linewidth, options.connectorLinewidth || 1.3)}px`)
+    .attr("d", connectorPath);
+
   labelLayer = svg.append("g");
   const labelGroups = labelLayer.selectAll("g.label")
-    .data(labelRows)
+    .data(options.labels ? labelRows : [])
     .join("g")
-    .attr("class", "label")
+    .attr("class", d => `label ${labelType(d)}`)
     .attr("transform", d => {
       const p = projection([d.x, d.y]);
       const regionOffset = regionOffsets.get(String(d.region)) || {dx_m: 0, dy_m: 0};
       const labelOffset = labelOffsets.get(String(d.label_id)) || {dx_m: 0, dy_m: 0};
       return `translate(${p[0] + (regionOffset.dx_m + labelOffset.dx_m) * metricScale},${p[1] - (regionOffset.dy_m + labelOffset.dy_m) * metricScale})`;
     });
-  labelGroups.append("circle").attr("r", 12);
-  labelGroups.append("text").text(d => d.label);
+  labelGroups.each(function(d) {
+    const group = d3.select(this);
+    if (labelType(d) === "box") {
+      const width = positiveNumber(d.width_px, options.labelBoxWidth);
+      const height = positiveNumber(d.height_px, options.labelBoxHeight);
+      group.append("rect")
+        .attr("x", -width / 2)
+        .attr("y", -height / 2)
+        .attr("width", width)
+        .attr("height", height)
+        .attr("rx", 6);
+      group.append("text")
+        .attr("fill", labelColor(d))
+        .attr("x", -width / 2 + 10)
+        .attr("y", -height / 2 + 9)
+        .style("font-size", `${options.labelTextSize}px`)
+        .call(wrapText, String(d.label), width - 20);
+    } else {
+      if (options.labelMarker) {
+        group.append("circle").attr("r", options.labelRadius);
+      } else {
+        group.append("circle")
+          .attr("class", "drag-hit")
+          .attr("r", Math.max(16, options.labelRadius));
+      }
+      group.append("text")
+        .attr("fill", labelColor(d))
+        .style("font-size", `${options.labelTextSize}px`)
+        .text(d.label);
+    }
+  });
 
   const regionDrag = d3.drag().on("drag", function(event, region) {
     const o = regionOffsets.get(region);
@@ -167,7 +258,9 @@ function render() {
     render();
   });
   groups.call(regionDrag);
-  labelGroups.call(labelDrag);
+  if (options.draggableLabels) {
+    labelGroups.call(labelDrag);
+  }
   updateCsv();
 }
 
@@ -181,6 +274,150 @@ function downloadCsv(text, filename) {
   URL.revokeObjectURL(url);
 }
 
+function labelPosition(label) {
+  const p = projection([label.x, label.y]);
+  const regionOffset = regionOffsets.get(String(label.region)) || {dx_m: 0, dy_m: 0};
+  const labelOffset = labelOffsets.get(String(label.label_id)) || {dx_m: 0, dy_m: 0};
+  return [
+    p[0] + (regionOffset.dx_m + labelOffset.dx_m) * metricScale,
+    p[1] - (regionOffset.dy_m + labelOffset.dy_m) * metricScale
+  ];
+}
+
+function anchorPosition(label) {
+  const startX = Number(label.connector_start_x);
+  const startY = Number(label.connector_start_y);
+  const p = Number.isFinite(startX) && Number.isFinite(startY) ?
+    projection([startX, startY]) :
+    projection([label.x, label.y]);
+  const regionOffset = regionOffsets.get(String(label.region)) || {dx_m: 0, dy_m: 0};
+  return [
+    p[0] + regionOffset.dx_m * metricScale,
+    p[1] - regionOffset.dy_m * metricScale
+  ];
+}
+
+function midpointPosition(label, start, end) {
+  if (Number.isFinite(Number(label.connector_mid_x)) && Number.isFinite(Number(label.connector_mid_y))) {
+    const p = projection([Number(label.connector_mid_x), Number(label.connector_mid_y)]);
+    const regionOffset = regionOffsets.get(String(label.region)) || {dx_m: 0, dy_m: 0};
+    return [
+      p[0] + regionOffset.dx_m * metricScale,
+      p[1] - regionOffset.dy_m * metricScale
+    ];
+  }
+  return [end[0], start[1]];
+}
+
+function connectorPath(label) {
+  const start = anchorPosition(label);
+  const end = connectorEndPosition(label, start);
+  if (connectorType(label) === "elbow") {
+    const mid = midpointPosition(label, start, end);
+    return `M${start[0]},${start[1]} L${mid[0]},${mid[1]} L${end[0]},${end[1]}`;
+  }
+  if (connectorType(label) === "curve") {
+    const mid = midpointPosition(label, start, end);
+    return `M${start[0]},${start[1]} Q${mid[0]},${mid[1]} ${end[0]},${end[1]}`;
+  }
+  if (connectorType(label) === "squiggle") {
+    return squigglePath(start, end, positiveNumber(label.connector_amplitude_px, 7), positiveNumber(label.connector_waves, 4));
+  }
+  return `M${start[0]},${start[1]} L${end[0]},${end[1]}`;
+}
+
+function squigglePath(start, end, amplitude, waves) {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.hypot(dx, dy);
+  if (length <= 0.001) return "";
+  const nx = -dy / length;
+  const ny = dx / length;
+  const points = [];
+  const n = 72;
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    const wiggle = Math.sin(t * waves * 2 * Math.PI) * amplitude * Math.sin(t * Math.PI);
+    points.push([
+      start[0] + dx * t + nx * wiggle,
+      start[1] + dy * t + ny * wiggle
+    ]);
+  }
+  return points.map((p, i) => `${i === 0 ? "M" : "L"}${p[0]},${p[1]}`).join(" ");
+}
+
+function hasConnectorLength(label) {
+  const start = anchorPosition(label);
+  const end = connectorEndPosition(label, start);
+  return Math.abs(start[0] - end[0]) > 0.001 || Math.abs(start[1] - end[1]) > 0.001;
+}
+
+function connectorEndPosition(label, start) {
+  const center = labelPosition(label);
+  const dx = start[0] - center[0];
+  const dy = start[1] - center[1];
+  const distance = Math.hypot(dx, dy);
+  if (distance <= 0.001) return center;
+  if (labelType(label) === "box") {
+    const halfWidth = positiveNumber(label.width_px, options.labelBoxWidth) / 2 + 3;
+    const halfHeight = positiveNumber(label.height_px, options.labelBoxHeight) / 2 + 3;
+    const tx = Math.abs(dx) > 0.001 ? halfWidth / Math.abs(dx) : Infinity;
+    const ty = Math.abs(dy) > 0.001 ? halfHeight / Math.abs(dy) : Infinity;
+    const t = Math.min(tx, ty);
+    return [center[0] + dx * t, center[1] + dy * t];
+  }
+  const radius = options.labelMarker ? positiveNumber(options.labelRadius, 12) + 3 : 8;
+  return [center[0] + dx / distance * radius, center[1] + dy / distance * radius];
+}
+
+function labelType(label) {
+  return String(label.label_type || "label").toLowerCase() === "box" ? "box" : "label";
+}
+
+function connectorType(label) {
+  const type = String(label.connector_type || "straight").toLowerCase();
+  return ["straight", "elbow", "curve", "squiggle"].includes(type) ? type : "straight";
+}
+
+function labelColor(label) {
+  const color = String(label.label_color || "#111827");
+  return /^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/.test(color) ? color : "#111827";
+}
+
+function truthy(value) {
+  if (typeof value === "boolean") return value;
+  return ["true", "t", "1", "yes", "y"].includes(String(value).toLowerCase());
+}
+
+function positiveNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function wrapText(selection, text, width) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const fontSize = Number.parseFloat(selection.style("font-size")) || 11;
+  const maxChars = Math.max(8, Math.floor(width / (fontSize * 0.58)));
+  const lines = [];
+  let line = "";
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length > maxChars && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  for (const [i, lineText] of lines.entries()) {
+    selection.append("tspan")
+      .attr("x", selection.attr("x"))
+      .attr("dy", i === 0 ? 0 : "1.18em")
+      .text(lineText);
+  }
+}
+
 document.querySelector("#copy-regions").addEventListener("click", () => navigator.clipboard.writeText(regionCsv()));
 document.querySelector("#download-regions").addEventListener("click", () => downloadCsv(regionCsv(), "drag_region_offsets.csv"));
 document.querySelector("#copy-labels").addEventListener("click", () => navigator.clipboard.writeText(labelCsv()));
@@ -191,6 +428,35 @@ document.querySelector("#reset").addEventListener("click", () => {
   render();
 });
 window.addEventListener("resize", render);
+window.addEventListener("message", function(event) {
+  if (event.data && event.data.type === "dragmapr-request-state") {
+    schedulePostState();
+  }
+  if (event.data && event.data.type === "dragmapr-set-labels") {
+    options.labels = !!event.data.labels;
+    syncLabelControls();
+    render();
+  }
+  if (event.data && event.data.type === "dragmapr-set-label-data") {
+    const previous = labelOffsets;
+    labelRows = event.data.labels || [];
+    labelOffsets = new Map(labelRows.map(d => [
+      String(d.label_id),
+      previous.get(String(d.label_id)) || {dx_m: 0, dy_m: 0}
+    ]));
+    render();
+  }
+  if (event.data && event.data.type === "dragmapr-set-label-options") {
+    Object.assign(options, event.data.options || {});
+    render();
+  }
+  if (event.data && event.data.type === "dragmapr-reset-state") {
+    for (const r of regions) regionOffsets.set(r, {dx_m: 0, dy_m: 0});
+    for (const label of labelRows) labelOffsets.set(String(label.label_id), {dx_m: 0, dy_m: 0});
+    render();
+  }
+});
+syncLabelControls();
 render();
 </script>
 </body>

@@ -1,0 +1,176 @@
+---
+title: "Shiny workflows"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Shiny workflows}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+`dragmapr` is useful in Shiny when the draggable plot is the interface itself.
+Users can move regions, panels, or labels directly instead of typing numeric
+offsets.
+
+## Embed A Draggable Plot
+
+The simplest Shiny pattern is to write a helper HTML file into a Shiny resource
+directory and show it in an iframe.
+
+```{r, eval = FALSE}
+shiny::runApp(system.file("examples", "shiny_draggable_plot.R", package = "dragmapr"))
+```
+
+This is useful when the app only needs to let users explore or compose a layout.
+
+## Custom Labels
+
+Apps can provide their own label table instead of using one label per region.
+This is useful for annotations, review notes, callouts, or workflow-specific
+metadata. Labels can be ordinary text labels, text-only draggable labels, or
+annotation boxes created with `as_drag_annotations()`.
+
+```{r, eval = FALSE}
+shiny::runApp(system.file("examples", "shiny_custom_labels.R", package = "dragmapr"))
+```
+
+The user-supplied label table is created with `as_drag_labels()` and can carry
+extra columns for app-specific behavior. Connector columns such as `connector`,
+`connector_type`, `connector_start_x`, and `connector_mid_x` are also preserved,
+so apps can let users choose straight, elbow, curved, or squiggle leader lines.
+
+## Export A Report Image
+
+Some apps need a static image after the user has finished dragging. The helper
+posts offset state to its Shiny parent window. The Shiny app can then render a
+preview and expose a PNG download.
+
+```{r, eval = FALSE}
+shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
+```
+
+This pattern is useful for report builders, document workflows, or review apps
+where the interactive layout is the editing surface and the exported PNG is the
+deliverable.
+
+The bundled `shiny_draggable_export.R` app intentionally has many controls
+because it acts as a smoke test for the package surface:
+
+- show or hide labels;
+- switch between short labels and info boxes;
+- show text labels with or without circular markers;
+- change info-box width and height;
+- show connector lines;
+- choose straight, elbow, curve, or squiggle connectors;
+- adjust connector thickness;
+- show or hide the region legend;
+- download a static PNG reconstructed from the current region and label offset
+  state.
+
+The important design point is that the Shiny app does not hold magic layout
+state. The parent app receives the same region and label offset tables that a
+non-Shiny workflow can copy or download from the helper.
+
+## Static Only
+
+If offsets have already been saved, an app can skip the draggable helper and
+only provide static preview/export.
+
+```{r, eval = FALSE}
+shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragmapr"))
+```
+
+## Spatial Studio
+
+`shiny_spatial_studio.R` is the most complete Shiny example. It is a small
+spatial workspace rather than a fixed demo: users upload local polygon data or
+enter a URL, pick grouping and label columns, edit colors, drag boundaries,
+switch between labels and info boxes, add connector lines, preview a static
+render, and download the current artifacts.
+
+```{r, eval = FALSE}
+shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
+```
+
+Supported inputs: zipped shapefiles, shapefile sidecar files (`.shp` + `.dbf` +
+`.shx`), GeoJSON, and GeoPackage — either uploaded locally or downloaded from
+a URL.  The app reads geometry with `sf::st_read()`, repairs it with
+`sf::st_make_valid()`, and transforms longitude/latitude data to EPSG:3857 so
+metre offsets work correctly.
+
+Available downloads from the studio sidebar:
+
+- **PNG** — static render from `render_dragged_map()`
+- **Region CSV** — current region offsets, importable by any later session
+- **Label CSV** — current label offsets
+- **GeoJSON / GPKG** — the adjusted sf geometry with offsets applied
+- **HTML helper** — the standalone D3 drag file you can share or reopen
+- **Bundle ZIP** — all of the above plus `palette.csv` and `metadata.json`;
+  enough to fully reconstruct the layout in a new session or hand off to a
+  collaborator
+
+The app names its central reactive values in the State tab so they are easy to
+find when adapting the code:
+
+- `source_sf()` — raw sf from upload / URL / demo
+- `projected_sf()` — after `prepare_dragmapr_sf()`
+- `region_col()`, `label_col()` — chosen columns
+- `label_table()` — `make_region_labels()` output with style flags
+- `region_state()`, `label_state()` — current drag offsets as data frames
+- `region_palette()` — named color vector
+- `current_plot()` — `ggplot2` object ready to save
+
+## Reusable Shiny Helpers
+
+The spatial studio internally uses four package-level helpers that are also
+available directly for custom apps.
+
+**`read_dragmapr_sf_upload(upload)`** wraps a [shiny::fileInput()] result —
+including multi-file shapefile sidecar uploads and zip archives — into a single
+`sf::st_read()` call.  Returns `NULL` when the upload is empty so callers can
+fall back to demo data.
+
+**`read_dragmapr_sf_url(url, timeout = 60)`** downloads a spatial file from a
+URL into a temporary directory, unpacks zip archives, and returns an `sf`
+object.  Raises a descriptive error on network or format failures.
+
+**`prepare_dragmapr_sf(x, target_crs = 3857)`** repairs invalid geometry, keeps
+only polygon types, assigns a fallback CRS when none is present, and reprojects
+geographic data to the target projected CRS so metre offsets are meaningful.
+
+**`dragmapr_iframe_bridge(...)`** returns a JavaScript string that installs the
+`postMessage` listener and polling loop needed to relay drag state from the
+helper iframe back to Shiny inputs.  Wrap it in `tags$head(tags$script(HTML(
+dragmapr_iframe_bridge())))` in your UI.  The function accepts `region_input`,
+`label_input`, `slow_poll_ms`, and `fast_poll_ms` arguments to customise the
+input names and timing.
+
+```{r, eval = FALSE}
+library(shiny)
+library(dragmapr)
+
+ui <- fluidPage(
+  tags$head(tags$script(HTML(dragmapr_iframe_bridge()))),
+  uiOutput("helper")
+)
+
+server <- function(input, output, session) {
+  helper_dir <- tempfile("myapp_")
+  dir.create(helper_dir)
+  shiny::addResourcePath("myapp_static", helper_dir)
+
+  x <- prepare_dragmapr_sf(my_sf)
+  drag_map_prototype(x, region_col = "region",
+                     file = file.path(helper_dir, "helper.html"))
+
+  output$helper <- renderUI(
+    tags$iframe(src = "myapp_static/helper.html",
+                style = "width:100%;height:700px;border:none;")
+  )
+}
+
+shinyApp(ui, server)
+```

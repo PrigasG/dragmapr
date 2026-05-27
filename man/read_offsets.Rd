@@ -15,3 +15,8 @@ A data frame with normalized \code{region}, \code{dx_m}, and \code{dy_m} columns
 \description{
 Read region offsets from CSV
 }
+\examples{
+path <- tempfile(fileext = ".csv")
+writeLines(c("region,dx_m,dy_m", "North,1000,-500", "South,0,0"), path)
+read_offsets(path)
+}

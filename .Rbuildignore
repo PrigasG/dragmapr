@@ -3,3 +3,7 @@
 ^_pkgdown\.yml$
 ^\.github$
 ^docs$
+^doc$
+^Meta$
+^deploy\.R$
+^rsconnect$

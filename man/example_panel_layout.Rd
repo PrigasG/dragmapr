@@ -15,3 +15,7 @@ This creates simple projected rectangles that behave like plot panels,
 dashboard tiles, or diagram cards. It is useful for checking that dragmapr's
 offset workflow is not tied to administrative map boundaries.
 }
+\examples{
+panels <- example_panel_layout()
+names(panels)
+}

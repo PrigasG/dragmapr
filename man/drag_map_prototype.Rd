@@ -2,13 +2,25 @@
 % Please edit documentation in R/prototype.R
 \name{drag_map_prototype}
 \alias{drag_map_prototype}
-\title{Write a draggable map prototype HTML file}
+\title{Write a draggable plot prototype HTML file}
 \usage{
 drag_map_prototype(
   x,
   region_col,
   label_col = region_col,
-  file = "drag-map.html"
+  labels = TRUE,
+  draggable_labels = TRUE,
+  label_marker = TRUE,
+  label_radius = 12,
+  label_text_size = 11,
+  label_box_width = 150,
+  label_box_height = 72,
+  connector_linewidth = 1.3,
+  region_offsets = NULL,
+  label_offsets = NULL,
+  region_palette = NULL,
+  file = "drag-map.html",
+  open = FALSE
 )
 }
 \arguments{
@@ -16,13 +28,67 @@ drag_map_prototype(
 
 \item{region_col}{Column defining draggable groups.}
 
-\item{label_col}{Column used for label text. Defaults to \code{region_col}.}
+\item{label_col}{Column used for default region-label text. Defaults to
+\code{region_col}.}
+
+\item{labels}{Show draggable labels. Use \code{TRUE} to derive one label per
+region, \code{FALSE} to omit labels, or a data frame accepted by
+\code{\link[=as_drag_labels]{as_drag_labels()}} for user-supplied labels.}
+
+\item{draggable_labels}{Allow labels to be dragged independently of regions.}
+
+\item{label_marker}{Draw circular markers behind labels.}
+
+\item{label_radius}{Label marker radius in screen pixels.}
+
+\item{label_text_size}{Label text size in screen pixels.}
+
+\item{label_box_width, label_box_height}{Default browser dimensions for
+draggable annotation boxes.}
+
+\item{connector_linewidth}{Browser connector line width in pixels.}
+
+\item{region_offsets}{Optional data frame with \code{region}, \code{dx_m}, and \code{dy_m}
+columns used to initialize region positions in the browser helper.}
+
+\item{label_offsets}{Optional data frame with \code{label_id}, \code{region}, \code{dx_m},
+and \code{dy_m} columns used to initialize label positions in the browser
+helper.}
+
+\item{region_palette}{Optional named character vector mapping region values
+to hex color strings (e.g. \code{c(North = "#2166ac", South = "#d73027")}).
+When supplied the D3 helper uses these colors instead of its built-in
+palette, so the interactive colors match a \code{\link[=render_dragged_map]{render_dragged_map()}} call
+that uses the same palette.}
 
 \item{file}{Output HTML path.}
+
+\item{open}{Open the written file in the default browser via
+\code{\link[utils:browseURL]{utils::browseURL()}}. Defaults to \code{FALSE}.}
 }
 \value{
 Invisibly returns \code{file}.
 }
 \description{
-Write a draggable map prototype HTML file
+Write a draggable plot prototype HTML file
+}
+\examples{
+poly <- sf::st_sf(
+  region = c("A", "B"),
+  geometry = sf::st_sfc(
+    sf::st_polygon(list(rbind(c(0,1e5),c(1e5,1e5),c(1e5,2e5),c(0,2e5),c(0,1e5)))),
+    sf::st_polygon(list(rbind(c(0,0),c(1e5,0),c(1e5,1e5),c(0,1e5),c(0,0)))),
+    crs = 3857
+  )
+)
+
+# Primary usage: open the interactive draggable plot in the browser.
+# Drag regions and labels, then copy or download the offset CSVs.
+\dontrun{
+drag_map_prototype(poly, region_col = "region", open = TRUE)
+}
+
+# Write to a specific path without opening (e.g. for Shiny or CI).
+drag_map_prototype(poly, region_col = "region",
+                  file = tempfile(fileext = ".html"))
 }
