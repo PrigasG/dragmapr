@@ -19,3 +19,12 @@ An \code{sf} object with geometries translated by group.
 \description{
 Apply rigid offsets to grouped sf geometries
 }
+\examples{
+regions <- sf::st_sf(
+  region = c("A", "B"),
+  geometry = sf::st_sfc(sf::st_point(c(0, 0)), sf::st_point(c(100, 100)),
+                        crs = 3857)
+)
+offsets <- data.frame(region = "A", dx_m = 5000, dy_m = -2000)
+apply_offsets(regions, offsets, region_col = "region")
+}

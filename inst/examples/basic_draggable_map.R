@@ -1,4 +1,9 @@
 # Minimal synthetic map example.
+#
+# Primary step: open the draggable browser helper and drag regions/labels until
+# the layout looks right, then copy or download the offset CSVs.
+# open = interactive() opens the browser in an interactive R session and is a
+# no-op when sourced non-interactively (e.g. from smoke_examples.R).
 
 library(dragmapr)
 
@@ -24,7 +29,8 @@ regions <- sf::st_sf(
   )
 )
 
-drag_map_prototype(regions, region_col = "region", label_col = "label", file = "basic_drag_helper.html")
+drag_map_prototype(regions, region_col = "region", label_col = "label",
+                   file = "basic_drag_helper.html", open = interactive())
 
 region_offsets <- data.frame(
   region = c("North", "South", "East", "West"),

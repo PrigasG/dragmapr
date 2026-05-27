@@ -2,7 +2,7 @@
 % Please edit documentation in R/render.R
 \name{render_dragged_map}
 \alias{render_dragged_map}
-\title{Render an adjusted map with draggable-style labels}
+\title{Render an adjusted draggable plot with labels}
 \usage{
 render_dragged_map(
   x,
@@ -14,7 +14,27 @@ render_dragged_map(
   region_palette = NULL,
   region_labels = NULL,
   show_legend = TRUE,
+  max_legend_keys = 25L,
+  legend_position = c("bottom", "top", "left", "right", "none"),
   title = NULL,
+  label_size = 3.4,
+  show_label_marker = TRUE,
+  marker_size = 3.2,
+  marker_fill = "white",
+  marker_color = "black",
+  marker_stroke = 0.8,
+  box_label_size = 3,
+  box_fill = "white",
+  box_color = "black",
+  box_wrap = 24,
+  connector_color = "#334155",
+  connector_linewidth = 0.35,
+  connector_linetype = "solid",
+  connector_curvature = 0.18,
+  connector_squiggle_amplitude = 12000,
+  connector_squiggle_waves = 4,
+  connector_end_gap = NULL,
+  label_padding = 0.08,
   file = NULL,
   width = 8,
   height = 6,
@@ -28,19 +48,67 @@ render_dragged_map(
 
 \item{region_col}{Column defining draggable groups.}
 
-\item{label_col}{Column used for label text. Defaults to \code{region_col}.}
+\item{label_col}{Column used for default region-label text. Defaults to
+\code{region_col}.}
 
-\item{label_offsets}{Label offsets as a data frame, CSV path, or \code{NULL}.}
+\item{label_offsets}{Label state as a data frame, CSV path, or \code{NULL}.}
 
-\item{labels}{Optional label table from \code{make_labels()}.}
+\item{labels}{Optional label table from \code{make_region_labels()} or
+\code{as_drag_labels()}. Use \code{FALSE} to omit labels from the static render.}
 
 \item{region_palette}{Optional named vector of fill colors keyed by region.}
 
 \item{region_labels}{Optional named vector of legend labels keyed by region.}
 
-\item{show_legend}{Show the region fill legend.}
+\item{show_legend}{Show the region fill legend.  When the number of distinct
+regions exceeds \code{max_legend_keys}, the legend is suppressed regardless of
+this setting (with an informational message).}
+
+\item{max_legend_keys}{Maximum number of legend keys before the legend is
+automatically hidden.  Defaults to \code{25}.  Set \code{Inf} to always show.}
+
+\item{legend_position}{Position of the fill legend in static exports.
+One of \code{"bottom"}, \code{"top"}, \code{"left"}, \code{"right"}, or \code{"none"}.}
 
 \item{title}{Optional plot title.}
+
+\item{label_size}{Text size passed to \code{\link[ggplot2:geom_text]{ggplot2::geom_text()}}. Defaults to
+\code{3.4}.}
+
+\item{show_label_marker}{Draw circular markers behind ordinary text labels.
+Use \code{FALSE} for text-only labels.}
+
+\item{marker_size}{Point size passed to \code{\link[ggplot2:geom_point]{ggplot2::geom_point()}}. Defaults to
+\code{3.2}.}
+
+\item{marker_fill}{Fill colour of the label marker circle. Defaults to
+\code{"white"}.}
+
+\item{marker_color}{Stroke colour of the label marker circle. Defaults to
+\code{"black"}.}
+
+\item{marker_stroke}{Stroke width of the label marker circle. Defaults to
+\code{0.8}.}
+
+\item{box_label_size}{Text size for annotation boxes. Defaults to \code{3}.}
+
+\item{box_fill, box_color}{Fill and border colours for annotation boxes.}
+
+\item{box_wrap}{Approximate character width used to wrap annotation-box text.}
+
+\item{connector_color, connector_linewidth, connector_linetype}{Static export
+styling for label connector lines.}
+
+\item{connector_curvature}{Curvature used by \code{"curve"} connectors.}
+
+\item{connector_squiggle_amplitude, connector_squiggle_waves}{Appearance of
+\code{"squiggle"} connectors in static exports.}
+
+\item{connector_end_gap}{Distance, in plot units, to trim connector endpoints
+away from label centers. Defaults to an automatic value based on plot size.}
+
+\item{label_padding}{Proportional padding added around displaced labels and
+connectors to avoid clipping static exports.}
 
 \item{file}{Optional output image path. When supplied, \code{ggplot2::ggsave()}
 saves the plot.}
@@ -51,5 +119,32 @@ saves the plot.}
 A \code{ggplot} object.
 }
 \description{
-Render an adjusted map with draggable-style labels
+Render an adjusted draggable plot with labels
+}
+\examples{
+# render_dragged_map() is an optional static-export step.
+# The primary workflow is drag_map_prototype(open = TRUE): open the
+# interactive HTML, drag regions and labels to your liking, then
+# copy or download the offset CSVs.  Only call render_dragged_map()
+# if you also need a reproducible ggplot2 image from those offsets.
+\dontrun{
+# Step 1 (always): open the interactive draggable plot.
+drag_map_prototype(poly, region_col = "region", open = TRUE)
+
+# Step 2 (optional): after dragging, reconstruct as a static image.
+region_offsets <- read_offsets("my_region_offsets.csv")
+render_dragged_map(poly, region_col = "region",
+                  region_offsets = region_offsets)
+}
+
+# Minimal runnable example (no prior dragging session needed).
+poly <- sf::st_sf(
+  region = c("A", "B"),
+  geometry = sf::st_sfc(
+    sf::st_polygon(list(rbind(c(0,1e5),c(1e5,1e5),c(1e5,2e5),c(0,2e5),c(0,1e5)))),
+    sf::st_polygon(list(rbind(c(0,0),c(1e5,0),c(1e5,1e5),c(0,1e5),c(0,0)))),
+    crs = 3857
+  )
+)
+render_dragged_map(poly, region_col = "region")
 }

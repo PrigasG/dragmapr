@@ -7,14 +7,14 @@
 apply_label_offsets(labels, label_offsets = NULL)
 }
 \arguments{
-\item{labels}{A data frame from \code{make_labels()}.}
+\item{labels}{A data frame from \code{make_region_labels()} or \code{as_drag_labels()}.}
 
 \item{label_offsets}{A data frame with \code{label_id}, \code{region}, \code{dx_m}, and
-\code{dy_m}, or a CSV path. \code{NULL} leaves labels unchanged.}
+\code{dy_m}, a CSV path, or \code{NULL}.}
 }
 \value{
 A label data frame with adjusted \code{x} and \code{y}.
 }
 \description{
-Apply label-specific offsets to a label table
+\code{apply_label_offsets()} is retained as an alias for \code{\link[=apply_label_state]{apply_label_state()}}.
 }

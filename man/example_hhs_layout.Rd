@@ -15,3 +15,7 @@ This copies the HHS region membership, names, colors, and published display
 offsets used by the explodemap paper workflow into a lightweight fixture that
 does not depend on the explodemap package or its generated paper outputs.
 }
+\examples{
+hhs <- example_hhs_layout()
+names(hhs)
+}
