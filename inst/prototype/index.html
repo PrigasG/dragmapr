@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dragmapr prototype</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<style>
+body { margin: 0; font-family: system-ui, sans-serif; color: #172033; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: 100vh; }
+svg { width: 100%; height: 100vh; display: block; background: #fbfcfe; cursor: grab; }
+aside { border-left: 1px solid #d8dee8; padding: 16px; }
+button { min-height: 34px; border: 1px solid #d8dee8; background: #f7f8fb; border-radius: 6px; }
+button + button { margin-left: 6px; }
+textarea { width: 100%; height: 28vh; margin-top: 8px; font: 12px/1.35 ui-monospace, Consolas, monospace; }
+h2 { font-size: 13px; margin: 16px 0 0; }
+.region path { stroke: white; stroke-width: 0.8; vector-effect: non-scaling-stroke; }
+.label circle { fill: white; stroke: #111827; stroke-width: 1.2; }
+.label text { font-size: 11px; font-weight: 800; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+</style>
+</head>
+<body>
+<main>
+  <svg id="map"></svg>
+  <aside>
+    <h1>dragmapr</h1>
+    <p>Drag grouped map regions and labels, then export offsets.</p>
+    <button id="copy-regions">Copy Regions</button>
+    <button id="download-regions">Download Regions</button>
+    <button id="copy-labels">Copy Labels</button>
+    <button id="download-labels">Download Labels</button>
+    <button id="reset">Reset</button>
+    <h2>Region offsets</h2>
+    <textarea id="region-csv" spellcheck="false"></textarea>
+    <h2>Label offsets</h2>
+    <textarea id="label-csv" spellcheck="false"></textarea>
+  </aside>
+</main>
+<script>
+const geojsonText = __GEOJSON__;
+const geojson = JSON.parse(geojsonText);
+const labelRows = __LABELS__;
+const svg = d3.select("#map");
+const palette = ["#2166ac", "#d73027", "#1a9850", "#984ea3", "#ff7f00", "#a65628", "#f781bf", "#999999"];
+const regions = Array.from(new Set(geojson.features.map(d => String(d.properties.drag_region)))).sort();
+const regionOffsets = new Map(regions.map(d => [d, {dx_m: 0, dy_m: 0}]));
+const labelOffsets = new Map(labelRows.map(d => [String(d.label_id), {dx_m: 0, dy_m: 0}]));
+const grouped = d3.group(geojson.features, d => String(d.properties.drag_region));
+const bounds = coordBounds(geojson);
+let projection, path, metricScale, root, labelLayer;
+
+function color(region) {
+  return palette[regions.indexOf(region) % palette.length];
+}
+
+function walkCoords(coords, fn) {
+  if (typeof coords[0] === "number") {
+    fn(coords);
+    return;
+  }
+  for (const child of coords) walkCoords(child, fn);
+}
+
+function coordBounds(collection) {
+  let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
+  for (const feature of collection.features) {
+    walkCoords(feature.geometry.coordinates, ([x, y]) => {
+      xmin = Math.min(xmin, x);
+      xmax = Math.max(xmax, x);
+      ymin = Math.min(ymin, y);
+      ymax = Math.max(ymax, y);
+    });
+  }
+  return { xmin, ymin, xmax, ymax };
+}
+
+function fit() {
+  const node = svg.node();
+  const width = node.clientWidth || 900;
+  const height = node.clientHeight || 650;
+  const pad = 24;
+  const sx = (width - pad * 2) / (bounds.xmax - bounds.xmin);
+  const sy = (height - pad * 2) / (bounds.ymax - bounds.ymin);
+  metricScale = Math.min(sx, sy);
+  const tx = pad + (width - pad * 2 - (bounds.xmax - bounds.xmin) * metricScale) / 2 - bounds.xmin * metricScale;
+  const ty = pad + (height - pad * 2 + (bounds.ymax - bounds.ymin) * metricScale) / 2 + bounds.ymin * metricScale;
+  projection = d3.geoIdentity().reflectY(true).scale(metricScale).translate([tx, ty]);
+  path = d3.geoPath(projection);
+}
+
+function regionCsv() {
+  const lines = ["region,dx_m,dy_m"];
+  for (const region of regions) {
+    const o = regionOffsets.get(region);
+    lines.push([region, Math.round(o.dx_m), Math.round(o.dy_m)].map(csvCell).join(","));
+  }
+  return lines.join("\n");
+}
+
+function labelCsv() {
+  const lines = ["label_id,region,dx_m,dy_m"];
+  for (const label of labelRows) {
+    const o = labelOffsets.get(String(label.label_id));
+    lines.push([label.label_id, label.region, Math.round(o.dx_m), Math.round(o.dy_m)].map(csvCell).join(","));
+  }
+  return lines.join("\n");
+}
+
+function csvCell(value) {
+  const text = String(value);
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+  return text;
+}
+
+function updateCsv() {
+  document.querySelector("#region-csv").value = regionCsv();
+  document.querySelector("#label-csv").value = labelCsv();
+}
+
+function offsetTransform(region) {
+  const o = regionOffsets.get(region);
+  return `translate(${o.dx_m * metricScale},${-o.dy_m * metricScale})`;
+}
+
+function render() {
+  fit();
+  svg.selectAll("*").remove();
+  root = svg.append("g");
+  const groups = root.selectAll("g.region")
+    .data(regions)
+    .join("g")
+    .attr("class", "region")
+    .attr("transform", offsetTransform);
+
+  groups.selectAll("path")
+    .data(d => grouped.get(d) || [])
+    .join("path")
+    .attr("fill", d => color(String(d.properties.drag_region)))
+    .attr("d", path);
+
+  labelLayer = svg.append("g");
+  const labelGroups = labelLayer.selectAll("g.label")
+    .data(labelRows)
+    .join("g")
+    .attr("class", "label")
+    .attr("transform", d => {
+      const p = projection([d.x, d.y]);
+      const regionOffset = regionOffsets.get(String(d.region)) || {dx_m: 0, dy_m: 0};
+      const labelOffset = labelOffsets.get(String(d.label_id)) || {dx_m: 0, dy_m: 0};
+      return `translate(${p[0] + (regionOffset.dx_m + labelOffset.dx_m) * metricScale},${p[1] - (regionOffset.dy_m + labelOffset.dy_m) * metricScale})`;
+    });
+  labelGroups.append("circle").attr("r", 12);
+  labelGroups.append("text").text(d => d.label);
+
+  const regionDrag = d3.drag().on("drag", function(event, region) {
+    const o = regionOffsets.get(region);
+    o.dx_m += event.dx / metricScale;
+    o.dy_m -= event.dy / metricScale;
+    render();
+  });
+  const labelDrag = d3.drag().on("drag", function(event, label) {
+    const o = labelOffsets.get(String(label.label_id));
+    o.dx_m += event.dx / metricScale;
+    o.dy_m -= event.dy / metricScale;
+    render();
+  });
+  groups.call(regionDrag);
+  labelGroups.call(labelDrag);
+  updateCsv();
+}
+
+function downloadCsv(text, filename) {
+  const blob = new Blob([text], {type: "text/csv"});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+document.querySelector("#copy-regions").addEventListener("click", () => navigator.clipboard.writeText(regionCsv()));
+document.querySelector("#download-regions").addEventListener("click", () => downloadCsv(regionCsv(), "drag_region_offsets.csv"));
+document.querySelector("#copy-labels").addEventListener("click", () => navigator.clipboard.writeText(labelCsv()));
+document.querySelector("#download-labels").addEventListener("click", () => downloadCsv(labelCsv(), "drag_label_offsets.csv"));
+document.querySelector("#reset").addEventListener("click", () => {
+  for (const r of regions) regionOffsets.set(r, {dx_m: 0, dy_m: 0});
+  for (const label of labelRows) labelOffsets.set(String(label.label_id), {dx_m: 0, dy_m: 0});
+  render();
+});
+window.addEventListener("resize", render);
+render();
+</script>
+</body>
+</html>
