@@ -11,20 +11,38 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-Labels have their own data model in `dragmapr` because final map composition
-often needs two kinds of movement:
+Labels have their own data model in `dragmapr` because draggable plots often
+need two kinds of movement:
 
 - region offsets move all geometries in a group;
 - label offsets nudge only the text marker after the region has moved.
 
-This mirrors the workflow used by the original explodemap paper scripts while
-keeping the package independent of explodemap.
+If users want a static image after the draggable edit, the same data model can
+be rendered back through `ggplot2`. This means a Shiny app is optional: once
+the region and label offset CSVs exist, `render_dragged_map()` can reconstruct
+the layout later in a script, report, or document workflow.
 
-## Label Anchors
+Labels can also be configured or omitted when the draggable helper is written:
 
-`make_labels()` derives one label anchor per region. By default it uses
-`sf::st_point_on_surface()` so anchors are likely to fall inside the grouped
-geometry.
+```{r, eval = FALSE}
+drag_map_prototype(x, "region", labels = FALSE)
+drag_map_prototype(x, "region", label_col = "name", draggable_labels = FALSE)
+drag_map_prototype(x, "region", label_col = "name", label_marker = FALSE)
+drag_map_prototype(x, "region", label_col = "name", label_radius = 16, label_text_size = 14)
+```
+
+## Label Concepts
+
+`dragmapr` separates labels into three related concepts:
+
+- `make_region_labels()` derives one default label anchor per group.
+- `as_drag_labels()` accepts user-supplied labels and preserves extra metadata.
+- `as_drag_annotations()` creates draggable info boxes for longer notes.
+- `read_label_state()` and `apply_label_state()` restore label movements from
+  CSV state exported by the draggable helper.
+
+By default, region labels use `sf::st_point_on_surface()` so anchors are likely
+to fall inside grouped geometry.
 
 ```{r}
 library(dragmapr)
@@ -33,11 +51,96 @@ hhs <- example_hhs_layout()
 head(hhs$labels)
 ```
 
-The label table is plain data:
+User-supplied labels are plain data:
 
 ```text
 label_id,region,label,x,y
 ```
+
+They may also carry extra columns for Shiny/D3 use:
+
+```{r}
+as_drag_labels(data.frame(
+  label_id = "note-1",
+  region = "3",
+  label = "Custom note",
+  x = hhs$labels$x[3],
+  y = hhs$labels$y[3],
+  tooltip = "Shown by a custom D3/Shiny layer"
+))
+```
+
+## Info Boxes And Text-only Labels
+
+Info boxes are just label rows with `label_type = "box"` plus browser box
+dimensions. `as_drag_annotations()` fills those details for you:
+
+```{r}
+note <- as_drag_annotations(data.frame(
+  label_id = "region-3-note",
+  region = "3",
+  label = "Region 3 has a longer note that reads better in a box.",
+  x = hhs$labels$x[3],
+  y = hhs$labels$y[3]
+), width_px = 180, height_px = 84)
+
+note
+```
+
+Ordinary labels can be rendered with a circular marker or as text-only labels.
+Text-only labels remain draggable in the browser helper because `dragmapr` adds
+an invisible drag target behind the text.
+
+```{r}
+render_dragged_map(
+  hhs$states,
+  region_offsets = hhs$region_offsets,
+  region_col = "hhs_region",
+  labels = hhs$labels,
+  label_offsets = hhs$label_offsets,
+  region_palette = hhs$region_colors,
+  region_labels = hhs$region_names,
+  show_label_marker = FALSE,
+  title = "Text-only labels"
+)
+```
+
+## Connector Lines
+
+Labels and annotation boxes can have connector lines. The connector starts from
+the original label anchor by default and ends just outside the visible label or
+box. Optional `connector_start_x` / `connector_start_y` columns can override the
+start point, while `connector_mid_x` / `connector_mid_y` can define a breakpoint
+for elbow or curved connectors.
+
+Supported connector styles are `"straight"`, `"elbow"`, `"curve"`, and
+`"squiggle"`.
+
+```{r}
+note$connector <- TRUE
+note$connector_type <- "squiggle"
+
+render_dragged_map(
+  hhs$states,
+  region_offsets = hhs$region_offsets,
+  region_col = "hhs_region",
+  labels = note,
+  label_offsets = data.frame(
+    label_id = "region-3-note",
+    region = "3",
+    dx_m = 90000,
+    dy_m = 70000
+  ),
+  region_palette = hhs$region_colors,
+  region_labels = hhs$region_names,
+  connector_linewidth = 0.9,
+  label_padding = 0.12,
+  title = "Annotation box with connector"
+)
+```
+
+`label_padding` expands static plot limits around displaced labels and
+connectors, which helps prevent exported images from clipping callouts.
 
 The exported label-offset table is also plain data:
 

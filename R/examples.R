@@ -7,6 +7,9 @@
 #' @return A list with `states`, `labels`, `region_offsets`, `label_offsets`,
 #'   `region_names`, and `region_colors`.
 #' @export
+#' @examples
+#' hhs <- example_hhs_layout()
+#' names(hhs)
 example_hhs_layout <- function() {
   hhs_lookup <- data.frame(
     STUSPS = c(
@@ -95,7 +98,7 @@ example_hhs_layout <- function() {
     geometry = sf::st_sfc(geoms, crs = 5070)
   )
 
-  labels <- make_labels(states, region_col = "hhs_region", label_col = "hhs_region")
+  labels <- make_region_labels(states, region_col = "hhs_region", label_col = "hhs_region")
   labels$label <- labels$region
 
   list(
@@ -117,6 +120,9 @@ example_hhs_layout <- function() {
 #' @return A list with `panels`, `labels`, `region_offsets`, `label_offsets`,
 #'   `region_names`, and `region_colors`.
 #' @export
+#' @examples
+#' panels <- example_panel_layout()
+#' names(panels)
 example_panel_layout <- function() {
   panels <- data.frame(
     panel = c("Input", "Model", "Review", "Publish", "Archive"),
@@ -147,7 +153,7 @@ example_panel_layout <- function() {
     group = panels$group,
     geometry = sf::st_sfc(geoms, crs = 3857)
   )
-  labels <- make_labels(sf_panels, region_col = "group", label_col = "panel")
+  labels <- make_region_labels(sf_panels, region_col = "group", label_col = "panel")
 
   region_offsets <- data.frame(
     region = panels$group,

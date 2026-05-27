@@ -4,6 +4,11 @@
 # published display offsets from the explodemap paper workflow are bundled in
 # dragmapr. The geometry is a lightweight projected fixture rather than the
 # large generated paper GeoJSON.
+#
+# Primary step: open the draggable helper and move regions/labels until the
+# layout looks right, then copy or download the offset CSVs.
+# open = interactive() opens the browser in an interactive R session and is a
+# no-op when sourced non-interactively (e.g. from smoke_examples.R).
 
 library(dragmapr)
 
@@ -13,7 +18,8 @@ drag_map_prototype(
   hhs$states,
   region_col = "hhs_region",
   label_col = "hhs_region",
-  file = "hhs_drag_helper.html"
+  file = "hhs_drag_helper.html",
+  open = interactive()
 )
 
 render_dragged_map(

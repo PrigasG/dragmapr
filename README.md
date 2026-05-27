@@ -1,8 +1,12 @@
 # dragmapr
 
-`dragmapr` makes manual layout edits reproducible. It writes a draggable browser
-helper for projected `sf` geometry, exports region and label movements as small
-CSV files, and applies those CSVs back to the original data for static plots.
+[![R-CMD-check](https://github.com/PrigasG/dragmapr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/PrigasG/dragmapr/actions/workflows/R-CMD-check.yaml)
+
+`dragmapr` creates draggable plots from projected `sf` geometry. It writes a
+browser-based D3 helper where grouped shapes, labels, annotation boxes, and
+connector lines can be moved directly. When users want a reproducible static
+image afterwards, the helper exports small region and label offset CSVs that can
+be rendered with `ggplot2`.
 
 The package started from an `explodemap` paper workflow, but it is now
 self-contained. The bundled HHS example copies only the small reusable pieces
@@ -24,10 +28,10 @@ devtools::load_all()
 ## Core Workflow
 
 1. Start with a projected `sf` object and a grouping column.
-2. Write a draggable browser helper.
+2. Write a draggable browser plot helper.
 3. Drag regions and labels until the layout works.
-4. Download or copy region and label offset CSVs.
-5. Render a static plot or image from the source geometry plus those CSVs.
+4. Use the draggable plot directly, or download/copy region and label offset CSVs.
+5. Optionally render a static plot or image from the source geometry plus those CSVs.
 
 ```r
 library(dragmapr)
@@ -36,7 +40,9 @@ drag_map_prototype(
   my_sf,
   region_col = "region",
   label_col = "region",
-  file = "drag-helper.html"
+  labels = TRUE,
+  draggable_labels = TRUE,
+  open = TRUE
 )
 
 render_dragged_map(
@@ -49,15 +55,75 @@ render_dragged_map(
 )
 ```
 
-## Labels
+## Labels, Info Boxes, And Connectors
 
-Region offsets move grouped geometries and their default label anchors. Label
-offsets are an additional fine-tuning layer for the marker/text only.
+Labels are optional when creating the draggable plot. There are four label
+concepts:
+
+- `make_region_labels()` derives one default label per draggable group.
+- `as_drag_labels()` accepts user-supplied labels and preserves extra columns
+  such as tooltip or styling metadata.
+- `as_drag_annotations()` turns label rows into draggable info boxes for longer
+  notes or callouts.
+- `read_label_state()` and `apply_label_state()` restore label movements from
+  CSV state exported by the browser helper.
 
 ```r
-labels <- make_labels(my_sf, region_col = "region", label_col = "name")
-labels <- apply_label_offsets(labels, "drag_label_offsets.csv")
+drag_map_prototype(my_sf, "region", labels = FALSE)
+drag_map_prototype(my_sf, "region", label_col = "name", label_marker = FALSE)
+drag_map_prototype(my_sf, "region", label_col = "name", label_text_size = 14)
+
+region_labels <- make_region_labels(my_sf, region_col = "region", label_col = "name")
+custom_labels <- as_drag_labels(data.frame(
+  label_id = "note-1",
+  region = "North",
+  label = "Custom note",
+  x = 50000,
+  y = 150000
+))
+
+labels <- apply_label_state(region_labels, "drag_label_offsets.csv")
 ```
+
+Label tables can also opt into connector lines:
+
+```r
+notes <- as_drag_annotations(data.frame(
+  label_id = "north-note",
+  region = "North",
+  label = "Longer text about this location",
+  x = 50000,
+  y = 150000
+), connector = TRUE, connector_type = "squiggle")
+
+render_dragged_map(
+  my_sf,
+  region_offsets = "drag_region_offsets.csv",
+  region_col = "region",
+  labels = notes,
+  label_offsets = "drag_label_offsets.csv",
+  connector_linewidth = 0.8,
+  show_label_marker = FALSE,
+  file = "annotated-layout.png"
+)
+```
+
+Supported connector styles are `"straight"`, `"elbow"`, `"curve"`, and
+`"squiggle"`. Advanced users can set `connector_start_x` /
+`connector_start_y` or `connector_mid_x` / `connector_mid_y` columns for custom
+line starts and breakpoints.
+
+## Static Export From Offsets
+
+The draggable helper exports two small tables:
+
+- region offsets: `region`, `dx_m`, `dy_m`
+- label offsets: `label_id`, `region`, `dx_m`, `dy_m`
+
+Those CSVs are enough to reconstruct a static image later without re-running a
+Shiny app. `render_dragged_map()` applies region movement first, then label
+movement, then optional connectors and labels. It also expands plot limits
+around displaced labels/connectors so exported PNGs do not clip callouts.
 
 ## Built-in Examples
 
@@ -68,6 +134,11 @@ labels <- apply_label_offsets(labels, "drag_label_offsets.csv")
 - `label_nudging.R`: independent text-marker nudges after region movement.
 - `non_map_panels.R`: dashboard/diagram rectangles, useful for non-map geometry checks.
 - `roundtrip_csv.R`: write offsets to CSV, read them back, and render.
+- `shiny_custom_labels.R`: Shiny app with user-supplied draggable labels.
+- `shiny_draggable_export.R`: Shiny app that captures drag state, previews a static plot, toggles labels/legends/connectors/info boxes, and exports PNG.
+- `shiny_draggable_plot.R`: embed a draggable plot helper in a Shiny app.
+- `shiny_spatial_studio.R`: first-pass spatial studio for local zipped shapefile, GeoJSON, or GPKG upload; choose grouping/labels/colors, drag the map, and export PNG/CSV/GeoJSON/HTML.
+- `shiny_static_export.R`: Shiny static PNG export after offsets are available.
 - `smoke_examples.R`: runs all bundled examples in a temporary directory.
 
 Run the full smoke suite:
@@ -78,11 +149,12 @@ source(system.file("examples", "smoke_examples.R", package = "dragmapr"))
 
 ## Vignettes And Site
 
-The package includes three vignettes:
+The package includes four vignettes:
 
 - Getting started with dragmapr
 - Labels and static output
 - Example gallery
+- Shiny workflows
 
 Build the pkgdown site locally with:
 
@@ -101,4 +173,6 @@ site will publish to <https://prigasg.github.io/dragmapr/>.
 - Stable metre offsets: browser resizing should not change exported offsets.
 - Static output friendly: outputs are ordinary `ggplot2` plots and image files.
 - Label-aware: labels can move with regions and be nudged independently.
+- Annotation-aware: info boxes, text-only labels, connector lines, and static
+  export controls are part of the same label table.
 - Small CSV surface: hand edits stay reviewable in Git.

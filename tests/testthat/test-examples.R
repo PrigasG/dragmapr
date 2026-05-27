@@ -7,6 +7,11 @@ test_that("bundled example scripts exist", {
     "label_nudging.R",
     "non_map_panels.R",
     "roundtrip_csv.R",
+    "shiny_custom_labels.R",
+    "shiny_draggable_export.R",
+    "shiny_draggable_plot.R",
+    "shiny_spatial_studio.R",
+    "shiny_static_export.R",
     "smoke_examples.R"
   )))))
 })

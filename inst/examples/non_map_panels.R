@@ -1,4 +1,9 @@
 # Use dragmapr on non-map geometry: diagram/dashboard panels.
+#
+# Primary step: open the draggable browser helper and drag panels/labels until
+# the layout looks right, then copy or download the offset CSVs.
+# open = interactive() opens the browser in an interactive R session and is a
+# no-op when sourced non-interactively (e.g. from smoke_examples.R).
 
 library(dragmapr)
 
@@ -8,7 +13,8 @@ drag_map_prototype(
   panels$panels,
   region_col = "group",
   label_col = "panel",
-  file = "panel_drag_helper.html"
+  file = "panel_drag_helper.html",
+  open = interactive()
 )
 
 render_dragged_map(

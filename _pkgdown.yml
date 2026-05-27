@@ -4,11 +4,23 @@ template:
   bootstrap: 5
   light-switch: true
 
+home:
+  links:
+  - text: "Try the Spatial Studio →"
+    href: https://prigasg.shinyapps.io/dragmapr-spatial-studio/
+  - text: Report a bug
+    href: https://github.com/PrigasG/dragmapr/issues
+  sidebar:
+    structure: [links, license, community, citation, authors, dev]
+
 navbar:
   structure:
     left: [intro, reference, articles, examples, news]
-    right: [github]
+    right: [demo, github]
   components:
+    demo:
+      text: "✦ Live Demo"
+      href: https://prigasg.shinyapps.io/dragmapr-spatial-studio/
     examples:
       text: Examples
       menu:
@@ -18,29 +30,71 @@ navbar:
         href: articles/labels-and-static-output.html
       - text: Example gallery
         href: articles/example-gallery.html
+      - text: Shiny workflows
+        href: articles/shiny-workflows.html
+      - text: "→ Spatial studio (live app)"
+        href: https://prigasg.shinyapps.io/dragmapr-spatial-studio/
     github:
       icon: fa-github
       href: https://github.com/PrigasG/dragmapr
       aria-label: GitHub
 
 reference:
-- title: Interactive helpers
+- title: Interactive prototype
+  desc: >
+    Create the browser-based D3 helper. This is the primary deliverable:
+    open it, drag, then copy or download the offset tables.
   contents:
   - drag_map_prototype
-- title: Offsets
+
+- title: Region offsets
+  desc: Read and apply the region movement tables exported by the helper.
   contents:
   - read_offsets
   - apply_offsets
-  - read_label_offsets
-  - apply_label_offsets
-- title: Labels and rendering
+
+- title: Labels
+  desc: >
+    Derive default label anchors, supply custom labels or annotation boxes,
+    configure connectors, and restore label positions from exported state.
   contents:
-  - make_labels
+  - make_region_labels
+  - as_drag_labels
+  - as_drag_annotations
+  - read_label_state
+  - apply_label_state
+
+- title: Static rendering
+  desc: >
+    Optionally reconstruct the dragged layout as a ggplot2 image from the
+    source geometry plus exported region and label offset tables.
+  contents:
   - render_dragged_map
+
 - title: Built-in examples
+  desc: Self-contained fixtures for testing and demonstrations.
   contents:
   - example_hhs_layout
   - example_panel_layout
+
+- title: Spatial I/O helpers
+  desc: >
+    Read spatial files from Shiny uploads or URLs, project and validate
+    geometry, and build the JavaScript bridge that relays drag state from the
+    helper iframe back to Shiny inputs.  These helpers are extracted from the
+    spatial studio example so apps can reuse them independently.
+  contents:
+  - read_dragmapr_sf_upload
+  - read_dragmapr_sf_url
+  - prepare_dragmapr_sf
+  - dragmapr_iframe_bridge
+
+- title: Compatibility aliases
+  desc: Earlier names kept for backward compatibility.
+  contents:
+  - make_labels
+  - read_label_offsets
+  - apply_label_offsets
 
 articles:
 - title: Workflows
@@ -49,3 +103,5 @@ articles:
   - getting-started
   - labels-and-static-output
   - example-gallery
+  - shiny-workflows
+

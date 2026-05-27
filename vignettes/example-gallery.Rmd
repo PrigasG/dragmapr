@@ -11,9 +11,9 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-This gallery exists for two reasons: to show what `dragmapr` can do, and to
-stress the package with different geometry shapes before real projects depend
-on it.
+This gallery exists for two reasons: to show the range of draggable plots that
+`dragmapr` can create, and to stress the package with different geometry shapes
+before real projects depend on it.
 
 ## Explodemap-style HHS Fixture
 
@@ -78,3 +78,60 @@ render_dragged_map(
   title = "CSV round trip"
 )
 ```
+
+## Labels, Boxes, And Connectors
+
+This example exercises the newer annotation surface: an info box, a squiggle
+connector, thicker connector lines, and plot padding for static export.
+
+```{r}
+note <- as_drag_annotations(data.frame(
+  label_id = "hhs-9-note",
+  region = "9",
+  label = "A longer callout can be dragged separately from the region.",
+  x = hhs$labels$x[hhs$labels$region == "9"],
+  y = hhs$labels$y[hhs$labels$region == "9"]
+), width_px = 210, height_px = 88, connector = TRUE, connector_type = "squiggle")
+
+render_dragged_map(
+  hhs$states,
+  region_offsets = hhs$region_offsets,
+  region_col = "hhs_region",
+  labels = note,
+  label_offsets = data.frame(
+    label_id = "hhs-9-note",
+    region = "9",
+    dx_m = 120000,
+    dy_m = 80000
+  ),
+  region_palette = hhs$region_colors,
+  region_labels = hhs$region_names,
+  connector_linewidth = 1,
+  label_padding = 0.12,
+  title = "Annotation box and connector"
+)
+```
+
+## Shiny
+
+Several Shiny examples are bundled but not evaluated in this vignette because
+they launch interactive apps:
+
+```{r, eval = FALSE}
+shiny::runApp(system.file("examples", "shiny_draggable_plot.R", package = "dragmapr"))
+shiny::runApp(system.file("examples", "shiny_custom_labels.R", package = "dragmapr"))
+shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
+shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
+shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragmapr"))
+```
+
+`shiny_draggable_export.R` demonstrates a common app pattern: users drag the
+interactive plot inside Shiny, the helper sends region and label state back to
+the parent app, and the app can export a PNG for a report or document. It also
+shows toggles for labels, legends, marker circles, info-box dimensions,
+connector style, and connector thickness.
+
+`shiny_spatial_studio.R` is the first-pass general workspace. It accepts local
+polygon uploads, including zipped shapefiles, GeoJSON, and GeoPackage files,
+then lets users choose grouping/label columns, colors, labels or info boxes,
+connectors, legend visibility, and export formats.

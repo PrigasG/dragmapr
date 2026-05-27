@@ -11,16 +11,16 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-`dragmapr` is built around a deliberately small loop:
+`dragmapr` is built around a deliberately small loop for draggable plots:
 
 1. Start with projected `sf` geometry and a grouping column.
-2. Write a draggable HTML helper.
-3. Drag regions and labels.
-4. Save offset CSVs.
-5. Render the final static image from the original data plus those CSVs.
+2. Open a draggable browser helper with `drag_map_prototype(open = TRUE)`.
+3. Drag regions, labels, or annotation boxes until the layout works.
+4. Use the draggable plot directly, or copy/download the offset CSVs.
+5. Optionally reproduce the layout as a static `ggplot2` image from those CSVs.
 
-This keeps manual layout decisions reviewable in Git. The browser is an editor,
-not the source of truth.
+The interactive browser helper is the primary deliverable. Step 5 is optional —
+use it when you need a reproducible image for a report or publication.
 
 ## A Synthetic Map
 
@@ -53,19 +53,28 @@ regions <- sf::st_sf(
 )
 ```
 
-Write the helper HTML:
+Open the interactive helper in the browser — this is the main step:
 
 ```{r, eval = FALSE}
 drag_map_prototype(
   regions,
   region_col = "region",
   label_col = "label",
-  file = "basic_drag_helper.html"
+  labels = TRUE,
+  draggable_labels = TRUE,
+  open = TRUE
 )
 ```
 
-After dragging, the helper exports a region-offset CSV and a label-offset CSV.
-They can be supplied as data frames or file paths:
+Drag regions and labels until the layout looks right. The helper panel shows
+live offset tables. Use **Copy Regions** / **Copy Labels** or the download
+buttons to capture the two CSVs. Region offsets move grouped geometries; label
+offsets move labels and annotation boxes after their region has moved.
+
+## Optional: Static Rendering
+
+If you need a reproducible `ggplot2` image, supply the exported offsets to
+`render_dragged_map()`. The data frames below stand in for the downloaded CSVs:
 
 ```{r}
 region_offsets <- data.frame(
@@ -74,7 +83,7 @@ region_offsets <- data.frame(
   dy_m = c(50000, -50000, 0, 0)
 )
 
-label_offsets <- data.frame(
+label_state <- data.frame(
   label_id = c("North", "South", "East", "West"),
   region = c("North", "South", "East", "West"),
   dx_m = c(0, 0, 25000, -25000),
@@ -86,10 +95,37 @@ plot <- render_dragged_map(
   region_offsets = region_offsets,
   region_col = "region",
   label_col = "label",
-  label_offsets = label_offsets,
+  label_offsets = label_state,
   title = "Synthetic draggable map"
 )
 plot
+```
+
+Static output can include the same label choices as the draggable helper:
+
+```{r}
+notes <- as_drag_annotations(data.frame(
+  label_id = "east-note",
+  region = "East",
+  label = "The East label can become a longer draggable note.",
+  x = 210000,
+  y = 120000
+), connector = TRUE, connector_type = "squiggle")
+
+render_dragged_map(
+  regions,
+  region_offsets = region_offsets,
+  region_col = "region",
+  labels = notes,
+  label_offsets = data.frame(
+    label_id = "east-note",
+    region = "East",
+    dx_m = 80000,
+    dy_m = 45000
+  ),
+  connector_linewidth = 0.8,
+  title = "Static output with an annotation box"
+)
 ```
 
 ## Running Examples
@@ -99,4 +135,16 @@ Installed example scripts live under `system.file("examples", package =
 
 ```{r, eval = FALSE}
 source(system.file("examples", "smoke_examples.R", package = "dragmapr"))
+```
+
+Shiny examples are available separately because they launch interactive apps.
+See the [Shiny workflows vignette](shiny-workflows.html) for a walkthrough, or
+run them directly:
+
+```{r, eval = FALSE}
+shiny::runApp(system.file("examples", "shiny_draggable_plot.R",   package = "dragmapr"))
+shiny::runApp(system.file("examples", "shiny_custom_labels.R",    package = "dragmapr"))
+shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
+shiny::runApp(system.file("examples", "shiny_spatial_studio.R",   package = "dragmapr"))
+shiny::runApp(system.file("examples", "shiny_static_export.R",    package = "dragmapr"))
 ```

@@ -36,6 +36,23 @@ test_that("apply_offsets translates matching sf groups", {
   expect_equal(unclass(sf::st_geometry(out)[[2]]), c(10, 10))
 })
 
+test_that("apply_offsets translates polygon groups", {
+  x <- sf::st_sf(
+    region = c("North", "South"),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      sf::st_polygon(list(rbind(c(10, 10), c(14, 10), c(14, 14), c(10, 14), c(10, 10)))),
+      crs = 3857
+    )
+  )
+  offsets <- data.frame(region = "North", dx_m = 5, dy_m = -2)
+
+  out <- apply_offsets(x, offsets, region_col = "region")
+
+  expect_equal(sf::st_coordinates(out[1, ])[1, c("X", "Y")], c(X = 5, Y = -2))
+  expect_equal(sf::st_coordinates(out[2, ])[1, c("X", "Y")], c(X = 10, Y = 10))
+})
+
 test_that("apply_offsets validates offset data frames", {
   x <- sf::st_sf(
     region = "North",

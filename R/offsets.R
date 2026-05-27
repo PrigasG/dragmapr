@@ -4,6 +4,10 @@
 #'
 #' @return A data frame with normalized `region`, `dx_m`, and `dy_m` columns.
 #' @export
+#' @examples
+#' path <- tempfile(fileext = ".csv")
+#' writeLines(c("region,dx_m,dy_m", "North,1000,-500", "South,0,0"), path)
+#' read_offsets(path)
 read_offsets <- function(path) {
   offsets <- utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
   names(offsets) <- tolower(names(offsets))
@@ -19,6 +23,14 @@ read_offsets <- function(path) {
 #'
 #' @return An `sf` object with geometries translated by group.
 #' @export
+#' @examples
+#' regions <- sf::st_sf(
+#'   region = c("A", "B"),
+#'   geometry = sf::st_sfc(sf::st_point(c(0, 0)), sf::st_point(c(100, 100)),
+#'                         crs = 3857)
+#' )
+#' offsets <- data.frame(region = "A", dx_m = 5000, dy_m = -2000)
+#' apply_offsets(regions, offsets, region_col = "region")
 apply_offsets <- function(x, offsets, region_col) {
   if (!inherits(x, "sf")) {
     stop("`x` must be an sf object.", call. = FALSE)
@@ -37,11 +49,23 @@ apply_offsets <- function(x, offsets, region_col) {
     stop("Project `x` before applying metre offsets.", call. = FALSE)
   }
 
+  feature_regions <- as.character(x[[region_col]])
+  match_idx <- match(feature_regions, offsets$region)
+  has_offset <- !is.na(match_idx)
+
   out <- x
-  for (i in seq_len(nrow(offsets))) {
-    idx <- as.character(out[[region_col]]) == offsets$region[i]
-    if (!any(idx)) next
-    sf::st_geometry(out)[idx] <- sf::st_geometry(out)[idx] + c(offsets$dx_m[i], offsets$dy_m[i])
+  if (any(has_offset)) {
+    geoms <- sf::st_geometry(out)
+    geoms[has_offset] <- sf::st_sfc(
+      Map(
+        function(geom, dx, dy) geom + c(dx, dy),
+        geoms[has_offset],
+        offsets$dx_m[match_idx[has_offset]],
+        offsets$dy_m[match_idx[has_offset]]
+      ),
+      crs = sf::st_crs(geoms)
+    )
+    sf::st_geometry(out) <- geoms
   }
   sf::st_as_sf(out)
 }

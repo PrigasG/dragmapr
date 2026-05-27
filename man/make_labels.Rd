@@ -14,15 +14,15 @@ make_labels(
 \arguments{
 \item{x}{An \code{sf} object in a projected CRS.}
 
-\item{region_col}{Column defining regions.}
+\item{region_col}{Column defining draggable groups.}
 
 \item{label_col}{Column used for label text. Defaults to \code{region_col}.}
 
 \item{point}{One of \code{"point_on_surface"} or \code{"centroid"}.}
 }
 \value{
-A data frame with \code{label_id}, \code{region}, \code{label}, \code{x}, and \code{y}.
+A drag label table.
 }
 \description{
-Derive one label anchor per draggable region
+\code{make_labels()} is retained as an alias for \code{\link[=make_region_labels]{make_region_labels()}}.
 }
