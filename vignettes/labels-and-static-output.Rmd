@@ -1,0 +1,85 @@
+---
+title: "Labels and static output"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Labels and static output}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+Labels have their own data model in `dragmapr` because final map composition
+often needs two kinds of movement:
+
+- region offsets move all geometries in a group;
+- label offsets nudge only the text marker after the region has moved.
+
+This mirrors the workflow used by the original explodemap paper scripts while
+keeping the package independent of explodemap.
+
+## Label Anchors
+
+`make_labels()` derives one label anchor per region. By default it uses
+`sf::st_point_on_surface()` so anchors are likely to fall inside the grouped
+geometry.
+
+```{r}
+library(dragmapr)
+
+hhs <- example_hhs_layout()
+head(hhs$labels)
+```
+
+The label table is plain data:
+
+```text
+label_id,region,label,x,y
+```
+
+The exported label-offset table is also plain data:
+
+```text
+label_id,region,dx_m,dy_m
+```
+
+## Region Movement Plus Label Movement
+
+Region offsets are applied to both geometry and default label anchors. Label
+offsets are applied after that.
+
+```{r}
+label_offsets <- hhs$label_offsets
+label_offsets$dx_m[label_offsets$label_id == "3"] <- -45000
+label_offsets$dy_m[label_offsets$label_id == "3"] <- -30000
+
+render_dragged_map(
+  hhs$states,
+  region_offsets = hhs$region_offsets,
+  region_col = "hhs_region",
+  labels = hhs$labels,
+  label_offsets = label_offsets,
+  region_palette = hhs$region_colors,
+  region_labels = hhs$region_names,
+  title = "HHS regions with label nudge"
+)
+```
+
+## Saving Static Images
+
+Supplying `file` passes the finished plot to `ggplot2::ggsave()`.
+
+```{r, eval = FALSE}
+render_dragged_map(
+  hhs$states,
+  region_offsets = "drag_region_offsets.csv",
+  region_col = "hhs_region",
+  labels = hhs$labels,
+  label_offsets = "drag_label_offsets.csv",
+  file = "hhs_dragged_layout.png",
+  width = 9,
+  height = 6
+)
+```

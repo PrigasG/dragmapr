@@ -1,0 +1,80 @@
+---
+title: "Example gallery"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Example gallery}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+This gallery exists for two reasons: to show what `dragmapr` can do, and to
+stress the package with different geometry shapes before real projects depend
+on it.
+
+## Explodemap-style HHS Fixture
+
+`example_hhs_layout()` bundles the small pieces needed from the explodemap paper
+workflow: HHS membership, region names, region colors, and the published
+display-offset CSV. The geometry itself is a lightweight projected fixture.
+
+```{r}
+library(dragmapr)
+
+hhs <- example_hhs_layout()
+render_dragged_map(
+  hhs$states,
+  region_offsets = hhs$region_offsets,
+  region_col = "hhs_region",
+  labels = hhs$labels,
+  label_offsets = hhs$label_offsets,
+  region_palette = hhs$region_colors,
+  region_labels = hhs$region_names,
+  title = "US Map by HHS Regions"
+)
+```
+
+## Non-map Panels
+
+The same offset machinery works on any projected `sf` geometry. This panel
+example treats rectangles as diagram or dashboard cards.
+
+```{r}
+panels <- example_panel_layout()
+render_dragged_map(
+  panels$panels,
+  region_offsets = panels$region_offsets,
+  region_col = "group",
+  labels = panels$labels,
+  label_offsets = panels$label_offsets,
+  region_palette = panels$region_colors,
+  region_labels = panels$region_names,
+  title = "Draggable non-map panels"
+)
+```
+
+## CSV Round Trip
+
+The key reproducibility test is that offsets can leave the browser as CSV and
+come back into R without hidden state.
+
+```{r}
+tmp_regions <- tempfile(fileext = ".csv")
+tmp_labels <- tempfile(fileext = ".csv")
+utils::write.csv(hhs$region_offsets, tmp_regions, row.names = FALSE)
+utils::write.csv(hhs$label_offsets, tmp_labels, row.names = FALSE)
+
+render_dragged_map(
+  hhs$states,
+  region_offsets = tmp_regions,
+  region_col = "hhs_region",
+  labels = hhs$labels,
+  label_offsets = tmp_labels,
+  region_palette = hhs$region_colors,
+  region_labels = hhs$region_names,
+  title = "CSV round trip"
+)
+```
