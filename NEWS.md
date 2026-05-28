@@ -1,5 +1,10 @@
 # dragmapr 0.0.0.9000 (third pass — studio polish + high-cardinality fix)
 
+* Added `stats` to `Imports` in `DESCRIPTION` (`stats::setNames` was used in
+  `R/examples.R` without being declared — R CMD check error on strict platforms).
+* Removed `--compact-vignettes=gs+qpdf` from the GitHub Actions check workflow;
+  Ghostscript and qpdf are not reliably available on macOS/Windows runners.
+
 * `render_dragged_map()` gains a `max_legend_keys` parameter (default `25`).
   When the number of distinct region groups exceeds the threshold the legend is
   suppressed automatically with an informational message.  Set `Inf` to always
