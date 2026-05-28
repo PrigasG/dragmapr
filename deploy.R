@@ -1,27 +1,54 @@
-# deploy.R — deploy the dragmapr Spatial Studio to shinyapps.io
+# deploy.R — push the dragmapr Spatial Studio to HuggingFace Spaces
 #
-# Run once interactively from the package root:
-#   source("deploy.R")
+# This file is excluded from the CRAN build (see .Rbuildignore).
+# Run the shell commands below from the package root, not from R.
 #
-# Prerequisites:
-#   install.packages(c("rsconnect", "shiny", "shinyWidgets", "sf",
-#                      "ggplot2", "jsonlite", "dragmapr"))
+# ── One-time setup ────────────────────────────────────────────────────────────
 #
-# First-time setup (do this once, then never again):
-#   rsconnect::setAccountInfo(
-#     name   = "prigasg",        # your shinyapps.io account name
-#     token  = "<YOUR TOKEN>",   # from shinyapps.io > Account > Tokens
-#     secret = "<YOUR SECRET>"
-#   )
-
-app_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
-if (!nzchar(app_file)) stop("Build and install dragmapr first: devtools::install()")
-
-rsconnect::deployApp(
-  appDir     = dirname(app_file),
-  appFiles   = basename(app_file),
-  appName    = "dragmapr-spatial-studio",
-  appTitle   = "dragmapr Spatial Studio",
-  account    = "prigasg",
-  forceUpdate = TRUE
-)
+#  1. Create the Space on huggingface.co:
+#       https://huggingface.co/new-space
+#       Owner  : prigasg
+#       Name   : dragmapr-spatial-studio
+#       SDK    : Docker          <- important
+#       License: MIT
+#
+#  2. Add the Space as a second git remote:
+#       git remote add space https://huggingface.co/spaces/Prigas89/dragmapr-spatial-studio
+#
+#  3. (First push only) authenticate — either log in with the HF CLI:
+#       pip install huggingface_hub
+#       huggingface-cli login
+#     or use a personal access token as the git password when prompted.
+#
+# ── Deploy / update ───────────────────────────────────────────────────────────
+#
+#  Push the current branch to the Space remote.  HuggingFace will build the
+#  Dockerfile automatically and restart the container.
+#
+#       git push space main
+#
+#  Force-push after a rebase:
+#       git push space main --force
+#
+# ── Live URLs ─────────────────────────────────────────────────────────────────
+#
+#  Space page : https://huggingface.co/spaces/Prigas89/dragmapr-spatial-studio
+#  Running app: https://prigasg-dragmapr-spatial-studio.hf.space
+#
+# ── Local Docker test (optional) ─────────────────────────────────────────────
+#
+#  Build and run locally before pushing:
+#       docker build -t dragmapr-studio .
+#       docker run --rm -p 7860:7860 dragmapr-studio
+#       # then open http://localhost:7860
+#
+# ── Notes ─────────────────────────────────────────────────────────────────────
+#
+#  * rocker/geospatial:4.4.2 ships GDAL, GEOS, PROJ, and sf pre-built, so the
+#    Docker build should complete in ~3-5 minutes on HuggingFace's build runners.
+#  * The container installs dragmapr from the repo source at build time, so
+#    every push reflects the latest commit exactly.
+#  * HuggingFace free CPU Spaces have 2 vCPUs and 16 GB RAM — enough for
+#    reasonably large shapefiles without hitting memory limits.
+#  * The Space sleeps after ~15 minutes of inactivity (free tier) and wakes on
+#    the next request within ~10 seconds.
