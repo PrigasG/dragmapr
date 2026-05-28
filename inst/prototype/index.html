@@ -8,6 +8,8 @@
 <style>
 body { margin: 0; font-family: system-ui, sans-serif; color: #172033; }
 main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: 100vh; }
+html.no-side-panel main { grid-template-columns: minmax(0, 1fr); }
+html.no-side-panel aside { display: none; }
 svg { width: 100%; height: 100vh; display: block; background: #fbfcfe; cursor: grab; }
 aside { border-left: 1px solid #d8dee8; padding: 16px; }
 button { min-height: 34px; padding: 0 12px; border: 1px solid #d8dee8; background: #f7f8fb; border-radius: 6px; cursor: pointer; font-size: 13px; color: #172033; white-space: nowrap; transition: background .12s; }
@@ -46,7 +48,7 @@ h2 { font-size: 13px; margin: 16px 0 0; }
       <button id="download-labels">Download</button>
     </div>
     <div class="btn-row-reset">
-      <button id="reset" class="reset-btn">↺ Reset all positions</button>
+      <button id="reset" class="reset-btn">Reset all positions</button>
     </div>
     <h2>Region offsets</h2>
     <textarea id="region-csv" spellcheck="false"></textarea>
@@ -60,6 +62,7 @@ let labelRows = __LABELS__;
 const initialRegionOffsets = __REGION_OFFSETS__;
 const initialLabelOffsets = __LABEL_OFFSETS__;
 const options = __OPTIONS__;
+document.documentElement.classList.toggle("no-side-panel", options.sidePanel === false);
 const svg = d3.select("#map");
 const palette = ["#2166ac", "#d73027", "#1a9850", "#984ea3", "#ff7f00", "#a65628", "#f781bf", "#999999"];
 const regions = Array.from(new Set(geojson.features.map(d => String(d.properties.drag_region)))).sort();
@@ -80,6 +83,7 @@ for (const row of initialLabelOffsets || []) {
 const grouped = d3.group(geojson.features, d => String(d.properties.drag_region));
 const bounds = coordBounds(geojson);
 let projection, path, metricScale, root, labelLayer;
+let layoutFrame = null;
 
 function color(region) {
   if (options.regionPalette && options.regionPalette[region]) {
@@ -221,12 +225,7 @@ function render() {
     .data(options.labels ? labelRows : [])
     .join("g")
     .attr("class", d => `label ${labelType(d)}`)
-    .attr("transform", d => {
-      const p = projection([d.x, d.y]);
-      const regionOffset = regionOffsets.get(String(d.region)) || {dx_m: 0, dy_m: 0};
-      const labelOffset = labelOffsets.get(String(d.label_id)) || {dx_m: 0, dy_m: 0};
-      return `translate(${p[0] + (regionOffset.dx_m + labelOffset.dx_m) * metricScale},${p[1] - (regionOffset.dy_m + labelOffset.dy_m) * metricScale})`;
-    });
+    .attr("transform", labelTransform);
   labelGroups.each(function(d) {
     const group = d3.select(this);
     if (labelType(d) === "box") {
@@ -263,18 +262,36 @@ function render() {
     const o = regionOffsets.get(region);
     o.dx_m += event.dx / metricScale;
     o.dy_m -= event.dy / metricScale;
-    render();
-  });
+    scheduleLayoutUpdate();
+  }).on("end", updateLayout);
   const labelDrag = d3.drag().on("drag", function(event, label) {
     const o = labelOffsets.get(String(label.label_id));
     o.dx_m += event.dx / metricScale;
     o.dy_m -= event.dy / metricScale;
-    render();
-  });
+    scheduleLayoutUpdate();
+  }).on("end", updateLayout);
   groups.call(regionDrag);
   if (options.draggableLabels) {
     labelGroups.call(labelDrag);
   }
+  updateCsv();
+}
+
+function scheduleLayoutUpdate() {
+  if (layoutFrame) return;
+  layoutFrame = window.requestAnimationFrame(() => {
+    layoutFrame = null;
+    updateLayout();
+  });
+}
+
+function updateLayout() {
+  svg.selectAll("g.region")
+    .attr("transform", offsetTransform);
+  svg.selectAll("path.connector")
+    .attr("d", connectorPath);
+  svg.selectAll("g.label")
+    .attr("transform", labelTransform);
   updateCsv();
 }
 
@@ -296,6 +313,11 @@ function labelPosition(label) {
     p[0] + (regionOffset.dx_m + labelOffset.dx_m) * metricScale,
     p[1] - (regionOffset.dy_m + labelOffset.dy_m) * metricScale
   ];
+}
+
+function labelTransform(label) {
+  const p = labelPosition(label);
+  return `translate(${p[0]},${p[1]})`;
 }
 
 function anchorPosition(label) {

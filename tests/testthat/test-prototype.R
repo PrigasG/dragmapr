@@ -29,6 +29,23 @@ test_that("drag_map_prototype writes configurable label options", {
   expect_match(html, "North label", fixed = TRUE)
 })
 
+test_that("drag_map_prototype can hide the built-in side panel", {
+  x <- sf::st_sf(
+    region = "North",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+  file <- tempfile(fileext = ".html")
+
+  drag_map_prototype(x, region_col = "region", side_panel = FALSE, file = file)
+
+  html <- paste(readLines(file, warn = FALSE), collapse = "\n")
+  expect_match(html, '"sidePanel":false', fixed = TRUE)
+  expect_match(html, "html.no-side-panel aside", fixed = TRUE)
+})
+
 test_that("drag_map_prototype writes named region palette", {
   x <- sf::st_sf(
     region = "North",

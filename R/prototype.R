@@ -24,6 +24,9 @@
 #'   When supplied the D3 helper uses these colors instead of its built-in
 #'   palette, so the interactive colors match a [render_dragged_map()] call
 #'   that uses the same palette.
+#' @param side_panel Show the built-in copy/download side panel in the helper
+#'   HTML. Defaults to `TRUE`; Shiny apps that provide their own controls can
+#'   set this to `FALSE`.
 #' @param file Output HTML path.
 #' @param open Open the written file in the default browser via
 #'   [utils::browseURL()]. Defaults to `FALSE`.
@@ -63,6 +66,7 @@ drag_map_prototype <- function(x,
                                region_offsets = NULL,
                                label_offsets = NULL,
                                region_palette = NULL,
+                               side_panel = TRUE,
                                file = "drag-map.html",
                                open = FALSE) {
   if (!inherits(x, "sf")) {
@@ -110,6 +114,9 @@ drag_map_prototype <- function(x,
   if (!is.null(region_palette) && (is.null(names(region_palette)) || any(names(region_palette) == ""))) {
     stop("`region_palette` must be a named vector when supplied.", call. = FALSE)
   }
+  if (!is.logical(side_panel) || length(side_panel) != 1L || is.na(side_panel)) {
+    stop("`side_panel` must be TRUE or FALSE.", call. = FALSE)
+  }
   if (!is.logical(open) || length(open) != 1L || is.na(open)) {
     stop("`open` must be TRUE or FALSE.", call. = FALSE)
   }
@@ -146,7 +153,8 @@ drag_map_prototype <- function(x,
     labelBoxWidth = unname(label_box_width),
     labelBoxHeight = unname(label_box_height),
     connectorLinewidth = unname(connector_linewidth),
-    regionPalette = if (is.null(region_palette)) NULL else as.list(region_palette)
+    regionPalette = if (is.null(region_palette)) NULL else as.list(region_palette),
+    sidePanel = isTRUE(side_panel)
   )
 
   template <- system.file("prototype", "index.html", package = "dragmapr", mustWork = TRUE)
