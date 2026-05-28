@@ -128,7 +128,24 @@ empty_label_offsets <- function(labels) {
 
 studio_css <- "
 /* ---- Layout ---- */
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f8fafc;
+  color: #172033;
+}
+.container-fluid {
+  max-width: 1680px;
+  padding: 16px 18px 28px;
+}
+.well {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 12px;
+}
 h2.studio-title {
   font-size: 1.35rem;
   font-weight: 700;
@@ -164,6 +181,15 @@ p.studio-subtitle {
 .studio-card .checkbox { margin-top: 4px; margin-bottom: 8px; }
 .studio-card .radio { margin-top: 4px; margin-bottom: 4px; }
 .studio-card .btn { margin-bottom: 4px; }
+.studio-card .selectize-control { margin-bottom: 0; }
+.studio-card .irs { margin-top: -4px; }
+.studio-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.studio-action-row .btn { margin-bottom: 0; }
 
 /* ---- Status bar ---- */
 .studio-status {
@@ -213,6 +239,41 @@ p.studio-subtitle {
   margin-top: 8px;
 }
 .download-grid .btn { width: 100%; font-size: 0.78rem; padding: 5px 8px; }
+
+/* ---- Main workspace ---- */
+.tabbable > .nav-tabs {
+  border-bottom: 1px solid #d9e0ea;
+  margin-bottom: 0;
+}
+.tabbable > .nav-tabs > li > a {
+  border-radius: 6px 6px 0 0;
+  color: #475569;
+  font-weight: 600;
+}
+.tab-content {
+  background: #ffffff;
+  border: 1px solid #d9e0ea;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+.preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin: 0 0 10px;
+}
+.preview-toolbar .checkbox { margin: 0; }
+.studio-helper-frame {
+  width: 100%;
+  height: min(78vh, 820px);
+  min-height: 620px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #ffffff;
+}
 
 /* ---- Top progress bar (fires on any server-side work) ---- */
 .studio-progress-bar {
@@ -305,7 +366,7 @@ ui <- fluidPage(
       });
     ")),
     tags$style(HTML(studio_css)),
-    # Progress bar — shown automatically whenever Shiny is busy
+    # Progress bar shown automatically whenever Shiny is busy
     tags$div(class = "studio-progress-bar")
   ),
 
@@ -325,12 +386,17 @@ ui <- fluidPage(
           multiple = TRUE,
           accept = c(".zip", ".shp", ".dbf", ".shx", ".prj", ".cpg", ".gpkg", ".geojson", ".json")
         ),
-        actionButton("load_demo", "Use bundled HHS demo", class = "btn-sm btn-default"),
-        tags$br(), tags$br(),
+        tags$div(
+          class = "studio-action-row",
+          actionButton("load_demo", "Use bundled HHS demo", class = "btn-sm btn-default")
+        ),
         textInput("spatial_url", "Or load from URL",
                   placeholder = "https://example.com/regions.geojson"),
-        actionButton("load_url", "Load URL", class = "btn-sm btn-primary"),
-        actionButton("reset_layout", "Reset drag layout", class = "btn-sm btn-warning")
+        tags$div(
+          class = "studio-action-row",
+          actionButton("load_url", "Load URL", class = "btn-sm btn-primary"),
+          actionButton("reset_layout", "Reset drag layout", class = "btn-sm btn-warning")
+        )
       ),
 
       tags$div(
@@ -409,8 +475,8 @@ ui <- fluidPage(
         ),
         tabPanel(
           "Preview",
-          div(
-            style = "display: flex; gap: 12px; align-items: center; margin: 10px 0;",
+          tags$div(
+            class = "preview-toolbar",
             actionButton("refresh_preview", "Refresh preview", class = "btn-sm btn-default"),
             checkboxInput("auto_preview", "Auto-refresh preview", value = FALSE)
           ),
@@ -491,7 +557,7 @@ server <- function(input, output, session) {
       set_status(
         paste0(
           "Loaded ", n_feat, " features from ", source_label, ". ",
-          "Lowest-cardinality column is ‘", best_col, "’ with ", n_best, " unique values. ",
+          "Lowest-cardinality column is '", best_col, "' with ", n_best, " unique values. ",
           "Choose a column with fewer unique values for clearest results. ",
           "Legend is auto-hidden above ", LEGEND_THRESHOLD, " groups."
         ),
@@ -541,7 +607,7 @@ server <- function(input, output, session) {
     }
     state$ingesting <- TRUE
     on.exit({ state$ingesting <- FALSE }, add = TRUE)
-    set_status("Downloading…", "info")
+    set_status("Downloading...", "info")
     tryCatch({
       x <- read_dragmapr_sf_url(url)
       state$source <- x
@@ -739,7 +805,7 @@ server <- function(input, output, session) {
   })
 
   build_plot <- function(region_offsets, label_offsets) {
-    # Suppress the legend when there are too many groups — the studio handles
+    # Suppress the legend when there are too many groups; the studio handles
     # this directly so it works regardless of which package version is installed.
     max_keys <- if (isTRUE(input$legend_show_all)) Inf else LEGEND_THRESHOLD
     render_dragged_map(
@@ -806,7 +872,7 @@ server <- function(input, output, session) {
 
   output$status_bar <- renderUI({
     level <- state$status_level %||% "info"
-    icon  <- switch(level, ok = "✓", error = "⚠️", "ℹ️")
+    icon <- switch(level, ok = "OK", error = "!", "i")
     tags$div(
       class = paste("studio-status", level),
       tags$span(icon, class = "status-icon"),
@@ -840,14 +906,14 @@ server <- function(input, output, session) {
     n      <- length(groups)
     pal    <- rep(default_palette, length.out = n)
 
-    # ── Large cardinality: compact cycle-palette editor ──────────────────────
+    # Large cardinality: compact cycle-palette editor.
     # With many groups individual pickers are unusable. Instead let the user
-    # edit the base palette (≤10 colors) that cycles across all groups.
+    # edit the base palette (up to 10 colors) that cycles across all groups.
     if (n > CPICKER_THRESHOLD) {
       cycle_colors <- paste(default_palette, collapse = ", ")
       header <- tags$p(
         style = "font-size:0.78rem; color:#6b7280; margin:2px 0 4px;",
-        paste0(n, " groups — colors cycle through the palette below.")
+        paste0(n, " groups - colors cycle through the palette below.")
       )
       if (!requireNamespace("shinyWidgets", quietly = TRUE)) {
         return(tagList(
@@ -879,7 +945,7 @@ server <- function(input, output, session) {
       ))
     }
 
-    # ── Small cardinality: one picker per region ──────────────────────────────
+    # Small cardinality: one picker per region.
     if (!requireNamespace("shinyWidgets", quietly = TRUE)) {
       return(textInput(
         "palette_text", "Palette (hex codes, comma-separated)",
@@ -1068,6 +1134,7 @@ server <- function(input, output, session) {
           region_offsets      = isolate(region_state()),
           label_offsets       = isolate(label_state()),
           region_palette      = region_palette(),
+          side_panel          = FALSE,
           file                = helper_file
         )
         state$helper_token    <- state$helper_token + 1L
@@ -1118,7 +1185,7 @@ server <- function(input, output, session) {
     state$helper_token
     tags$iframe(
       src   = paste0("dragmapr_spatial_studio/studio_helper.html?v=", state$helper_token),
-      style = "width: 100%; height: 780px; border: 1px solid #e5e7eb; border-radius: 6px;"
+      class = "studio-helper-frame"
     )
   })
 
@@ -1127,13 +1194,13 @@ server <- function(input, output, session) {
     tags$div(
       class = "helper-overlay",
       tags$div(class = "studio-spinner"),
-      tags$p("Building interactive map…")
+      tags$p("Building interactive map...")
     )
   })
 
   output$preview           <- renderPlot(preview_plot())
-  output$region_state_text <- renderText(region_csv_raw() %||% "Waiting for drag state…")
-  output$label_state_text  <- renderText(label_csv_raw()  %||% "Waiting for drag state…")
+  output$region_state_text <- renderText(region_csv_raw() %||% "Waiting for drag state...")
+  output$label_state_text  <- renderText(label_csv_raw()  %||% "Waiting for drag state...")
 
   # ---- Download handlers ----
 

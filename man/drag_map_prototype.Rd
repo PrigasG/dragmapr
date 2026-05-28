@@ -19,6 +19,7 @@ drag_map_prototype(
   region_offsets = NULL,
   label_offsets = NULL,
   region_palette = NULL,
+  side_panel = TRUE,
   file = "drag-map.html",
   open = FALSE
 )
@@ -60,6 +61,10 @@ to hex color strings (e.g. \code{c(North = "#2166ac", South = "#d73027")}).
 When supplied the D3 helper uses these colors instead of its built-in
 palette, so the interactive colors match a \code{\link[=render_dragged_map]{render_dragged_map()}} call
 that uses the same palette.}
+
+\item{side_panel}{Show the built-in copy/download side panel in the helper
+HTML. Defaults to \code{TRUE}; Shiny apps that provide their own controls can
+set this to \code{FALSE}.}
 
 \item{file}{Output HTML path.}
 
