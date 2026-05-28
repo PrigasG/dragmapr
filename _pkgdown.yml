@@ -7,7 +7,7 @@ template:
 home:
   links:
   - text: "Try the Spatial Studio →"
-    href: https://prigasg.shinyapps.io/dragmapr-spatial-studio/
+    href: https://Prigas89-dragmapr-spatial-studio.hf.space
   - text: Report a bug
     href: https://github.com/PrigasG/dragmapr/issues
   sidebar:
@@ -20,7 +20,7 @@ navbar:
   components:
     demo:
       text: "✦ Live Demo"
-      href: https://prigasg.shinyapps.io/dragmapr-spatial-studio/
+      href: https://Prigas89-dragmapr-spatial-studio.hf.space
     examples:
       text: Examples
       menu:
@@ -33,7 +33,7 @@ navbar:
       - text: Shiny workflows
         href: articles/shiny-workflows.html
       - text: "→ Spatial studio (live app)"
-        href: https://prigasg.shinyapps.io/dragmapr-spatial-studio/
+        href: https://Prigas89-dragmapr-spatial-studio.hf.space
     github:
       icon: fa-github
       href: https://github.com/PrigasG/dragmapr
@@ -104,4 +104,3 @@ articles:
   - labels-and-static-output
   - example-gallery
   - shiny-workflows
-
