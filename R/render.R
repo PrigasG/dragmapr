@@ -149,7 +149,7 @@ render_dragged_map <- function(x,
   regions <- sort(unique(as.character(adjusted[[region_col]])))
   if (show_legend && length(regions) > max_legend_keys) {
     message(
-      "dragmapr: legend suppressed — ", length(regions), " groups exceeds ",
+      "dragmapr: legend suppressed - ", length(regions), " groups exceeds ",
       "max_legend_keys = ", max_legend_keys, ". ",
       "Set show_legend = FALSE explicitly to silence this, or raise max_legend_keys."
     )
