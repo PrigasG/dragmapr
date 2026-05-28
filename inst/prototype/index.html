@@ -10,8 +10,14 @@ body { margin: 0; font-family: system-ui, sans-serif; color: #172033; }
 main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: 100vh; }
 svg { width: 100%; height: 100vh; display: block; background: #fbfcfe; cursor: grab; }
 aside { border-left: 1px solid #d8dee8; padding: 16px; }
-button { min-height: 34px; border: 1px solid #d8dee8; background: #f7f8fb; border-radius: 6px; }
-button + button { margin-left: 6px; }
+button { min-height: 34px; padding: 0 12px; border: 1px solid #d8dee8; background: #f7f8fb; border-radius: 6px; cursor: pointer; font-size: 13px; color: #172033; white-space: nowrap; transition: background .12s; }
+button:hover { background: #eef1f7; border-color: #b0b8cc; }
+button:active { background: #e2e7f0; }
+button.reset-btn { background: #fff0f0; border-color: #f5c2c2; color: #c0392b; }
+button.reset-btn:hover { background: #ffe4e4; border-color: #e08080; }
+.btn-group { display: flex; gap: 6px; margin-top: 8px; }
+.btn-group-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #64748b; margin: 16px 0 0; }
+.btn-row-reset { margin-top: 12px; border-top: 1px solid #e8ecf2; padding-top: 12px; }
 textarea { width: 100%; height: 28vh; margin-top: 8px; font: 12px/1.35 ui-monospace, Consolas, monospace; }
 h2 { font-size: 13px; margin: 16px 0 0; }
 .region path { stroke: white; stroke-width: 0.8; vector-effect: non-scaling-stroke; }
@@ -29,11 +35,19 @@ h2 { font-size: 13px; margin: 16px 0 0; }
   <aside>
     <h1>dragmapr</h1>
     <p>Drag grouped map regions and labels, then export offsets.</p>
-    <button id="copy-regions">Copy Regions</button>
-    <button id="download-regions">Download Regions</button>
-    <button id="copy-labels">Copy Labels</button>
-    <button id="download-labels">Download Labels</button>
-    <button id="reset">Reset</button>
+    <div class="btn-group-label">Regions</div>
+    <div class="btn-group">
+      <button id="copy-regions">Copy</button>
+      <button id="download-regions">Download</button>
+    </div>
+    <div class="btn-group-label">Labels</div>
+    <div class="btn-group">
+      <button id="copy-labels">Copy</button>
+      <button id="download-labels">Download</button>
+    </div>
+    <div class="btn-row-reset">
+      <button id="reset" class="reset-btn">↺ Reset all positions</button>
+    </div>
     <h2>Region offsets</h2>
     <textarea id="region-csv" spellcheck="false"></textarea>
     <h2 id="label-heading">Label offsets</h2>
