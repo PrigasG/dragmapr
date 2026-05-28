@@ -1,7 +1,12 @@
-# dragmapr 0.0.0.9000 (third pass — studio polish + high-cardinality fix)
+# dragmapr 0.0.0.9000 (third pass - studio polish + high-cardinality fix)
 
+* Polished the Spatial Studio example for hosted demos: the embedded D3 helper
+  can now hide its built-in side panel with `side_panel = FALSE`, giving Shiny
+  apps the full helper canvas while keeping standalone HTML exports unchanged.
+* Improved D3 helper drag performance by updating transforms/connectors during
+  drag instead of rebuilding the full SVG on every mouse move.
 * Added `stats` to `Imports` in `DESCRIPTION` (`stats::setNames` was used in
-  `R/examples.R` without being declared — R CMD check error on strict platforms).
+  `R/examples.R` without being declared - R CMD check error on strict platforms).
 * Removed `--compact-vignettes=gs+qpdf` from the GitHub Actions check workflow;
   Ghostscript and qpdf are not reliably available on macOS/Windows runners.
 
@@ -15,7 +20,7 @@
 * Added `post_load_hints()` inside the studio: after loading any file, the
   status bar reports group count and warns when the legend will be auto-hidden.
 
-# dragmapr 0.0.0.9000 (third pass — studio polish)
+# dragmapr 0.0.0.9000 (third pass - studio polish)
 
 * Polished `shiny_spatial_studio.R` UI: per-region `shinyWidgets::colorPickr()` swatches
   (with graceful fallback to comma-separated text input when shinyWidgets is not installed),
