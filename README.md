@@ -1,3 +1,12 @@
+---
+title: dragmapr Spatial Studio
+emoji: 🗺️
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # dragmapr
 
 [![R-CMD-check](https://github.com/PrigasG/dragmapr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/PrigasG/dragmapr/actions/workflows/R-CMD-check.yaml)
