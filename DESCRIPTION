@@ -25,6 +25,7 @@ Imports:
     jsonlite,
     rlang,
     sf,
+    stats,
     tools,
     utils
 Suggests:
