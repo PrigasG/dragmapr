@@ -8,4 +8,5 @@
 ^deploy\.R$
 ^rsconnect$
 ^Dockerfile$
+^HuggingFace_Deployment_Guide\.docx$
 ^pkgdown$
