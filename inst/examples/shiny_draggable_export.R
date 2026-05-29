@@ -31,12 +31,18 @@ ui <- fluidPage(
       Shiny.setInputValue('label_csv', event.data.labelCsv, {priority: 'event'});
     });
 
+    // Use a specific id so Shiny's hidden download iframes cannot intercept
+    // messages intended for the drag-map helper.
+    function getHelperFrame() {
+      return document.getElementById('dragmapr-export-helper');
+    }
+
     // After Shiny connects, poll the iframe every 500 ms until state arrives.
     // This handles the race where the iframe fires its first postMessage before
     // the Shiny WebSocket is established.
     function requestIframeState() {
       if (dragmaprStateReceived) return;
-      var iframe = document.querySelector('iframe');
+      var iframe = getHelperFrame();
       if (iframe && iframe.contentWindow) {
         iframe.contentWindow.postMessage({type: 'dragmapr-request-state'}, '*');
       }
@@ -46,7 +52,7 @@ ui <- fluidPage(
       setTimeout(requestIframeState, 100);
     });
     Shiny.addCustomMessageHandler('dragmapr-labels', function(message) {
-      var iframe = document.querySelector('iframe');
+      var iframe = getHelperFrame();
       if (iframe && iframe.contentWindow) {
         iframe.contentWindow.postMessage({
           type: 'dragmapr-set-labels',
@@ -55,7 +61,7 @@ ui <- fluidPage(
       }
     });
     Shiny.addCustomMessageHandler('dragmapr-label-data', function(message) {
-      var iframe = document.querySelector('iframe');
+      var iframe = getHelperFrame();
       if (iframe && iframe.contentWindow) {
         iframe.contentWindow.postMessage({
           type: 'dragmapr-set-label-data',
@@ -64,7 +70,7 @@ ui <- fluidPage(
       }
     });
     Shiny.addCustomMessageHandler('dragmapr-label-options', function(message) {
-      var iframe = document.querySelector('iframe');
+      var iframe = getHelperFrame();
       if (iframe && iframe.contentWindow) {
         iframe.contentWindow.postMessage({
           type: 'dragmapr-set-label-options',
@@ -185,7 +191,8 @@ server <- function(input, output, session) {
 
   output$helper <- renderUI({
     tags$iframe(
-      src = "dragmapr_export_static/hhs_drag_helper.html",
+      id    = "dragmapr-export-helper",
+      src   = "dragmapr_export_static/hhs_drag_helper.html",
       style = "width: 100%; height: 760px; border: 1px solid #d8dee8;"
     )
   })

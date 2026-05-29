@@ -88,40 +88,55 @@ shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragma
 `shiny_spatial_studio.R` is the most complete Shiny example. It is a small
 spatial workspace rather than a fixed demo: users upload local polygon data or
 enter a URL, pick grouping and label columns, edit colors, drag boundaries,
-switch between labels and info boxes, add connector lines, preview a static
-render, and download the current artifacts.
+switch between short labels and info boxes, control text size and connector
+style, preview a static render, and download the current artifacts.
 
 ```{r, eval = FALSE}
 shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
 ```
 
 Supported inputs: zipped shapefiles, shapefile sidecar files (`.shp` + `.dbf` +
-`.shx`), GeoJSON, and GeoPackage - either uploaded locally or downloaded from
-a URL.  The app reads geometry with `sf::st_read()`, repairs it with
+`.shx`), GeoJSON, and GeoPackage — either uploaded locally or downloaded from
+a URL. The app reads geometry with `sf::st_read()`, repairs it with
 `sf::st_make_valid()`, and transforms longitude/latitude data to EPSG:3857 so
-metre offsets work correctly.
+metre offsets work correctly. Region group names are sorted using a natural
+(numeric-aware) order, so "1", "2", ..., "10" are displayed in the right
+sequence rather than lexicographic order.
+
+The label sidebar consolidates controls so only sliders relevant to the current
+label type are shown: text size is always visible; marker size (width + height)
+appears only for rounded-box labels; circle radius only for circle labels; box
+dimensions only for info boxes.
 
 Available downloads from the studio sidebar:
 
-- **PNG** - static render from `render_dragged_map()`
-- **Region CSV** - current region offsets, importable by any later session
-- **Label CSV** - current label offsets
-- **GeoJSON / GPKG** - the adjusted sf geometry with offsets applied
-- **HTML helper** - the standalone D3 drag file you can share or reopen
-- **Bundle ZIP** - all of the above plus `palette.csv` and `metadata.json`;
+- **PNG** — static render from `render_dragged_map()`
+- **Region CSV** — current region offsets, importable by any later session
+- **Label CSV** — current label offsets
+- **GeoJSON / GPKG** — the adjusted sf geometry with offsets applied
+- **HTML helper** — the standalone D3 drag file you can share or reopen
+- **Bundle ZIP** — all of the above plus `palette.csv` and `metadata.json`;
   enough to fully reconstruct the layout in a new session or hand off to a
   collaborator
 
 The app names its central reactive values in the State tab so they are easy to
 find when adapting the code:
 
-- `source_sf()` - raw sf from upload / URL / demo
-- `projected_sf()` - after `prepare_dragmapr_sf()`
-- `region_col()`, `label_col()` - chosen columns
-- `label_table()` - `make_region_labels()` output with style flags
-- `region_state()`, `label_state()` - current drag offsets as data frames
-- `region_palette()` - named color vector
-- `current_plot()` - `ggplot2` object ready to save
+- `source_sf()` — raw sf from upload / URL / demo
+- `projected_sf()` — after `prepare_dragmapr_sf()`
+- `region_col()`, `label_col()` — chosen columns
+- `label_table()` — styled label data frame passed to `drag_map_prototype()`
+- `region_state()`, `label_state()` — current drag offsets as data frames
+- `region_palette()` — named colour vector
+- `current_plot()` — `ggplot2` object ready to save
+
+### Loading veil
+
+The studio shows a loading veil while data is being read and the D3 helper is
+being built. The veil is dismissed when the helper iframe signals it has
+finished its first `render()` call by posting a `dragmapr-ready` message to the
+parent page. This avoids the race condition where the browser fires the iframe
+`load` event before the parent's listener has been attached.
 
 ## Reusable Shiny Helpers
 
