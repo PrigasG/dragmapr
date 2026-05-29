@@ -134,8 +134,8 @@ body {
   color: #172033;
 }
 .container-fluid {
-  max-width: 1680px;
-  padding: 16px 18px 28px;
+  max-width: 1920px;
+  padding: 12px 14px 24px;
 }
 .well {
   background: #ffffff;
@@ -183,6 +183,25 @@ p.studio-subtitle {
 .studio-card .btn { margin-bottom: 4px; }
 .studio-card .selectize-control { margin-bottom: 0; }
 .studio-card .irs { margin-top: -4px; }
+
+/* ---- Compact slider sub-group ---- */
+.slider-group-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed #e5e7eb;
+}
+.slider-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
+}
+.slider-pair .form-group { margin-bottom: 6px; }
+.slider-pair .control-label { font-size: 0.75rem; }
 .studio-action-row {
   display: flex;
   flex-wrap: wrap;
@@ -206,6 +225,42 @@ p.studio-subtitle {
 .studio-status.ok    { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
 .studio-status.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 .studio-status .status-icon { font-size: 1rem; flex-shrink: 0; }
+
+/* ---- Blocking load veil ---- */
+.studio-load-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(248, 250, 252, 0.78);
+  backdrop-filter: blur(3px);
+}
+body.dragmapr-loading .studio-load-veil { display: flex; }
+.studio-load-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 260px;
+  max-width: 360px;
+  padding: 14px 16px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+}
+.studio-load-panel strong {
+  display: block;
+  color: #172033;
+  font-size: 0.9rem;
+}
+.studio-load-panel span {
+  display: block;
+  color: #64748b;
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
 
 /* ---- Color picker rows ---- */
 .cpicker-grid {
@@ -268,8 +323,8 @@ p.studio-subtitle {
 .preview-toolbar .checkbox { margin: 0; }
 .studio-helper-frame {
   width: 100%;
-  height: min(78vh, 820px);
-  min-height: 620px;
+  height: min(86vh, 960px);
+  min-height: 720px;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   background: #ffffff;
@@ -298,8 +353,8 @@ body.shiny-busy .studio-progress-bar { opacity: 1; }
 .helper-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(2px);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(1.5px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -307,6 +362,13 @@ body.shiny-busy .studio-progress-bar { opacity: 1; }
   gap: 14px;
   z-index: 10;
   border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+.helper-wrap.is-updating .helper-overlay {
+  opacity: 1;
+  pointer-events: auto;
 }
 .helper-overlay p {
   font-size: 0.85rem;
@@ -334,40 +396,130 @@ ui <- fluidPage(
     tags$script(HTML(dragmapr_iframe_bridge())),
     # Label-toggle message handler (app-specific, stays inline)
     tags$script(HTML("
+      // Use a specific selector so Shiny's own internal iframes (download
+      // handlers, etc.) never intercept messages meant for the map helper.
+      function getHelperFrame() {
+        return document.querySelector('iframe.studio-helper-frame');
+      }
+      function helperTargetOrigin() {
+        var iframe = getHelperFrame();
+        if (!iframe || !iframe.src) return window.location.origin;
+        try {
+          return new URL(iframe.src, window.location.href).origin;
+        } catch (e) {
+          return window.location.origin;
+        }
+      }
+      var helperUpdateStarted = 0;
+      var helperUpdateHideTimer = null;
+      function setHelperUpdating(active) {
+        var wrap = document.querySelector('.helper-wrap');
+        window.clearTimeout(helperUpdateHideTimer);
+        if (!wrap) return;
+        if (active) {
+          helperUpdateStarted = Date.now();
+          wrap.classList.add('is-updating');
+          return;
+        }
+        var elapsed = Date.now() - helperUpdateStarted;
+        var delay = Math.max(0, 450 - elapsed);
+        helperUpdateHideTimer = window.setTimeout(function() {
+          wrap.classList.remove('is-updating');
+        }, delay);
+      }
       Shiny.addCustomMessageHandler('dragmapr-labels', function(message) {
-        var iframe = document.querySelector('iframe');
+        var iframe = getHelperFrame();
         if (iframe && iframe.contentWindow) {
           iframe.contentWindow.postMessage(
-            {type: 'dragmapr-set-labels', labels: !!message.labels}, '*'
+            {type: 'dragmapr-set-labels', labels: !!message.labels}, helperTargetOrigin()
           );
         }
       });
       Shiny.addCustomMessageHandler('dragmapr-reset-state', function(message) {
-        var iframe = document.querySelector('iframe');
+        var iframe = getHelperFrame();
         if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage({type: 'dragmapr-reset-state'}, '*');
+          iframe.contentWindow.postMessage({type: 'dragmapr-reset-state'}, helperTargetOrigin());
         }
       });
       Shiny.addCustomMessageHandler('dragmapr-label-data', function(message) {
-        var iframe = document.querySelector('iframe');
+        var iframe = getHelperFrame();
         if (iframe && iframe.contentWindow) {
           iframe.contentWindow.postMessage(
-            {type: 'dragmapr-set-label-data', labels: message.labels || []}, '*'
+            {type: 'dragmapr-set-label-data', labels: message.labels || []}, helperTargetOrigin()
           );
         }
       });
       Shiny.addCustomMessageHandler('dragmapr-label-options', function(message) {
-        var iframe = document.querySelector('iframe');
+        var iframe = getHelperFrame();
         if (iframe && iframe.contentWindow) {
           iframe.contentWindow.postMessage(
-            {type: 'dragmapr-set-label-options', options: message.options || {}}, '*'
+            {type: 'dragmapr-set-label-options', options: message.options || {}}, helperTargetOrigin()
           );
+        }
+      });
+      Shiny.addCustomMessageHandler('dragmapr-loading', function(message) {
+        document.body.classList.toggle('dragmapr-loading', !!(message && message.active));
+      });
+      Shiny.addCustomMessageHandler('dragmapr-helper-loading', function(message) {
+        setHelperUpdating(!!(message && message.active));
+      });
+      document.addEventListener('change', function(event) {
+        if (event.target && event.target.id === 'spatial_upload') {
+          document.body.classList.add('dragmapr-loading');
+        }
+        if (event.target && (event.target.id === 'region_col' || event.target.id === 'label_col')) {
+          setHelperUpdating(true);
+        }
+      }, true);
+      document.addEventListener('shiny:inputchanged', function(event) {
+        if (event.name === 'region_col' || event.name === 'label_col') {
+          setHelperUpdating(true);
+        }
+      });
+      $(document).on('shiny:inputchanged', function(event) {
+        if (event.name === 'region_col' || event.name === 'label_col') {
+          setHelperUpdating(true);
+        }
+      });
+      $(document).on('change', '#region_col, #label_col', function() {
+        setHelperUpdating(true);
+      });
+      document.addEventListener('click', function(event) {
+        var loadButton = event.target && event.target.closest &&
+          event.target.closest('#load_url, #load_demo');
+        if (loadButton) {
+          document.body.classList.add('dragmapr-loading');
+        }
+      }, true);
+
+      // Dismiss the loading veil when the drag-map iframe signals it is ready.
+      // The iframe sends 'dragmapr-ready' at the end of its startup script,
+      // after D3 has completed the first render(). This avoids the race
+      // condition of the MutationObserver + iframe 'load' approach: the
+      // iframe's 'load' event fires as soon as its HTML is parsed, which can
+      // beat the observer's listener setup for fast local resources.
+      window.addEventListener('message', function(event) {
+        if (event.data && event.data.type === 'dragmapr-ready') {
+          document.body.classList.remove('dragmapr-loading');
+          setHelperUpdating(false);
+          Shiny.setInputValue('helper_ready_token', Date.now(), {priority: 'event'});
         }
       });
     ")),
     tags$style(HTML(studio_css)),
     # Progress bar shown automatically whenever Shiny is busy
-    tags$div(class = "studio-progress-bar")
+    tags$div(class = "studio-progress-bar"),
+    tags$div(
+      class = "studio-load-veil",
+      tags$div(
+        class = "studio-load-panel",
+        tags$div(class = "studio-spinner"),
+        tags$div(
+          tags$strong("Loading spatial data"),
+          tags$span("Reading geometry, columns, labels, and preview state...")
+        )
+      )
+    )
   ),
 
   tags$h2("dragmapr spatial studio", class = "studio-title"),
@@ -376,7 +528,7 @@ ui <- fluidPage(
 
   sidebarLayout(
     sidebarPanel(
-      width = 3,
+      width = 2,
 
       tags$div(
         class = "studio-card",
@@ -404,7 +556,7 @@ ui <- fluidPage(
         tags$div("Columns & colors", class = "studio-section"),
         uiOutput("column_controls"),
         uiOutput("color_pickers"),
-        checkboxInput("show_legend", "Show legend in preview", value = TRUE),
+        checkboxInput("show_legend", "Show legend in drag and preview", value = TRUE),
         checkboxInput("legend_show_all", "Show all legend keys", value = FALSE),
         selectInput(
           "legend_position",
@@ -425,9 +577,14 @@ ui <- fluidPage(
           choices  = c("Short labels" = "labels", "Info boxes" = "boxes"),
           selected = "labels"
         ),
-        checkboxInput("show_label_marker", "Circle behind text labels", value = TRUE),
-        sliderInput("box_width",  "Info box width",  min = 110, max = 280, value = 170, step = 5),
-        sliderInput("box_height", "Info box height", min = 48,  max = 150, value = 76,  step = 4)
+        radioButtons(
+          "label_marker_shape", "Text label marker",
+          choices = c("Circle" = "circle", "Rounded box" = "rect", "Text only" = "none"),
+          selected = "circle"
+        ),
+        sliderInput("label_text_size", "Text size (px)",
+                    min = 7, max = 22, value = 11, step = 1),
+        uiOutput("label_size_controls")
       ),
 
       tags$div(
@@ -447,6 +604,7 @@ ui <- fluidPage(
       tags$div(
         class = "studio-card",
         tags$div("Export", class = "studio-section"),
+        checkboxInput("show_helper_panel", "Show offset panel in drag view", value = TRUE),
         tags$div(
           class = "download-grid",
           downloadButton("download_png",        "PNG"),
@@ -461,7 +619,7 @@ ui <- fluidPage(
     ),
 
     mainPanel(
-      width = 9,
+      width = 10,
       uiOutput("status_bar"),
       uiOutput("studio_overlay_ui"),
       tabsetPanel(
@@ -470,7 +628,12 @@ ui <- fluidPage(
           tags$div(
             class = "helper-wrap",
             uiOutput("helper"),
-            uiOutput("helper_overlay_ui")
+            tags$div(
+              id = "helper-overlay",
+              class = "helper-overlay",
+              tags$div(class = "studio-spinner"),
+              tags$p("Updating drag map...")
+            )
           )
         ),
         tabPanel(
@@ -517,6 +680,7 @@ server <- function(input, output, session) {
     status_level    = "info",    # "info" | "ok" | "error"
     helper_token    = 0L,
     helper_building = FALSE,     # TRUE while drag_map_prototype() is running
+    helper_loading  = FALSE,     # TRUE until the new iframe reports ready
     ingesting       = FALSE,
     region_csv_cache = NULL,
     label_csv_cache  = NULL
@@ -530,6 +694,20 @@ server <- function(input, output, session) {
   set_status <- function(msg, level = "info") {
     state$status       <- msg
     state$status_level <- level
+  }
+
+  set_loading <- function(active) {
+    session$sendCustomMessage("dragmapr-loading", list(active = isTRUE(active)))
+  }
+
+  set_helper_loading <- function(active) {
+    state$helper_loading <- isTRUE(active)
+    session$sendCustomMessage("dragmapr-helper-loading", list(active = isTRUE(active)))
+  }
+
+  finish_ingest <- function() {
+    state$ingesting <- FALSE
+    set_loading(FALSE)
   }
 
   rows_for_message <- function(x) {
@@ -574,8 +752,9 @@ server <- function(input, output, session) {
   # ---- Data loading ----
 
   observeEvent(input$load_demo, {
+    set_loading(TRUE)
     state$ingesting <- TRUE
-    on.exit({ state$ingesting <- FALSE }, add = TRUE)
+    on.exit(finish_ingest(), add = TRUE)
     x <- example_hhs_layout()$states
     state$source <- x
     state$region_csv_cache <- NULL
@@ -584,8 +763,9 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$spatial_upload, {
+    set_loading(TRUE)
     state$ingesting <- TRUE
-    on.exit({ state$ingesting <- FALSE }, add = TRUE)
+    on.exit(finish_ingest(), add = TRUE)
     tryCatch({
       x <- read_dragmapr_sf_upload(input$spatial_upload)
       if (!is.null(x)) {
@@ -595,18 +775,20 @@ server <- function(input, output, session) {
         post_load_hints(x, "upload")
       }
     }, error = function(e) {
-      set_status(paste("Upload error:", conditionMessage(e)), "error")
+      set_status(paste("Upload failed:", conditionMessage(e)), "error")
     })
   })
 
   observeEvent(input$load_url, {
     url <- trimws(input$spatial_url %||% "")
     if (!nzchar(url)) {
+      set_loading(FALSE)
       set_status("Enter a URL before clicking Load URL.", "error")
       return()
     }
+    set_loading(TRUE)
     state$ingesting <- TRUE
-    on.exit({ state$ingesting <- FALSE }, add = TRUE)
+    on.exit(finish_ingest(), add = TRUE)
     set_status("Downloading...", "info")
     tryCatch({
       x <- read_dragmapr_sf_url(url)
@@ -615,9 +797,13 @@ server <- function(input, output, session) {
       state$label_csv_cache <- NULL
       post_load_hints(x, "URL")
     }, error = function(e) {
-      set_status(paste("URL error:", conditionMessage(e)), "error")
+      set_status(paste("URL load failed:", conditionMessage(e)), "error")
     })
   })
+
+  observeEvent(input$helper_ready_token, {
+    set_helper_loading(FALSE)
+  }, ignoreInit = TRUE)
 
   # ---- Reactives ----
 
@@ -627,7 +813,7 @@ server <- function(input, output, session) {
     tryCatch(
       prepare_dragmapr_sf(source_sf()),
       error = function(e) {
-        set_status(paste("Projection error:", conditionMessage(e)), "error")
+        set_status(paste("Could not prepare geometry:", conditionMessage(e)), "error")
         source_sf()
       }
     )
@@ -818,7 +1004,9 @@ server <- function(input, output, session) {
       show_legend         = isTRUE(input$show_legend),
       max_legend_keys     = max_keys,
       legend_position     = input$legend_position %||% "bottom",
-      show_label_marker   = isTRUE(input$show_label_marker),
+      show_label_marker   = !identical(input$label_marker_shape %||% "circle", "none"),
+      label_marker_shape  = input$label_marker_shape %||% "circle",
+      marker_size         = (input$label_radius %||% 14) / 3,
       connector_linewidth = input$connector_linewidth %||% 0.45,
       label_padding       = 0.12,
       title               = "dragmapr spatial studio"
@@ -845,7 +1033,7 @@ server <- function(input, output, session) {
 
   observeEvent(
     list(projected_sf(), region_col(), label_col(), region_palette(), label_table(),
-         input$show_labels, input$show_legend, input$show_label_marker,
+         input$show_labels, input$show_legend, input$label_marker_shape,
          input$connector_linewidth, input$legend_show_all, input$legend_position),
     do_refresh(),
     ignoreInit = FALSE
@@ -973,6 +1161,39 @@ server <- function(input, output, session) {
              style = "font-size:0.78rem; color:#6b7280; margin:2px 0 6px;"),
       tags$div(class = "cpicker-grid", pickers)
     )
+  })
+
+  # Renders only the size sliders that are relevant for the current
+  # annotation mode and label marker shape, keeping the sidebar uncluttered.
+  output$label_size_controls <- renderUI({
+    mode  <- input$annotation_mode    %||% "labels"
+    shape <- input$label_marker_shape %||% "circle"
+
+    if (identical(mode, "boxes")) {
+      tagList(
+        tags$p("Box size", class = "slider-group-label"),
+        tags$div(
+          class = "slider-pair",
+          sliderInput("box_width",  "Width",  min = 110, max = 280, value = 170, step = 5),
+          sliderInput("box_height", "Height", min = 48,  max = 150, value = 76,  step = 4)
+        )
+      )
+    } else if (identical(shape, "circle")) {
+      sliderInput("label_radius", "Circle radius (px)",
+                  min = 8, max = 60, value = 14, step = 1)
+    } else if (identical(shape, "rect")) {
+      tagList(
+        tags$p("Marker size", class = "slider-group-label"),
+        tags$div(
+          class = "slider-pair",
+          sliderInput("label_width",  "Width",  min = 32, max = 180, value = 64, step = 4),
+          sliderInput("label_height", "Height", min = 22, max = 90,  value = 30, step = 2)
+        )
+      )
+    } else {
+      # "none" - text only: text size slider above is all that is needed
+      NULL
+    }
   })
 
   output$label_filter_ui <- renderUI({
@@ -1118,30 +1339,41 @@ server <- function(input, output, session) {
   # Label-only style changes are sent to the existing iframe with postMessage
   # so changing connector style does not reset the drag state.
   observeEvent(
-    list(projected_sf(), region_col(), label_col(), region_palette()),
+    list(projected_sf(), region_col(), label_col(), region_palette(), input$show_helper_panel),
     {
       state$helper_building <- TRUE
+      set_helper_loading(TRUE)
+      on.exit({
+        state$helper_building <- FALSE
+      }, add = TRUE)
       tryCatch({
         drag_map_prototype(
           projected_sf(),
           region_col          = region_col(),
           label_col           = label_col(),
           labels              = label_table(),
-          label_marker        = isTRUE(input$show_label_marker),
+          label_marker        = !identical(input$label_marker_shape %||% "circle", "none"),
+          label_marker_shape  = input$label_marker_shape %||% "circle",
+          label_text_size     = input$label_text_size %||% 11,
+          label_radius        = input$label_radius %||% 14,
+          label_width         = input$label_width  %||% 64,
+          label_height        = input$label_height %||% 30,
           label_box_width     = input$box_width  %||% 170,
           label_box_height    = input$box_height %||% 76,
           connector_linewidth = (input$connector_linewidth %||% 0.45) * 3,
           region_offsets      = isolate(region_state()),
           label_offsets       = isolate(label_state()),
           region_palette      = region_palette(),
-          side_panel          = FALSE,
+          show_legend         = isTRUE(input$show_legend),
+          max_legend_keys     = if (isTRUE(input$legend_show_all)) 1000000 else LEGEND_THRESHOLD,
+          legend_position     = input$legend_position %||% "bottom",
+          side_panel          = isTRUE(input$show_helper_panel %||% TRUE),
           file                = helper_file
         )
         state$helper_token    <- state$helper_token + 1L
-        state$helper_building <- FALSE
       }, error = function(e) {
-        state$helper_building <- FALSE
-        set_status(paste("Helper error:", conditionMessage(e)), "error")
+        set_helper_loading(FALSE)
+        set_status(paste("Could not build the interactive helper:", conditionMessage(e)), "error")
       })
     },
     ignoreInit = FALSE
@@ -1152,17 +1384,29 @@ server <- function(input, output, session) {
   }, ignoreInit = FALSE)
 
   observeEvent(label_table(), {
+    if (isTRUE(state$helper_loading) || isTRUE(state$helper_building)) return()
     session$sendCustomMessage("dragmapr-label-data", list(labels = rows_for_message(label_table())))
   }, ignoreInit = TRUE)
 
   observeEvent(
-    list(input$show_label_marker, input$box_width, input$box_height, input$connector_linewidth),
+    list(input$label_marker_shape, input$label_text_size,
+         input$label_radius, input$label_width, input$label_height,
+         input$box_width, input$box_height, input$connector_linewidth,
+         input$show_legend, input$legend_show_all, input$legend_position),
     {
       session$sendCustomMessage("dragmapr-label-options", list(options = list(
-        labelMarker = isTRUE(input$show_label_marker),
+        labelMarker = !identical(input$label_marker_shape %||% "circle", "none"),
+        labelMarkerShape = input$label_marker_shape %||% "circle",
+        labelTextSize = input$label_text_size %||% 11,
+        labelRadius = input$label_radius %||% 14,
+        labelWidth = input$label_width %||% 64,
+        labelHeight = input$label_height %||% 30,
         labelBoxWidth = input$box_width %||% 170,
         labelBoxHeight = input$box_height %||% 76,
-        connectorLinewidth = (input$connector_linewidth %||% 0.45) * 3
+        connectorLinewidth = (input$connector_linewidth %||% 0.45) * 3,
+        showLegend = isTRUE(input$show_legend),
+        maxLegendKeys = if (isTRUE(input$legend_show_all)) 1000000 else LEGEND_THRESHOLD,
+        legendPosition = input$legend_position %||% "bottom"
       )))
     },
     ignoreInit = TRUE
@@ -1186,15 +1430,6 @@ server <- function(input, output, session) {
     tags$iframe(
       src   = paste0("dragmapr_spatial_studio/studio_helper.html?v=", state$helper_token),
       class = "studio-helper-frame"
-    )
-  })
-
-  output$helper_overlay_ui <- renderUI({
-    if (!isTRUE(state$helper_building)) return(NULL)
-    tags$div(
-      class = "helper-overlay",
-      tags$div(class = "studio-spinner"),
-      tags$p("Building interactive map...")
     )
   })
 

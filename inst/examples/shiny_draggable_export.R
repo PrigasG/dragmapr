@@ -91,7 +91,14 @@ ui <- fluidPage(
         selected = "labels",
         inline = TRUE
       ),
-      checkboxInput("show_label_marker", "Circle behind text labels", value = TRUE),
+      radioButtons(
+        "label_marker_shape",
+        "Text label marker",
+        choices = c("Circle" = "circle", "Rounded box" = "rect", "Text only" = "none"),
+        selected = "circle",
+        inline = TRUE
+      ),
+      sliderInput("label_radius", "Circle label radius", min = 8, max = 48, value = 14, step = 1),
       sliderInput("box_width", "Info box width", min = 110, max = 260, value = 165, step = 5),
       sliderInput("box_height", "Info box height", min = 48, max = 140, value = 68, step = 4),
       checkboxInput("show_connectors", "Show connector lines", value = FALSE),
@@ -133,9 +140,10 @@ server <- function(input, output, session) {
     region_col = "hhs_region",
     labels = hhs$labels,
     label_col = "hhs_region",
-    region_palette = hhs$region_colors,
-    file = helper_file
-  )
+      region_palette = hhs$region_colors,
+      show_legend = TRUE,
+      file = helper_file
+    )
 
   region_csv <- debounce(reactive(input$region_csv), 250)
   label_csv <- debounce(reactive(input$label_csv), 250)
@@ -166,7 +174,9 @@ server <- function(input, output, session) {
       region_palette = hhs$region_colors,
       region_labels = hhs$region_names,
       show_legend = isTRUE(input$show_legend),
-      show_label_marker = isTRUE(input$show_label_marker),
+      show_label_marker = !identical(input$label_marker_shape %||% "circle", "none"),
+      label_marker_shape = input$label_marker_shape %||% "circle",
+      marker_size = (input$label_radius %||% 14) / 3,
       connector_linewidth = input$connector_linewidth %||% 0.45,
       label_padding = 0.12,
       title = "US Map by HHS Regions"
@@ -197,10 +207,13 @@ server <- function(input, output, session) {
     session$sendCustomMessage(
       "dragmapr-label-options",
       list(options = list(
-        labelMarker = isTRUE(input$show_label_marker),
+        labelMarker = !identical(input$label_marker_shape %||% "circle", "none"),
+        labelMarkerShape = input$label_marker_shape %||% "circle",
+        labelRadius = input$label_radius %||% 14,
         labelBoxWidth = input$box_width %||% 165,
         labelBoxHeight = input$box_height %||% 68,
-        connectorLinewidth = (input$connector_linewidth %||% 0.45) * 3
+        connectorLinewidth = (input$connector_linewidth %||% 0.45) * 3,
+        showLegend = isTRUE(input$show_legend)
       ))
     )
   })

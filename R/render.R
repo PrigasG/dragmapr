@@ -20,8 +20,11 @@
 #' @param title Optional plot title.
 #' @param label_size Text size passed to [ggplot2::geom_text()]. Defaults to
 #'   `3.4`.
-#' @param show_label_marker Draw circular markers behind ordinary text labels.
-#'   Use `FALSE` for text-only labels.
+#' @param show_label_marker Draw markers behind ordinary text labels. Use
+#'   `FALSE` for text-only labels.
+#' @param label_marker_shape Marker shape for ordinary text labels in static
+#'   exports. One of `"circle"`, `"rect"`, or `"none"`. If
+#'   `show_label_marker = FALSE`, this is treated as `"none"`.
 #' @param marker_size Point size passed to [ggplot2::geom_point()]. Defaults to
 #'   `3.2`.
 #' @param marker_fill Fill colour of the label marker circle. Defaults to
@@ -89,6 +92,7 @@ render_dragged_map <- function(x,
                                title = NULL,
                                label_size = 3.4,
                                show_label_marker = TRUE,
+                               label_marker_shape = c("circle", "rect", "none"),
                                marker_size = 3.2,
                                marker_fill = "white",
                                marker_color = "black",
@@ -110,12 +114,16 @@ render_dragged_map <- function(x,
                                height = 6,
                                dpi = 300) {
   legend_position <- match.arg(legend_position)
+  label_marker_shape <- match.arg(label_marker_shape)
   if (identical(legend_position, "none")) {
     show_legend <- FALSE
   }
+  if (!isTRUE(show_label_marker)) {
+    label_marker_shape <- "none"
+  }
   if (is.null(region_offsets)) {
     region_offsets <- data.frame(
-      region = sort(unique(as.character(x[[region_col]]))),
+      region = natural_sort(unique(as.character(x[[region_col]]))),
       dx_m = 0,
       dy_m = 0,
       stringsAsFactors = FALSE
@@ -146,7 +154,7 @@ render_dragged_map <- function(x,
   ) else empty_connector_data()
   limits <- plot_limits(adjusted, if (show_labels) labels else NULL, connectors, padding = label_padding)
 
-  regions <- sort(unique(as.character(adjusted[[region_col]])))
+  regions <- natural_sort(unique(as.character(adjusted[[region_col]])))
   if (show_legend && length(regions) > max_legend_keys) {
     message(
       "dragmapr: legend suppressed - ", length(regions), " groups exceeds ",
@@ -249,7 +257,7 @@ render_dragged_map <- function(x,
       if (!"label_color" %in% names(point_labels)) {
         point_labels$label_color <- marker_color
       }
-      if (isTRUE(show_label_marker)) {
+      if (identical(label_marker_shape, "circle")) {
         plot <- plot +
           ggplot2::geom_point(
             data = point_labels,
@@ -260,14 +268,27 @@ render_dragged_map <- function(x,
             color = marker_color,
             stroke = marker_stroke
           )
+      } else if (identical(label_marker_shape, "rect")) {
+        plot <- plot +
+          ggplot2::geom_label(
+            data = point_labels,
+            ggplot2::aes(x = .data$x, y = .data$y, label = .data$label, color = .data$label_color),
+            fontface = "bold",
+            size = label_size,
+            fill = marker_fill,
+            linewidth = marker_stroke * 0.25,
+            label.padding = grid::unit(0.16, "lines")
+          )
       }
-      plot <- plot +
-        ggplot2::geom_text(
-          data = point_labels,
-          ggplot2::aes(x = .data$x, y = .data$y, label = .data$label, color = .data$label_color),
-          fontface = "bold",
-          size = label_size
-        )
+      if (!identical(label_marker_shape, "rect")) {
+        plot <- plot +
+          ggplot2::geom_text(
+            data = point_labels,
+            ggplot2::aes(x = .data$x, y = .data$y, label = .data$label, color = .data$label_color),
+            fontface = "bold",
+            size = label_size
+          )
+      }
       uses_label_color <- TRUE
     }
     if (nrow(box_labels) > 0L) {

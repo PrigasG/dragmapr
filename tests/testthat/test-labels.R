@@ -367,6 +367,23 @@ test_that("text labels can render without marker circles", {
   expect_equal(length(plot$layers), 2)
 })
 
+test_that("text labels can render with rectangular markers", {
+  x <- sf::st_sf(
+    region = "North",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+
+  plot <- render_dragged_map(x, region_col = "region", label_marker_shape = "rect")
+
+  label_layers <- vapply(plot$layers, function(layer) inherits(layer$geom, "GeomLabel"), logical(1))
+  point_layers <- vapply(plot$layers, function(layer) inherits(layer$geom, "GeomPoint"), logical(1))
+  expect_true(any(label_layers))
+  expect_false(any(point_layers))
+})
+
 test_that("invalid label type errors clearly", {
   labels <- data.frame(
     label_id = "note-1",

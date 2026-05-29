@@ -35,7 +35,7 @@ make_region_labels <- function(x,
   }
   point <- match.arg(point)
 
-  regions <- sort(unique(as.character(x[[region_col]])))
+  regions <- natural_sort(unique(as.character(x[[region_col]])))
   rows <- lapply(regions, function(region) {
     idx <- as.character(x[[region_col]]) == region
     geom <- sf::st_union(sf::st_geometry(x)[idx])
@@ -133,12 +133,13 @@ as_drag_annotations <- function(labels,
   if (!"height_px" %in% tolower(names(labels))) {
     labels$height_px <- height_px
   }
-  if (!"connector" %in% tolower(names(labels))) {
-    labels$connector <- connector
-  }
-  if (!"connector_type" %in% tolower(names(labels))) {
-    labels$connector_type <- connector_type
-  }
+  # Always apply the caller's connector/connector_type values. normalize_labels
+  # (called upstream by make_region_labels) pre-fills these columns with FALSE /
+  # "straight", so the "column absent" guard would silently drop the explicit
+  # argument. Unconditional assignment is the correct semantic here - the caller
+  # explicitly chose these values for the annotation boxes.
+  labels$connector      <- connector
+  labels$connector_type <- connector_type
   out <- normalize_labels(labels)
   out$label_type <- "box"
   missing_width <- !is.finite(out$width_px) | out$width_px <= 0
@@ -238,6 +239,28 @@ read_label_offsets <- function(path) {
 apply_label_offsets <- function(labels, label_offsets = NULL) {
   apply_label_state(labels, label_offsets)
 }
+
+# ---- Internal natural-sort helpers ----------------------------------------
+# Sort character vectors so embedded integers are ordered numerically:
+#   "1", "2", ..., "10"  rather than  "1", "10", "2", ...
+# These are package-internal only (not exported).
+
+natural_sort_key_r <- function(x) {
+  vapply(as.character(x), function(value) {
+    m <- gregexpr("[0-9]+", value, perl = TRUE)[[1L]]
+    if (m[1L] < 0L) return(value)
+    nums <- regmatches(value, list(m))[[1L]]
+    padded <- sprintf("%020.0f", as.numeric(nums))
+    regmatches(value, list(m)) <- list(padded)
+    value
+  }, character(1L), USE.NAMES = FALSE)
+}
+
+natural_sort <- function(x) {
+  x[order(natural_sort_key_r(as.character(x)), method = "radix")]
+}
+
+# ---------------------------------------------------------------------------
 
 normalize_labels <- function(labels) {
   if (!is.data.frame(labels)) {

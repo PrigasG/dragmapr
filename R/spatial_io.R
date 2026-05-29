@@ -26,29 +26,42 @@ read_dragmapr_sf_upload <- function(upload) {
   if (is.null(upload) || nrow(upload) == 0L) {
     return(NULL)
   }
+  required <- c("name", "datapath")
+  missing <- setdiff(required, names(upload))
+  if (length(missing) > 0L) {
+    stop(
+      "`upload` must be a Shiny fileInput() value with column(s): ",
+      paste(required, collapse = ", "), ". Missing: ",
+      paste(missing, collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  safe_names <- sanitize_upload_names(upload$name)
   upload_dir <- tempfile("dragmapr_upload_")
   dir.create(upload_dir, recursive = TRUE)
   for (i in seq_len(nrow(upload))) {
-    file.copy(upload$datapath[i],
-              file.path(upload_dir, upload$name[i]),
-              overwrite = TRUE)
+    ok <- file.copy(
+      upload$datapath[i],
+      file.path(upload_dir, safe_names[i]),
+      overwrite = TRUE
+    )
+    if (!isTRUE(ok)) {
+      stop(
+        "Could not copy uploaded file '", safe_names[i], "'. ",
+        "Please try uploading the file again.",
+        call. = FALSE
+      )
+    }
   }
   zip_files <- file.path(
     upload_dir,
-    upload$name[tolower(tools::file_ext(upload$name)) == "zip"]
+    safe_names[tolower(tools::file_ext(safe_names)) == "zip"]
   )
   if (length(zip_files) > 0L) {
-    utils::unzip(zip_files[1], exdir = upload_dir)
+    .unzip_spatial_archive(zip_files[1], upload_dir, source = "uploaded zip file")
   }
   spatial_file <- .detect_spatial_file(upload_dir)
-  x <- sf::st_read(spatial_file, quiet = TRUE)
-  if (!inherits(x, "sf")) {
-    stop("The uploaded file could not be read as an sf object.", call. = FALSE)
-  }
-  if (nrow(x) == 0L) {
-    stop("The uploaded spatial file contains no features.", call. = FALSE)
-  }
-  x
+  .read_spatial_file(spatial_file, source = "uploaded spatial file")
 }
 
 #' Download and read an sf object from a URL
@@ -95,19 +108,12 @@ read_dragmapr_sf_url <- function(url, timeout = 60) {
   if (ext == "zip") {
     extract_dir <- tempfile("dragmapr_url_")
     dir.create(extract_dir, recursive = TRUE)
-    utils::unzip(dest, exdir = extract_dir)
+    .unzip_spatial_archive(dest, extract_dir, source = "downloaded zip file")
     spatial_file <- .detect_spatial_file(extract_dir)
   } else {
     spatial_file <- dest
   }
-  x <- sf::st_read(spatial_file, quiet = TRUE)
-  if (!inherits(x, "sf")) {
-    stop("The downloaded file could not be read as an sf object.", call. = FALSE)
-  }
-  if (nrow(x) == 0L) {
-    stop("The downloaded spatial file contains no features.", call. = FALSE)
-  }
-  x
+  .read_spatial_file(spatial_file, source = "downloaded spatial file")
 }
 
 #' Prepare an sf object for use with dragmapr
@@ -181,6 +187,9 @@ prepare_dragmapr_sf <- function(x, target_crs = 3857) {
 #'   been received.  Defaults to `2000`.
 #' @param fast_poll_ms Polling interval in milliseconds before initial state
 #'   arrives.  Defaults to `500`.
+#' @param allowed_origin Origin allowed to send drag state messages. Use
+#'   `"same-origin"` to accept the current Shiny app origin, `"*"` to accept
+#'   any origin, or a specific origin such as `"https://example.com"`.
 #'
 #' @return A character string of JavaScript ready for
 #'   `tags$head(tags$script(HTML(dragmapr_iframe_bridge())))`.
@@ -197,17 +206,34 @@ prepare_dragmapr_sf <- function(x, target_crs = 3857) {
 dragmapr_iframe_bridge <- function(region_input = "region_csv",
                                    label_input  = "label_csv",
                                    slow_poll_ms = 2000L,
-                                   fast_poll_ms = 500L) {
+                                   fast_poll_ms = 500L,
+                                   allowed_origin = "same-origin") {
   region_input <- as.character(region_input[1L])
   label_input  <- as.character(label_input[1L])
   slow_poll_ms <- as.integer(slow_poll_ms[1L])
   fast_poll_ms <- as.integer(fast_poll_ms[1L])
+  allowed_origin <- as.character(allowed_origin[1L])
+  if (!nzchar(allowed_origin)) {
+    stop("`allowed_origin` must be a non-empty character string.", call. = FALSE)
+  }
 
   sprintf(
     '
 var _dragmaprBridgeReceived = false;
+var _dragmaprAllowedOrigin = %s;
+function _dragmaprOriginAllowed(event) {
+  if (_dragmaprAllowedOrigin === "*") return true;
+  if (_dragmaprAllowedOrigin === "same-origin") {
+    return event.origin === window.location.origin || event.origin === "null";
+  }
+  return event.origin === _dragmaprAllowedOrigin;
+}
+function _dragmaprTargetOrigin() {
+  return _dragmaprAllowedOrigin === "same-origin" ? window.location.origin : _dragmaprAllowedOrigin;
+}
 window.addEventListener("message", function(event) {
   if (!event.data || event.data.type !== "dragmapr-offsets") return;
+  if (!_dragmaprOriginAllowed(event)) return;
   _dragmaprBridgeReceived = true;
   Shiny.setInputValue(%s, event.data.regionCsv, {priority: "event"});
   Shiny.setInputValue(%s, event.data.labelCsv, {priority: "event"});
@@ -215,7 +241,7 @@ window.addEventListener("message", function(event) {
 function _dragmaprBridgePoll() {
   var iframe = document.querySelector("iframe");
   if (iframe && iframe.contentWindow) {
-    iframe.contentWindow.postMessage({type: "dragmapr-request-state"}, "*");
+    iframe.contentWindow.postMessage({type: "dragmapr-request-state"}, _dragmaprTargetOrigin());
   }
   setTimeout(_dragmaprBridgePoll, _dragmaprBridgeReceived ? %d : %d);
 }
@@ -223,6 +249,7 @@ $(document).on("shiny:connected", function() {
   setTimeout(_dragmaprBridgePoll, 100);
 });
 ',
+    jsonlite::toJSON(allowed_origin, auto_unbox = TRUE),
     jsonlite::toJSON(region_input, auto_unbox = TRUE),
     jsonlite::toJSON(label_input,  auto_unbox = TRUE),
     slow_poll_ms,
@@ -230,19 +257,90 @@ $(document).on("shiny:connected", function() {
   )
 }
 
+sanitize_upload_names <- function(names) {
+  names <- basename(gsub("\\\\", "/", as.character(names)))
+  bad <- is.na(names) | !nzchar(names) | names %in% c(".", "..")
+  if (any(bad)) {
+    stop("Uploaded files must have non-empty base names.", call. = FALSE)
+  }
+  make.unique(names, sep = "_")
+}
+
 # Internal: find the first readable spatial file in a directory tree.
 .detect_spatial_file <- function(dir) {
   files <- list.files(dir, recursive = TRUE, full.names = TRUE)
+  files <- files[!grepl("(^|[/\\\\])(__MACOSX|\\.DS_Store)", files)]
   supported <- files[
     tolower(tools::file_ext(files)) %in% c("shp", "gpkg", "geojson", "json")
   ]
   if (length(supported) == 0L) {
     stop(
-      "No .shp, .gpkg, .geojson, or .json file found in '", dir, "'.",
+      "No supported spatial file found. Upload a .zip containing a shapefile, ",
+      "or provide a .shp, .gpkg, .geojson, or .json file.",
       call. = FALSE
     )
   }
   shp <- supported[tolower(tools::file_ext(supported)) == "shp"]
   if (length(shp) > 0L) return(shp[1L])
   supported[1L]
+}
+
+.unzip_spatial_archive <- function(zip_file, exdir, source) {
+  listing <- tryCatch(
+    utils::unzip(zip_file, list = TRUE),
+    error = function(e) {
+      stop(
+        "Could not inspect the ", source, ". ",
+        "Check that it is a valid .zip archive and try again.",
+        call. = FALSE
+      )
+    }
+  )
+  names <- gsub("\\\\", "/", listing$Name)
+  unsafe <- grepl("(^/|^[A-Za-z]:|(^|/)\\.\\.(/|$))", names)
+  if (any(unsafe)) {
+    stop(
+      "The ", source, " contains unsafe paths. ",
+      "Please re-create the archive with ordinary relative file names.",
+      call. = FALSE
+    )
+  }
+  tryCatch(
+    utils::unzip(zip_file, exdir = exdir),
+    error = function(e) {
+      stop(
+        "Could not unzip the ", source, ". ",
+        "Check that it is a valid .zip archive and try again.",
+        call. = FALSE
+      )
+    },
+    warning = function(w) {
+      stop(
+        "Could not unzip the ", source, ". ",
+        "Check that it is a valid .zip archive and try again.",
+        call. = FALSE
+      )
+    }
+  )
+}
+
+.read_spatial_file <- function(file, source) {
+  x <- tryCatch(
+    sf::st_read(file, quiet = TRUE),
+    error = function(e) {
+      stop(
+        "Could not read the ", source, " as spatial data. ",
+        "Supported formats are zipped shapefiles, GeoPackage, GeoJSON, and JSON. ",
+        "Original error: ", conditionMessage(e),
+        call. = FALSE
+      )
+    }
+  )
+  if (!inherits(x, "sf")) {
+    stop("The ", source, " did not produce an sf object.", call. = FALSE)
+  }
+  if (nrow(x) == 0L) {
+    stop("The ", source, " contains no features.", call. = FALSE)
+  }
+  x
 }

@@ -19,6 +19,7 @@ render_dragged_map(
   title = NULL,
   label_size = 3.4,
   show_label_marker = TRUE,
+  label_marker_shape = c("circle", "rect", "none"),
   marker_size = 3.2,
   marker_fill = "white",
   marker_color = "black",
@@ -75,8 +76,12 @@ One of \code{"bottom"}, \code{"top"}, \code{"left"}, \code{"right"}, or \code{"n
 \item{label_size}{Text size passed to \code{\link[ggplot2:geom_text]{ggplot2::geom_text()}}. Defaults to
 \code{3.4}.}
 
-\item{show_label_marker}{Draw circular markers behind ordinary text labels.
-Use \code{FALSE} for text-only labels.}
+\item{show_label_marker}{Draw markers behind ordinary text labels. Use
+\code{FALSE} for text-only labels.}
+
+\item{label_marker_shape}{Marker shape for ordinary text labels in static
+exports. One of \code{"circle"}, \code{"rect"}, or \code{"none"}. If
+\code{show_label_marker = FALSE}, this is treated as \code{"none"}.}
 
 \item{marker_size}{Point size passed to \code{\link[ggplot2:geom_point]{ggplot2::geom_point()}}. Defaults to
 \code{3.2}.}

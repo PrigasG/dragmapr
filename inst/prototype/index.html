@@ -4,10 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dragmapr prototype</title>
-<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script>
+__D3__
+</script>
 <style>
 body { margin: 0; font-family: system-ui, sans-serif; color: #172033; }
-main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: 100vh; }
+main { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: 100vh; }
 html.no-side-panel main { grid-template-columns: minmax(0, 1fr); }
 html.no-side-panel aside { display: none; }
 svg { width: 100%; height: 100vh; display: block; background: #fbfcfe; cursor: grab; }
@@ -22,17 +24,64 @@ button.reset-btn:hover { background: #ffe4e4; border-color: #e08080; }
 .btn-row-reset { margin-top: 12px; border-top: 1px solid #e8ecf2; padding-top: 12px; }
 textarea { width: 100%; height: 28vh; margin-top: 8px; font: 12px/1.35 ui-monospace, Consolas, monospace; }
 h2 { font-size: 13px; margin: 16px 0 0; }
-.region path { stroke: white; stroke-width: 0.8; vector-effect: non-scaling-stroke; }
+.region path { stroke: white; stroke-width: 0.8; vector-effect: non-scaling-stroke; cursor: grab; }
+.region.is-active path { stroke: #111827; stroke-width: 1.8; }
 .connector { fill: none; stroke: #334155; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.82; pointer-events: none; }
-.label circle { fill: white; stroke: #111827; stroke-width: 1.2; }
-.label circle.drag-hit { fill: transparent; stroke: transparent; }
-.label rect { fill: white; stroke: #111827; stroke-width: 1.1; filter: drop-shadow(0 2px 5px rgba(15, 23, 42, 0.16)); }
+.label rect, .label circle { fill: white; stroke: #111827; stroke-width: 1.1; }
+.label rect { filter: drop-shadow(0 2px 5px rgba(15, 23, 42, 0.16)); }
+.label rect.drag-hit { fill: transparent; stroke: transparent; filter: none; }
 .label text { font-size: 11px; font-weight: 800; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .label.box text { font-weight: 650; text-anchor: start; dominant-baseline: hanging; }
+.identity-badge {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  z-index: 2;
+  display: none;
+  max-width: min(360px, calc(100vw - 40px));
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  color: #172033;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  pointer-events: none;
+}
+.identity-badge.is-visible { display: block; }
+.identity-badge span { color: #64748b; font-weight: 650; margin-right: 4px; }
+.drag-legend {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 5px;
+  max-width: min(280px, calc(100vw - 40px));
+  max-height: min(42vh, 340px);
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  color: #172033;
+  font-size: 11px;
+  pointer-events: none;
+}
+.drag-legend.bottom { left: 50%; bottom: 14px; transform: translateX(-50%); }
+.drag-legend.top { left: 50%; top: 14px; transform: translateX(-50%); }
+.drag-legend.left { left: 14px; top: 50%; transform: translateY(-50%); }
+.drag-legend.right { right: 14px; top: 50%; transform: translateY(-50%); }
+.legend-item { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.legend-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(15, 23, 42, 0.18); flex: 0 0 auto; }
+.legend-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 </head>
 <body>
 <main>
+  <div id="identity-badge" class="identity-badge" aria-live="polite"></div>
+  <div id="drag-legend" class="drag-legend" hidden></div>
   <svg id="map"></svg>
   <aside>
     <h1>dragmapr</h1>
@@ -65,7 +114,27 @@ const options = __OPTIONS__;
 document.documentElement.classList.toggle("no-side-panel", options.sidePanel === false);
 const svg = d3.select("#map");
 const palette = ["#2166ac", "#d73027", "#1a9850", "#984ea3", "#ff7f00", "#a65628", "#f781bf", "#999999"];
-const regions = Array.from(new Set(geojson.features.map(d => String(d.properties.drag_region)))).sort();
+// Natural-order comparator: "1" < "2" < "10" rather than "1" < "10" < "2".
+function naturalCompare(a, b) {
+  const re = /(\d+)|(\D+)/g;
+  const pa = String(a).match(re) || [];
+  const pb = String(b).match(re) || [];
+  const n = Math.max(pa.length, pb.length);
+  for (let i = 0; i < n; i++) {
+    if (i >= pa.length) return -1;
+    if (i >= pb.length) return  1;
+    const na = Number(pa[i]);
+    const nb = Number(pb[i]);
+    if (!Number.isNaN(na) && !Number.isNaN(nb)) {
+      if (na !== nb) return na - nb;
+    } else {
+      if (pa[i] < pb[i]) return -1;
+      if (pa[i] > pb[i]) return  1;
+    }
+  }
+  return 0;
+}
+const regions = Array.from(new Set(geojson.features.map(d => String(d.properties.drag_region)))).sort(naturalCompare);
 const regionOffsets = new Map(regions.map(d => [d, {dx_m: 0, dy_m: 0}]));
 for (const row of initialRegionOffsets || []) {
   const region = String(row.region);
@@ -84,12 +153,41 @@ const grouped = d3.group(geojson.features, d => String(d.properties.drag_region)
 const bounds = coordBounds(geojson);
 let projection, path, metricScale, root, labelLayer;
 let layoutFrame = null;
+let activeDragRegion = null;
+let badgeTimer = null;
+const allowedParentOrigin = parentOrigin();
+
+function parentOrigin() {
+  if (!document.referrer) return "*";
+  try {
+    return new URL(document.referrer).origin;
+  } catch (e) {
+    return "*";
+  }
+}
+
+function messageTargetOrigin() {
+  return allowedParentOrigin === "null" ? "*" : allowedParentOrigin;
+}
+
+function validMessageOrigin(event) {
+  return allowedParentOrigin === "*" ||
+    event.origin === allowedParentOrigin ||
+    event.origin === window.location.origin ||
+    event.origin === "null";
+}
 
 function color(region) {
   if (options.regionPalette && options.regionPalette[region]) {
     return options.regionPalette[region];
   }
   return palette[regions.indexOf(region) % palette.length];
+}
+
+function markerShape() {
+  if (options.labelMarker === false) return "none";
+  const shape = String(options.labelMarkerShape || (options.labelMarker ? "rect" : "none")).toLowerCase();
+  return ["rect", "circle", "none"].includes(shape) ? shape : "rect";
 }
 
 function walkCoords(coords, fn) {
@@ -179,7 +277,7 @@ function schedulePostState(regionText = regionCsv(), labelText = labelCsv()) {
       type: "dragmapr-offsets",
       regionCsv: regionText,
       labelCsv: labelText
-    }, "*");
+    }, messageTargetOrigin());
   }, 150);
 }
 
@@ -191,9 +289,68 @@ function syncLabelControls() {
   document.querySelector("#label-csv").hidden = hidden;
 }
 
+function syncLegend() {
+  const legend = document.querySelector("#drag-legend");
+  const position = String(options.legendPosition || "bottom").toLowerCase();
+  const maxKeys = Number(options.maxLegendKeys);
+  const shouldShow = options.showLegend === true &&
+    position !== "none" &&
+    (Number.isFinite(maxKeys) ? regions.length <= maxKeys : true);
+  legend.hidden = !shouldShow;
+  if (!shouldShow) {
+    legend.replaceChildren();
+    return;
+  }
+  legend.className = `drag-legend ${["top", "left", "right", "bottom"].includes(position) ? position : "bottom"}`;
+  legend.replaceChildren(...regions.map(region => {
+    const item = document.createElement("div");
+    item.className = "legend-item";
+    const swatch = document.createElement("span");
+    swatch.className = "legend-swatch";
+    swatch.style.background = color(region);
+    const label = document.createElement("span");
+    label.className = "legend-label";
+    label.textContent = region;
+    item.append(swatch, label);
+    return item;
+  }));
+}
+
 function offsetTransform(region) {
   const o = regionOffsets.get(region);
   return `translate(${o.dx_m * metricScale},${-o.dy_m * metricScale})`;
+}
+
+function setActiveRegion(region, mode = "Region") {
+  window.clearTimeout(badgeTimer);
+  const value = String(region);
+  svg.selectAll("g.region").classed("is-active", d => String(d) === value);
+  const badge = document.querySelector("#identity-badge");
+  badge.innerHTML = `<span>${mode}</span>${escapeHtml(value)}`;
+  badge.classList.add("is-visible");
+}
+
+function clearActiveRegion(delay = 0) {
+  window.clearTimeout(badgeTimer);
+  const clear = () => {
+    if (activeDragRegion !== null) return;
+    svg.selectAll("g.region").classed("is-active", false);
+    document.querySelector("#identity-badge").classList.remove("is-visible");
+  };
+  if (delay > 0) {
+    badgeTimer = window.setTimeout(clear, delay);
+  } else {
+    clear();
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function render() {
@@ -206,15 +363,17 @@ function render() {
     .attr("class", "region")
     .attr("transform", offsetTransform);
 
-  groups.selectAll("path")
+  const regionPaths = groups.selectAll("path")
     .data(d => grouped.get(d) || [])
     .join("path")
     .attr("fill", d => color(String(d.properties.drag_region)))
     .attr("d", path);
+  regionPaths.append("title")
+    .text(d => String(d.properties.drag_region));
 
   const connectorLayer = svg.append("g");
   connectorLayer.selectAll("path.connector")
-    .data(options.labels ? labelRows.filter(d => truthy(d.connector) && hasConnectorLength(d)) : [])
+    .data(options.labels ? labelRows.filter(d => truthy(d.connector)) : [])
     .join("path")
     .attr("class", d => `connector ${connectorType(d)}`)
     .style("stroke-width", d => `${positiveNumber(d.connector_linewidth, options.connectorLinewidth || 1.3)}px`)
@@ -244,33 +403,67 @@ function render() {
         .style("font-size", `${options.labelTextSize}px`)
         .call(wrapText, String(d.label), width - 20);
     } else {
-      if (options.labelMarker) {
-        group.append("circle").attr("r", options.labelRadius);
-      } else {
+      const width = positiveNumber(d.width_px, options.labelWidth || 64);
+      const height = positiveNumber(d.height_px, options.labelHeight || 30);
+      const shape = markerShape();
+      if (shape === "circle") {
         group.append("circle")
+          .attr("r", positiveNumber(d.radius_px, options.labelRadius || 12));
+      } else if (shape === "rect") {
+        group.append("rect")
+          .attr("x", -width / 2)
+          .attr("y", -height / 2)
+          .attr("width", width)
+          .attr("height", height)
+          .attr("rx", Math.min(8, height / 2));
+      } else {
+        group.append("rect")
           .attr("class", "drag-hit")
-          .attr("r", Math.max(16, options.labelRadius));
+          .attr("x", -width / 2)
+          .attr("y", -height / 2)
+          .attr("width", width)
+          .attr("height", height)
+          .attr("rx", Math.min(8, height / 2));
       }
       group.append("text")
         .attr("fill", labelColor(d))
+        .attr("x", 0)
+        .attr("y", 0)
         .style("font-size", `${options.labelTextSize}px`)
-        .text(d.label);
+        .call(wrapText, String(d.label), Math.max(12, width - 10));
     }
   });
+  connectorLayer.raise();
+  syncLegend();
 
-  const regionDrag = d3.drag().on("drag", function(event, region) {
+  const regionDrag = d3.drag().on("start", function(event, region) {
+    activeDragRegion = String(region);
+    setActiveRegion(region, "Dragging");
+  }).on("drag", function(event, region) {
     const o = regionOffsets.get(region);
     o.dx_m += event.dx / metricScale;
     o.dy_m -= event.dy / metricScale;
     scheduleLayoutUpdate();
-  }).on("end", updateLayout);
+  }).on("end", function(event, region) {
+    updateLayout();
+    activeDragRegion = null;
+    setActiveRegion(region, "Moved");
+    clearActiveRegion(1200);
+  });
   const labelDrag = d3.drag().on("drag", function(event, label) {
     const o = labelOffsets.get(String(label.label_id));
     o.dx_m += event.dx / metricScale;
     o.dy_m -= event.dy / metricScale;
     scheduleLayoutUpdate();
   }).on("end", updateLayout);
-  groups.call(regionDrag);
+  groups
+    .on("pointerenter", function(event, region) {
+      if (activeDragRegion === null) setActiveRegion(region, "Region");
+    })
+    .on("pointerleave", function() {
+      if (activeDragRegion === null) clearActiveRegion(250);
+    })
+    .call(regionDrag);
   if (options.draggableLabels) {
     labelGroups.call(labelDrag);
   }
@@ -321,8 +514,8 @@ function labelTransform(label) {
 }
 
 function anchorPosition(label) {
-  const startX = Number(label.connector_start_x);
-  const startY = Number(label.connector_start_y);
+  const startX = label.connector_start_x != null ? Number(label.connector_start_x) : NaN;
+  const startY = label.connector_start_y != null ? Number(label.connector_start_y) : NaN;
   const p = Number.isFinite(startX) && Number.isFinite(startY) ?
     projection([startX, startY]) :
     projection([label.x, label.y]);
@@ -334,7 +527,8 @@ function anchorPosition(label) {
 }
 
 function midpointPosition(label, start, end) {
-  if (Number.isFinite(Number(label.connector_mid_x)) && Number.isFinite(Number(label.connector_mid_y))) {
+  if (label.connector_mid_x != null && label.connector_mid_y != null &&
+      Number.isFinite(Number(label.connector_mid_x)) && Number.isFinite(Number(label.connector_mid_y))) {
     const p = projection([Number(label.connector_mid_x), Number(label.connector_mid_y)]);
     const regionOffset = regionOffsets.get(String(label.region)) || {dx_m: 0, dy_m: 0};
     return [
@@ -382,12 +576,6 @@ function squigglePath(start, end, amplitude, waves) {
   return points.map((p, i) => `${i === 0 ? "M" : "L"}${p[0]},${p[1]}`).join(" ");
 }
 
-function hasConnectorLength(label) {
-  const start = anchorPosition(label);
-  const end = connectorEndPosition(label, start);
-  return Math.abs(start[0] - end[0]) > 0.001 || Math.abs(start[1] - end[1]) > 0.001;
-}
-
 function connectorEndPosition(label, start) {
   const center = labelPosition(label);
   const dx = start[0] - center[0];
@@ -397,13 +585,28 @@ function connectorEndPosition(label, start) {
   if (labelType(label) === "box") {
     const halfWidth = positiveNumber(label.width_px, options.labelBoxWidth) / 2 + 3;
     const halfHeight = positiveNumber(label.height_px, options.labelBoxHeight) / 2 + 3;
+    if (Math.abs(dx) <= halfWidth && Math.abs(dy) <= halfHeight) {
+      return center;
+    }
     const tx = Math.abs(dx) > 0.001 ? halfWidth / Math.abs(dx) : Infinity;
     const ty = Math.abs(dy) > 0.001 ? halfHeight / Math.abs(dy) : Infinity;
     const t = Math.min(tx, ty);
     return [center[0] + dx * t, center[1] + dy * t];
   }
-  const radius = options.labelMarker ? positiveNumber(options.labelRadius, 12) + 3 : 8;
-  return [center[0] + dx / distance * radius, center[1] + dy / distance * radius];
+  if (markerShape() === "circle") {
+    const radius = positiveNumber(label.radius_px, options.labelRadius || 12) + 3;
+    const t = radius / distance;
+    return [center[0] + dx * t, center[1] + dy * t];
+  }
+  const halfWidth = positiveNumber(label.width_px, options.labelWidth || 64) / 2 + 3;
+  const halfHeight = positiveNumber(label.height_px, options.labelHeight || 30) / 2 + 3;
+  if (Math.abs(dx) <= halfWidth && Math.abs(dy) <= halfHeight) {
+    return center;
+  }
+  const tx = Math.abs(dx) > 0.001 ? halfWidth / Math.abs(dx) : Infinity;
+  const ty = Math.abs(dy) > 0.001 ? halfHeight / Math.abs(dy) : Infinity;
+  const t = Math.min(tx, ty);
+  return [center[0] + dx * t, center[1] + dy * t];
 }
 
 function labelType(label) {
@@ -465,13 +668,15 @@ document.querySelector("#reset").addEventListener("click", () => {
 });
 window.addEventListener("resize", render);
 window.addEventListener("message", function(event) {
+  if (!validMessageOrigin(event)) return;
   if (event.data && event.data.type === "dragmapr-request-state") {
     schedulePostState();
   }
   if (event.data && event.data.type === "dragmapr-set-labels") {
     options.labels = !!event.data.labels;
-    syncLabelControls();
-    render();
+  syncLabelControls();
+  syncLegend();
+  render();
   }
   if (event.data && event.data.type === "dragmapr-set-label-data") {
     const previous = labelOffsets;
@@ -484,6 +689,7 @@ window.addEventListener("message", function(event) {
   }
   if (event.data && event.data.type === "dragmapr-set-label-options") {
     Object.assign(options, event.data.options || {});
+    syncLegend();
     render();
   }
   if (event.data && event.data.type === "dragmapr-reset-state") {
@@ -493,7 +699,16 @@ window.addEventListener("message", function(event) {
   }
 });
 syncLabelControls();
+syncLegend();
 render();
+// Tell the parent page (Shiny studio) that the map has finished its first
+// render. The parent listens for this to dismiss the loading veil.
+// postMessage is used instead of the iframe 'load' event because 'load'
+// fires as soon as the HTML document is parsed - before D3 has drawn
+// anything - and can race with the parent's listener setup.
+if (window.parent !== window) {
+  window.parent.postMessage({ type: 'dragmapr-ready' }, messageTargetOrigin());
+}
 </script>
 </body>
 </html>

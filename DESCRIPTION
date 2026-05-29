@@ -1,6 +1,6 @@
 Package: dragmapr
 Title: Create Draggable Plots from Projected Geometry
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R:
     person("George", "Arthur", role = c("aut", "cre"), email = "prigasgenthian48@gmail.com")
 Description: Creates interactive draggable plots from grouped projected sf
