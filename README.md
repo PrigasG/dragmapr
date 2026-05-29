@@ -1,3 +1,12 @@
+---
+title: dragmapr Spatial Studio
+emoji: 🗺️
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # dragmapr
 
 <img src="man/figures/logo.png" align="right" height="180" alt="dragmapr hex logo" />
