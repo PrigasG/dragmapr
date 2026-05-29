@@ -25,10 +25,24 @@ the layout later in a script, report, or document workflow.
 Labels can also be configured or omitted when the draggable helper is written:
 
 ```{r, eval = FALSE}
+# No labels at all
 drag_map_prototype(x, "region", labels = FALSE)
+
+# Labels follow their region but cannot be nudged independently
 drag_map_prototype(x, "region", label_col = "name", draggable_labels = FALSE)
-drag_map_prototype(x, "region", label_col = "name", label_marker = FALSE)
-drag_map_prototype(x, "region", label_col = "name", label_radius = 16, label_text_size = 14)
+
+# Text only — no visible marker behind the label text
+drag_map_prototype(x, "region", label_col = "name", label_marker_shape = "none")
+
+# Circle markers — label_radius only applies when shape is "circle"
+drag_map_prototype(x, "region", label_col = "name",
+                   label_marker_shape = "circle",
+                   label_radius = 16, label_text_size = 14)
+
+# Rounded-box markers (default) with explicit size
+drag_map_prototype(x, "region", label_col = "name",
+                   label_marker_shape = "rect",
+                   label_width = 80, label_height = 32, label_text_size = 12)
 ```
 
 ## Label Concepts

@@ -128,10 +128,12 @@ shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragma
 `shiny_draggable_export.R` demonstrates a common app pattern: users drag the
 interactive plot inside Shiny, the helper sends region and label state back to
 the parent app, and the app can export a PNG for a report or document. It also
-shows toggles for labels, legends, marker circles, info-box dimensions,
-connector style, and connector thickness.
+shows toggles for labels, legends, marker shapes (circle, rounded box, text
+only), info-box dimensions, connector style, and connector thickness.
 
-`shiny_spatial_studio.R` is the first-pass general workspace. It accepts local
-polygon uploads, including zipped shapefiles, GeoJSON, and GeoPackage files,
-then lets users choose grouping/label columns, colors, labels or info boxes,
-connectors, legend visibility, and export formats.
+`shiny_spatial_studio.R` is the general spatial workspace. It accepts local
+polygon uploads or a URL, including zipped shapefiles, GeoJSON, and GeoPackage
+files, then lets users choose grouping/label columns, colors, annotation style
+(short labels or info boxes), text size, connector style, legend visibility, and
+export formats. Region groups are sorted in natural numeric order throughout the
+sidebar, the legend, and the exported CSVs.

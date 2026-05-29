@@ -14,132 +14,347 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 `dragmapr` is built around a deliberately small loop for draggable plots:
 
 1. Start with projected `sf` geometry and a grouping column.
-2. Open a draggable browser helper with `drag_map_prototype(open = TRUE)`.
-3. Drag regions, labels, or annotation boxes until the layout works.
-4. Use the draggable plot directly, or copy/download the offset CSVs.
-5. Optionally reproduce the layout as a static `ggplot2` image from those CSVs.
+2. Open the draggable browser helper with `drag_map_prototype(open = TRUE)`.
+3. Drag regions, labels, or annotation boxes until the layout looks right.
+4. Copy or download the offset CSVs from the helper panel.
+5. Optionally reproduce the layout as a static `ggplot2` image with `render_dragged_map()`.
 
-The interactive browser helper is the primary deliverable. Step 5 is optional -
-use it when you need a reproducible image for a report or publication.
+The interactive helper is the primary deliverable.
+Step 5 is optional — use it when you need a reproducible image for a report or publication.
 
-## A Synthetic Map
+## Toy geometry
 
-The package examples use projected toy geometries so the workflow can be tested
+All examples below use a projected toy dataset so the workflow can be tested
 without downloading shapefiles.
 
-```{r}
+```{r setup}
 library(dragmapr)
 
 make_square <- function(x0, y0, size = 100000) {
   sf::st_polygon(list(rbind(
-    c(x0, y0),
-    c(x0 + size, y0),
-    c(x0 + size, y0 + size),
-    c(x0, y0 + size),
-    c(x0, y0)
+    c(x0, y0), c(x0 + size, y0), c(x0 + size, y0 + size),
+    c(x0, y0 + size), c(x0, y0)
   )))
 }
 
 regions <- sf::st_sf(
   region = c("North", "South", "East", "West"),
-  label = c("North", "South", "East", "West"),
+  label  = c("North", "South", "East", "West"),
   geometry = sf::st_sfc(
-    make_square(0, 140000),
-    make_square(0, 0),
-    make_square(140000, 70000),
-    make_square(-140000, 70000),
+    make_square(0,       140000),
+    make_square(0,            0),
+    make_square( 140000,  70000),
+    make_square(-140000,  70000),
     crs = 3857
   )
 )
 ```
 
-Open the interactive helper in the browser - this is the main step:
+---
+
+## `drag_map_prototype()` — full parameter reference
+
+### Data
+
+These three arguments identify the geometry and what to group or label.
+
+| Argument | Default | Description |
+|---|---|---|
+| `x` | *(required)* | Projected `sf` object. Must not be in a geographic (lon/lat) CRS. |
+| `region_col` | *(required)* | Column name that defines draggable groups. |
+| `label_col` | `region_col` | Column used for label text. Defaults to the grouping column. |
 
 ```{r, eval = FALSE}
+# Minimal call — one grouping column used for both groups and labels
+drag_map_prototype(regions, region_col = "region", open = TRUE)
+
+# Separate column for label text
+drag_map_prototype(regions, region_col = "region", label_col = "label", open = TRUE)
+```
+
+---
+
+### Labels
+
+Control whether labels appear and whether they can be dragged independently.
+
+| Argument | Default | Description |
+|---|---|---|
+| `labels` | `TRUE` | `TRUE` derives one label per region automatically. `FALSE` shows no labels. Supply a data frame from `as_drag_labels()` or `as_drag_annotations()` for custom labels. |
+| `draggable_labels` | `TRUE` | When `TRUE`, labels can be moved independently. When `FALSE`, labels follow their region but cannot be repositioned on their own. |
+
+```{r, eval = FALSE}
+# No labels
+drag_map_prototype(regions, region_col = "region", labels = FALSE, open = TRUE)
+
+# Labels follow regions but cannot be dragged separately
+drag_map_prototype(regions, region_col = "region",
+                   draggable_labels = FALSE, open = TRUE)
+
+# Custom label data frame
+custom_labels <- make_region_labels(regions, region_col = "region", label_col = "label")
+drag_map_prototype(regions, region_col = "region",
+                   labels = custom_labels, open = TRUE)
+```
+
+---
+
+### Label styling
+
+Choose between three marker shapes for short text labels — rounded box, circle,
+or text-only — and control their sizes and font.
+
+| Argument | Default | Description |
+|---|---|---|
+| `label_marker` | `TRUE` | Draw a visible marker shape behind label text. `FALSE` is a shortcut for `label_marker_shape = "none"`. |
+| `label_marker_shape` | `"rect"` | Shape behind the label text: `"rect"` (rounded box), `"circle"`, or `"none"` (text only with an invisible drag target). |
+| `label_text_size` | `11` | Label text size in browser pixels. Applies to all label types. |
+| `label_width` | `64` | Width of rounded-box label markers in pixels. |
+| `label_height` | `30` | Height of rounded-box label markers in pixels. |
+| `label_radius` | `12` | Circle radius in pixels. Used when `label_marker_shape = "circle"`. |
+| `label_box_width` | `150` | Width of draggable annotation box (info-box style) in pixels. |
+| `label_box_height` | `72` | Height of draggable annotation box in pixels. |
+
+```{r, eval = FALSE}
+# Rounded-box markers (default) — adjust size and text
 drag_map_prototype(
-  regions,
-  region_col = "region",
-  label_col = "label",
-  labels = TRUE,
-  draggable_labels = TRUE,
+  regions, region_col = "region",
+  label_marker_shape = "rect",
+  label_text_size    = 12,
+  label_width        = 80,
+  label_height       = 32,
+  open = TRUE
+)
+
+# Circle markers
+drag_map_prototype(
+  regions, region_col = "region",
+  label_marker_shape = "circle",
+  label_radius       = 18,
+  label_text_size    = 11,
+  open = TRUE
+)
+
+# Text only — no visible marker, just draggable text
+drag_map_prototype(
+  regions, region_col = "region",
+  label_marker_shape = "none",
+  label_text_size    = 13,
+  open = TRUE
+)
+
+# Annotation boxes (info-box style with connectors)
+notes <- as_drag_annotations(
+  make_region_labels(regions, region_col = "region"),
+  width_px       = 160,
+  height_px      = 70,
+  connector      = TRUE,
+  connector_type = "elbow"
+)
+drag_map_prototype(
+  regions, region_col = "region",
+  labels           = notes,
+  label_box_width  = 160,
+  label_box_height = 70,
   open = TRUE
 )
 ```
 
-Drag regions and labels until the layout looks right. The helper panel shows
-live offset tables. Use **Copy Regions** / **Copy Labels** or the download
-buttons to capture the two CSVs. Region offsets move grouped geometries; label
-offsets move labels and annotation boxes after their region has moved.
+---
 
-## Optional: Static Rendering
+### Connectors
 
-If you need a reproducible `ggplot2` image, supply the exported offsets to
-`render_dragged_map()`. The data frames below stand in for the downloaded CSVs:
+Connector lines link a label or annotation box back to its region anchor.
+They are only drawn for labels that have `connector = TRUE` in their label data
+frame — set that flag via `as_drag_annotations(..., connector = TRUE)` or
+`as_drag_labels()`. The line style (`"straight"`, `"elbow"`, `"curve"`,
+`"squiggle"`) is stored per-label in the `connector_type` column.
+
+| Argument | Default | Description |
+|---|---|---|
+| `connector_linewidth` | `1.3` | Connector line thickness in browser pixels. |
+
+```{r, eval = FALSE}
+drag_map_prototype(
+  regions, region_col = "region",
+  labels              = notes,   # labels with connector = TRUE
+  connector_linewidth = 2,
+  open = TRUE
+)
+```
+
+---
+
+### Initial positions
+
+Supply previously exported offset tables to pre-load a saved layout so
+dragging can continue from where it left off.
+
+| Argument | Default | Description |
+|---|---|---|
+| `region_offsets` | `NULL` | Data frame with columns `region`, `dx_m`, `dy_m`. All regions start at zero when `NULL`. |
+| `label_offsets` | `NULL` | Data frame with columns `label_id`, `region`, `dx_m`, `dy_m`. All labels start at zero when `NULL`. |
+
+```{r, eval = FALSE}
+# Resume from previously downloaded CSVs
+region_csv <- read.csv("drag_region_offsets.csv")
+label_csv  <- read.csv("drag_label_offsets.csv")
+
+drag_map_prototype(
+  regions, region_col = "region",
+  region_offsets = region_csv,
+  label_offsets  = label_csv,
+  open = TRUE
+)
+```
+
+---
+
+### Colour palette
+
+| Argument | Default | Description |
+|---|---|---|
+| `region_palette` | `NULL` | Named character vector mapping each region value to a hex colour string. Uses a built-in 8-colour cycling palette when `NULL`. |
+
+Matching the interactive palette to a `render_dragged_map()` call makes the
+draggable preview and the final static image look identical.
+
+```{r, eval = FALSE}
+my_palette <- c(
+  North = "#4C78A8",
+  South = "#F58518",
+  East  = "#54A24B",
+  West  = "#B279A2"
+)
+
+drag_map_prototype(
+  regions, region_col = "region",
+  region_palette = my_palette,
+  show_legend    = TRUE,
+  open = TRUE
+)
+```
+
+---
+
+### Legend
+
+A compact colour legend can be embedded directly inside the browser helper.
+It is hidden by default because many maps are labelled and need no legend.
+
+| Argument | Default | Description |
+|---|---|---|
+| `show_legend` | `FALSE` | Show a colour legend in the helper. |
+| `max_legend_keys` | `25` | Suppress the legend automatically when the number of groups exceeds this value. Set to `Inf` to always show it regardless of group count. |
+| `legend_position` | `"bottom"` | Where the legend appears: `"bottom"`, `"top"`, `"left"`, `"right"`, or `"none"`. |
+
+```{r, eval = FALSE}
+drag_map_prototype(
+  regions, region_col = "region",
+  region_palette  = my_palette,
+  show_legend     = TRUE,
+  legend_position = "bottom",   # "top" | "left" | "right" | "none"
+  max_legend_keys = 25,
+  open = TRUE
+)
+```
+
+---
+
+### Output file and display
+
+| Argument | Default | Description |
+|---|---|---|
+| `file` | `"drag-map.html"` | File path for the written standalone HTML. |
+| `open` | `FALSE` | Open the file in the default browser via `browseURL()` after writing. |
+| `side_panel` | `TRUE` | Show the built-in copy/download side panel. Shiny apps that provide their own export controls can set this to `FALSE` to reclaim the full canvas. |
+
+```{r, eval = FALSE}
+# Write to a chosen path without opening (e.g. CI, server, or Shiny)
+drag_map_prototype(
+  regions, region_col = "region",
+  file       = "output/my_map.html",
+  side_panel = TRUE,
+  open       = FALSE
+)
+
+# Embedded in a Shiny app — hide the panel; the app provides its own controls
+drag_map_prototype(
+  regions, region_col = "region",
+  side_panel = FALSE,
+  file       = tempfile(fileext = ".html")
+)
+```
+
+---
+
+## Optional: Static rendering
+
+When you need a reproducible `ggplot2` image, pass the exported offset tables
+to `render_dragged_map()`. The data frames below stand in for downloaded CSVs:
 
 ```{r}
 region_offsets <- data.frame(
   region = c("North", "South", "East", "West"),
-  dx_m = c(0, 0, 60000, -60000),
-  dy_m = c(50000, -50000, 0, 0)
+  dx_m   = c(0, 0,  60000, -60000),
+  dy_m   = c(50000, -50000, 0, 0)
 )
 
 label_state <- data.frame(
   label_id = c("North", "South", "East", "West"),
-  region = c("North", "South", "East", "West"),
-  dx_m = c(0, 0, 25000, -25000),
-  dy_m = c(30000, -30000, 0, 0)
+  region   = c("North", "South", "East", "West"),
+  dx_m     = c(0, 0,  25000, -25000),
+  dy_m     = c(30000, -30000, 0, 0)
 )
-
-plot <- render_dragged_map(
-  regions,
-  region_offsets = region_offsets,
-  region_col = "region",
-  label_col = "label",
-  label_offsets = label_state,
-  title = "Synthetic draggable map"
-)
-plot
-```
-
-Static output can include the same label choices as the draggable helper:
-
-```{r}
-notes <- as_drag_annotations(data.frame(
-  label_id = "east-note",
-  region = "East",
-  label = "The East label can become a longer draggable note.",
-  x = 210000,
-  y = 120000
-), connector = TRUE, connector_type = "squiggle")
 
 render_dragged_map(
   regions,
   region_offsets = region_offsets,
-  region_col = "region",
-  labels = notes,
-  label_offsets = data.frame(
-    label_id = "east-note",
-    region = "East",
-    dx_m = 80000,
-    dy_m = 45000
-  ),
-  connector_linewidth = 0.8,
-  title = "Static output with an annotation box"
+  region_col     = "region",
+  label_col      = "label",
+  label_offsets  = label_state,
+  title          = "Synthetic draggable map"
 )
 ```
 
-## Running Examples
+The same annotation types available in the interactive helper work in static output:
 
-Installed example scripts live under `system.file("examples", package =
-"dragmapr")`. To smoke test the full package surface:
+```{r}
+notes <- as_drag_annotations(data.frame(
+  label_id = "east-note",
+  region   = "East",
+  label    = "The East label can become a longer draggable note.",
+  x = 210000, y = 120000
+), connector = TRUE, connector_type = "squiggle")
+
+render_dragged_map(
+  regions,
+  region_offsets      = region_offsets,
+  region_col          = "region",
+  labels              = notes,
+  label_offsets       = data.frame(
+    label_id = "east-note", region = "East",
+    dx_m = 80000, dy_m = 45000
+  ),
+  connector_linewidth = 0.8,
+  title               = "Static output with an annotation box"
+)
+```
+
+---
+
+## Running examples
+
+Installed example scripts live under `system.file("examples", package = "dragmapr")`.
+To exercise the full package surface non-interactively:
 
 ```{r, eval = FALSE}
 source(system.file("examples", "smoke_examples.R", package = "dragmapr"))
 ```
 
-Shiny examples are available separately because they launch interactive apps.
-See the [Shiny workflows vignette](shiny-workflows.html) for a walkthrough, or
-run them directly:
+Shiny examples launch interactive apps and must be run separately.
+See the [Shiny workflows vignette](shiny-workflows.html) for a full walkthrough,
+or run any example directly:
 
 ```{r, eval = FALSE}
 shiny::runApp(system.file("examples", "shiny_draggable_plot.R",   package = "dragmapr"))

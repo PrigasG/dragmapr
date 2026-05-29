@@ -400,7 +400,7 @@ function render() {
         .attr("fill", labelColor(d))
         .attr("x", -width / 2 + 10)
         .attr("y", -height / 2 + 9)
-        .style("font-size", `${options.labelTextSize}px`)
+        .style("font-size", `${options.labelTextSize || 11}px`)
         .call(wrapText, String(d.label), width - 20);
     } else {
       const width = positiveNumber(d.width_px, options.labelWidth || 64);
@@ -429,11 +429,12 @@ function render() {
         .attr("fill", labelColor(d))
         .attr("x", 0)
         .attr("y", 0)
-        .style("font-size", `${options.labelTextSize}px`)
+        .style("font-size", `${options.labelTextSize || 11}px`)
         .call(wrapText, String(d.label), Math.max(12, width - 10));
     }
   });
-  connectorLayer.raise();
+  // SVG layer order (bottom → top): root/regions → connectorLayer → labelLayer.
+  // Labels are appended last so they always render above connector lines.
   syncLegend();
 
   const regionDrag = d3.drag().on("start", function(event, region) {
@@ -657,6 +658,7 @@ function wrapText(selection, text, width) {
   }
 }
 
+// ---- Button listeners -------------------------------------------------------
 document.querySelector("#copy-regions").addEventListener("click", () => navigator.clipboard.writeText(regionCsv()));
 document.querySelector("#download-regions").addEventListener("click", () => downloadCsv(regionCsv(), "drag_region_offsets.csv"));
 document.querySelector("#copy-labels").addEventListener("click", () => navigator.clipboard.writeText(labelCsv()));
@@ -667,6 +669,8 @@ document.querySelector("#reset").addEventListener("click", () => {
   render();
 });
 window.addEventListener("resize", render);
+
+// ---- postMessage handlers (Shiny studio ↔ iframe) --------------------------
 window.addEventListener("message", function(event) {
   if (!validMessageOrigin(event)) return;
   if (event.data && event.data.type === "dragmapr-request-state") {
@@ -674,9 +678,9 @@ window.addEventListener("message", function(event) {
   }
   if (event.data && event.data.type === "dragmapr-set-labels") {
     options.labels = !!event.data.labels;
-  syncLabelControls();
-  syncLegend();
-  render();
+    syncLabelControls();
+    syncLegend();
+    render();
   }
   if (event.data && event.data.type === "dragmapr-set-label-data") {
     const previous = labelOffsets;
