@@ -34,12 +34,67 @@ test_that("read_dragmapr_sf_upload returns NULL for no upload", {
   expect_null(read_dragmapr_sf_upload(data.frame()))
 })
 
+test_that("read_dragmapr_sf_upload validates Shiny upload shape", {
+  upload <- data.frame(name = "regions.geojson")
+
+  expect_error(
+    read_dragmapr_sf_upload(upload),
+    "Shiny fileInput"
+  )
+})
+
+test_that("spatial file detection errors guide users", {
+  dir <- tempfile("dragmapr_empty_upload_")
+  dir.create(dir)
+  writeLines("not spatial", file.path(dir, "notes.txt"))
+
+  expect_error(
+    dragmapr:::.detect_spatial_file(dir),
+    "No supported spatial file found"
+  )
+})
+
+test_that("invalid spatial files produce actionable read errors", {
+  file <- tempfile(fileext = ".geojson")
+  writeLines("not geojson", file)
+
+  expect_error(
+    dragmapr:::.read_spatial_file(file, source = "test file"),
+    "Could not read the test file as spatial data"
+  )
+})
+
 test_that("dragmapr_iframe_bridge names configured Shiny inputs", {
   js <- dragmapr_iframe_bridge(region_input = "regions", label_input = "labels")
 
   expect_match(js, '"regions"', fixed = TRUE)
   expect_match(js, '"labels"', fixed = TRUE)
   expect_match(js, "dragmapr-request-state", fixed = TRUE)
+  expect_match(js, "_dragmaprOriginAllowed", fixed = TRUE)
+})
+
+test_that("upload file names are sanitized", {
+  expect_equal(
+    dragmapr:::sanitize_upload_names(c("../regions.geojson", "C:\\fake\\map.shp")),
+    c("regions.geojson", "map.shp")
+  )
+  expect_error(dragmapr:::sanitize_upload_names(".."), "non-empty base names")
+})
+
+test_that("zip archives reject unsafe paths", {
+  skip_if_not(nzchar(Sys.which("zip")), "zip command not available")
+  parent <- tempfile("dragmapr_zip_parent_")
+  child <- file.path(parent, "child")
+  dir.create(child, recursive = TRUE)
+  writeLines("not spatial", file.path(parent, "outside.geojson"))
+  old <- setwd(child)
+  on.exit(setwd(old), add = TRUE)
+  system2("zip", c("-q", "unsafe.zip", "../outside.geojson"))
+
+  expect_error(
+    dragmapr:::.unzip_spatial_archive("unsafe.zip", tempfile("dragmapr_unzip_"), "test zip"),
+    "unsafe paths"
+  )
 })
 
 test_that("spatial studio falls back from stale demo columns", {

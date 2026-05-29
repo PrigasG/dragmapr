@@ -11,14 +11,20 @@ drag_map_prototype(
   labels = TRUE,
   draggable_labels = TRUE,
   label_marker = TRUE,
+  label_marker_shape = c("rect", "circle", "none"),
   label_radius = 12,
   label_text_size = 11,
+  label_width = 64,
+  label_height = 30,
   label_box_width = 150,
   label_box_height = 72,
   connector_linewidth = 1.3,
   region_offsets = NULL,
   label_offsets = NULL,
   region_palette = NULL,
+  show_legend = FALSE,
+  max_legend_keys = 25L,
+  legend_position = c("bottom", "top", "left", "right", "none"),
   side_panel = TRUE,
   file = "drag-map.html",
   open = FALSE
@@ -38,11 +44,21 @@ region, \code{FALSE} to omit labels, or a data frame accepted by
 
 \item{draggable_labels}{Allow labels to be dragged independently of regions.}
 
-\item{label_marker}{Draw circular markers behind labels.}
+\item{label_marker}{Draw a marker behind ordinary text labels. Set to
+\code{FALSE} for text-only draggable labels.}
 
-\item{label_radius}{Label marker radius in screen pixels.}
+\item{label_marker_shape}{Marker shape for ordinary draggable text labels:
+\code{"rect"} for rounded rectangles, \code{"circle"} for circles, or \code{"none"} for a
+transparent drag target with text only. If \code{label_marker = FALSE},
+\code{label_marker_shape} is treated as \code{"none"}.}
+
+\item{label_radius}{Retained for compatibility with earlier circle markers.
+Used when \code{label_marker_shape = "circle"}.}
 
 \item{label_text_size}{Label text size in screen pixels.}
+
+\item{label_width, label_height}{Default browser dimensions for ordinary
+draggable text-label markers.}
 
 \item{label_box_width, label_box_height}{Default browser dimensions for
 draggable annotation boxes.}
@@ -61,6 +77,14 @@ to hex color strings (e.g. \code{c(North = "#2166ac", South = "#d73027")}).
 When supplied the D3 helper uses these colors instead of its built-in
 palette, so the interactive colors match a \code{\link[=render_dragged_map]{render_dragged_map()}} call
 that uses the same palette.}
+
+\item{show_legend}{Show a compact region legend inside the browser helper.}
+
+\item{max_legend_keys}{Maximum number of legend keys to show in the browser
+helper before suppressing the legend. Set to \code{Inf} to always show it.}
+
+\item{legend_position}{Browser-helper legend position. One of \code{"bottom"},
+\code{"top"}, \code{"left"}, \code{"right"}, or \code{"none"}.}
 
 \item{side_panel}{Show the built-in copy/download side panel in the helper
 HTML. Defaults to \code{TRUE}; Shiny apps that provide their own controls can

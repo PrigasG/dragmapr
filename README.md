@@ -1,13 +1,6 @@
----
-title: dragmapr Spatial Studio
-emoji: 🗺️
-colorFrom: blue
-colorTo: green
-sdk: docker
-pinned: false
----
-
 # dragmapr
+
+<img src="man/figures/logo.png" align="right" height="180" alt="dragmapr hex logo" />
 
 [![R-CMD-check](https://github.com/PrigasG/dragmapr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/PrigasG/dragmapr/actions/workflows/R-CMD-check.yaml)
 
@@ -80,6 +73,8 @@ concepts:
 ```r
 drag_map_prototype(my_sf, "region", labels = FALSE)
 drag_map_prototype(my_sf, "region", label_col = "name", label_marker = FALSE)
+drag_map_prototype(my_sf, "region", label_col = "name", label_marker_shape = "circle")
+drag_map_prototype(my_sf, "region", show_legend = TRUE, legend_position = "right")
 drag_map_prototype(my_sf, "region", label_col = "name", label_text_size = 14)
 
 region_labels <- make_region_labels(my_sf, region_col = "region", label_col = "name")
@@ -113,6 +108,7 @@ render_dragged_map(
   label_offsets = "drag_label_offsets.csv",
   connector_linewidth = 0.8,
   show_label_marker = FALSE,
+  label_marker_shape = "none",
   file = "annotated-layout.png"
 )
 ```
@@ -146,7 +142,7 @@ around displaced labels/connectors so exported PNGs do not clip callouts.
 - `shiny_custom_labels.R`: Shiny app with user-supplied draggable labels.
 - `shiny_draggable_export.R`: Shiny app that captures drag state, previews a static plot, toggles labels/legends/connectors/info boxes, and exports PNG.
 - `shiny_draggable_plot.R`: embed a draggable plot helper in a Shiny app.
-- `shiny_spatial_studio.R`: first-pass spatial studio for local zipped shapefile, GeoJSON, or GPKG upload; choose grouping/labels/colors, drag the map, and export PNG/CSV/GeoJSON/HTML.
+- `shiny_spatial_studio.R`: first-pass spatial studio for local zipped shapefile, GeoJSON, or GPKG upload; choose grouping/labels/colors, show the legend in drag and preview panes, switch text labels between circle/rounded-box/text-only markers, drag the map, and export PNG/CSV/GeoJSON/HTML.
 - `shiny_static_export.R`: Shiny static PNG export after offsets are available.
 - `smoke_examples.R`: runs all bundled examples in a temporary directory.
 

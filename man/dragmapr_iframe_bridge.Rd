@@ -8,7 +8,8 @@ dragmapr_iframe_bridge(
   region_input = "region_csv",
   label_input = "label_csv",
   slow_poll_ms = 2000L,
-  fast_poll_ms = 500L
+  fast_poll_ms = 500L,
+  allowed_origin = "same-origin"
 )
 }
 \arguments{
@@ -23,6 +24,10 @@ been received.  Defaults to \code{2000}.}
 
 \item{fast_poll_ms}{Polling interval in milliseconds before initial state
 arrives.  Defaults to \code{500}.}
+
+\item{allowed_origin}{Origin allowed to send drag state messages. Use
+\code{"same-origin"} to accept the current Shiny app origin, \code{"*"} to accept
+any origin, or a specific origin such as \code{"https://example.com"}.}
 }
 \value{
 A character string of JavaScript ready for

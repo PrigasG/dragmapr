@@ -19,7 +19,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 4. Use the draggable plot directly, or copy/download the offset CSVs.
 5. Optionally reproduce the layout as a static `ggplot2` image from those CSVs.
 
-The interactive browser helper is the primary deliverable. Step 5 is optional —
+The interactive browser helper is the primary deliverable. Step 5 is optional -
 use it when you need a reproducible image for a report or publication.
 
 ## A Synthetic Map
@@ -53,7 +53,7 @@ regions <- sf::st_sf(
 )
 ```
 
-Open the interactive helper in the browser — this is the main step:
+Open the interactive helper in the browser - this is the main step:
 
 ```{r, eval = FALSE}
 drag_map_prototype(

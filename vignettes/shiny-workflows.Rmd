@@ -96,40 +96,40 @@ shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragm
 ```
 
 Supported inputs: zipped shapefiles, shapefile sidecar files (`.shp` + `.dbf` +
-`.shx`), GeoJSON, and GeoPackage — either uploaded locally or downloaded from
+`.shx`), GeoJSON, and GeoPackage - either uploaded locally or downloaded from
 a URL.  The app reads geometry with `sf::st_read()`, repairs it with
 `sf::st_make_valid()`, and transforms longitude/latitude data to EPSG:3857 so
 metre offsets work correctly.
 
 Available downloads from the studio sidebar:
 
-- **PNG** — static render from `render_dragged_map()`
-- **Region CSV** — current region offsets, importable by any later session
-- **Label CSV** — current label offsets
-- **GeoJSON / GPKG** — the adjusted sf geometry with offsets applied
-- **HTML helper** — the standalone D3 drag file you can share or reopen
-- **Bundle ZIP** — all of the above plus `palette.csv` and `metadata.json`;
+- **PNG** - static render from `render_dragged_map()`
+- **Region CSV** - current region offsets, importable by any later session
+- **Label CSV** - current label offsets
+- **GeoJSON / GPKG** - the adjusted sf geometry with offsets applied
+- **HTML helper** - the standalone D3 drag file you can share or reopen
+- **Bundle ZIP** - all of the above plus `palette.csv` and `metadata.json`;
   enough to fully reconstruct the layout in a new session or hand off to a
   collaborator
 
 The app names its central reactive values in the State tab so they are easy to
 find when adapting the code:
 
-- `source_sf()` — raw sf from upload / URL / demo
-- `projected_sf()` — after `prepare_dragmapr_sf()`
-- `region_col()`, `label_col()` — chosen columns
-- `label_table()` — `make_region_labels()` output with style flags
-- `region_state()`, `label_state()` — current drag offsets as data frames
-- `region_palette()` — named color vector
-- `current_plot()` — `ggplot2` object ready to save
+- `source_sf()` - raw sf from upload / URL / demo
+- `projected_sf()` - after `prepare_dragmapr_sf()`
+- `region_col()`, `label_col()` - chosen columns
+- `label_table()` - `make_region_labels()` output with style flags
+- `region_state()`, `label_state()` - current drag offsets as data frames
+- `region_palette()` - named color vector
+- `current_plot()` - `ggplot2` object ready to save
 
 ## Reusable Shiny Helpers
 
 The spatial studio internally uses four package-level helpers that are also
 available directly for custom apps.
 
-**`read_dragmapr_sf_upload(upload)`** wraps a [shiny::fileInput()] result —
-including multi-file shapefile sidecar uploads and zip archives — into a single
+**`read_dragmapr_sf_upload(upload)`** wraps a [shiny::fileInput()] result -
+including multi-file shapefile sidecar uploads and zip archives - into a single
 `sf::st_read()` call.  Returns `NULL` when the upload is empty so callers can
 fall back to demo data.
 
