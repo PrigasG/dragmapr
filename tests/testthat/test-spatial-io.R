@@ -73,6 +73,25 @@ test_that("dragmapr_iframe_bridge names configured Shiny inputs", {
   expect_match(js, "_dragmaprOriginAllowed", fixed = TRUE)
 })
 
+test_that("dragmapr_iframe_bridge respects custom iframe_selector", {
+  js_default  <- dragmapr_iframe_bridge()
+  js_specific <- dragmapr_iframe_bridge(iframe_selector = "iframe.my-map-frame")
+  js_id       <- dragmapr_iframe_bridge(iframe_selector = "#my-helper")
+
+  # Default should use plain "iframe" selector
+  expect_match(js_default, '"iframe"', fixed = TRUE)
+
+  # Custom selectors appear in the generated JS
+  expect_match(js_specific, '"iframe.my-map-frame"', fixed = TRUE)
+  expect_match(js_id,       '"#my-helper"',          fixed = TRUE)
+
+  # Selector is wired into the poll function
+  expect_match(js_specific, "_dragmaprIframeSelector", fixed = TRUE)
+
+  # Empty selector is rejected
+  expect_error(dragmapr_iframe_bridge(iframe_selector = ""), "non-empty CSS selector")
+})
+
 test_that("upload file names are sanitized", {
   expect_equal(
     dragmapr:::sanitize_upload_names(c("../regions.geojson", "C:\\fake\\map.shp")),

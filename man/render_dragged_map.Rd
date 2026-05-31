@@ -107,7 +107,10 @@ styling for label connector lines.}
 \item{connector_curvature}{Curvature used by \code{"curve"} connectors.}
 
 \item{connector_squiggle_amplitude, connector_squiggle_waves}{Appearance of
-\code{"squiggle"} connectors in static exports.}
+\code{"squiggle"} connectors in static exports.
+\code{connector_squiggle_amplitude} is in the same coordinate units as the
+projected CRS (metres for EPSG:3857). The default of \code{12000} is tuned for
+country-scale datasets; scale it up or down to match your data extent.}
 
 \item{connector_end_gap}{Distance, in plot units, to trim connector endpoints
 away from label centers. Defaults to an automatic value based on plot size.}
@@ -152,4 +155,9 @@ poly <- sf::st_sf(
   )
 )
 render_dragged_map(poly, region_col = "region")
+}
+\seealso{
+\code{\link[=drag_map_prototype]{drag_map_prototype()}} for the interactive draggable browser helper
+that produces the offset CSVs; \code{\link[=read_offsets]{read_offsets()}} and \code{\link[=read_label_state]{read_label_state()}}
+to load saved offsets from disk; \code{\link[=as_drag_annotations]{as_drag_annotations()}} for info-box labels.
 }

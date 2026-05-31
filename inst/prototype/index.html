@@ -70,9 +70,13 @@ h2 { font-size: 13px; margin: 16px 0 0; }
   pointer-events: none;
 }
 .drag-legend.bottom { left: 50%; bottom: 14px; transform: translateX(-50%); }
-.drag-legend.top { left: 50%; top: 14px; transform: translateX(-50%); }
-.drag-legend.left { left: 14px; top: 50%; transform: translateY(-50%); }
-.drag-legend.right { right: 14px; top: 50%; transform: translateY(-50%); }
+.drag-legend.top    { left: 50%; top:    14px; transform: translateX(-50%); }
+.drag-legend.left   { left: 14px; top: 50%; transform: translateY(-50%); }
+.drag-legend.right  { right: 14px; top: 50%; transform: translateY(-50%); }
+/* When the side panel is visible (340 px), shift right/top legends left so
+   they land inside the SVG column rather than over the aside panel. */
+html:not(.no-side-panel) .drag-legend.right { right: calc(340px + 14px); }
+html:not(.no-side-panel) .drag-legend.top   { left: calc(50% - 170px); }
 .legend-item { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .legend-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(15, 23, 42, 0.18); flex: 0 0 auto; }
 .legend-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

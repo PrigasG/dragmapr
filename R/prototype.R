@@ -45,6 +45,9 @@
 #'   [utils::browseURL()]. Defaults to `FALSE`.
 #'
 #' @return Invisibly returns `file`.
+#' @seealso [render_dragged_map()] for the optional static ggplot2 render after
+#'   dragging; [make_region_labels()] and [as_drag_annotations()] to build
+#'   custom label tables; [prepare_dragmapr_sf()] to project uploaded geometry.
 #' @export
 #' @examples
 #' poly <- sf::st_sf(
@@ -98,7 +101,12 @@ drag_map_prototype <- function(x,
     stop("label_col '", label_col, "' not found.", call. = FALSE)
   }
   if (sf::st_is_longlat(x)) {
-    stop("Project `x` before using the prototype.", call. = FALSE)
+    stop(
+      "Project `x` before using the prototype. ",
+      "Use prepare_dragmapr_sf(x) or sf::st_transform(x, crs = 3857) ",
+      "to convert to a projected CRS first.",
+      call. = FALSE
+    )
   }
   if (!(is.logical(labels) && length(labels) == 1L && !is.na(labels)) && !is.data.frame(labels)) {
     stop("`labels` must be TRUE, FALSE, or a label data frame.", call. = FALSE)

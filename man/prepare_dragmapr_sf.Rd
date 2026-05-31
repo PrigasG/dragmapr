@@ -32,3 +32,8 @@ poly <- sf::st_sf(
 out <- prepare_dragmapr_sf(poly)
 sf::st_is_longlat(out)  # FALSE
 }
+\seealso{
+\code{\link[=read_dragmapr_sf_upload]{read_dragmapr_sf_upload()}} and \code{\link[=read_dragmapr_sf_url]{read_dragmapr_sf_url()}} to read
+spatial files before passing them to this function; \code{\link[=drag_map_prototype]{drag_map_prototype()}}
+which requires a projected sf object.
+}

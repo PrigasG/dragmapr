@@ -393,7 +393,7 @@ body.shiny-busy .studio-progress-bar { opacity: 1; }
 ui <- fluidPage(
   tags$head(
     # Iframe bridge: relays drag state from helper to Shiny inputs
-    tags$script(HTML(dragmapr_iframe_bridge())),
+    tags$script(HTML(dragmapr_iframe_bridge(iframe_selector = "iframe.studio-helper-frame"))),
     # Label-toggle message handler (app-specific, stays inline)
     tags$script(HTML("
       // Use a specific selector so Shiny's own internal iframes (download
@@ -676,7 +676,7 @@ server <- function(input, output, session) {
 
   state <- reactiveValues(
     source          = example_hhs_layout()$states,
-    status          = "Using bundled HHS demo. Upload a file or enter a URL to replace it.",
+    status          = "Showing the bundled HHS demo — upload a shapefile, GeoJSON, or GeoPackage (or paste a URL) to use your own data. Drag regions and labels, then download the offset CSVs.",
     status_level    = "info",    # "info" | "ok" | "error"
     helper_token    = 0L,
     helper_building = FALSE,     # TRUE while drag_map_prototype() is running

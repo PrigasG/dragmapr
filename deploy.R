@@ -52,3 +52,45 @@
 #    reasonably large shapefiles without hitting memory limits.
 #  * The Space sleeps after ~15 minutes of inactivity (free tier) and wakes on
 #    the next request within ~10 seconds.
+#
+# ── README.md frontmatter ─────────────────────────────────────────────────────
+#
+#  HuggingFace Spaces requires a YAML block at the very top of README.md.
+#  It can be accidentally lost when editing the file.  Before every push to the
+#  space remote, run source("deploy.R") from the package root to check and
+#  restore the block automatically, then commit if README.md changed:
+#
+#       source("deploy.R")
+#       git add README.md
+#       git commit -m "Restore HF YAML" --allow-empty
+#       git push space master:main
+#
+# ── Helper function ───────────────────────────────────────────────────────────
+
+#' Ensure README.md begins with the HuggingFace Space YAML frontmatter.
+#'
+#' Prepends the required block when it is missing; does nothing when it is
+#' already present.  Call this from the package root before every HF push.
+ensure_hf_readme <- function(readme = "README.md") {
+  hf_yaml <- c(
+    "---",
+    "title: dragmapr Spatial Studio",
+    "emoji: \U0001F5FA\UFE0F",
+    "colorFrom: blue",
+    "colorTo: green",
+    "sdk: docker",
+    "pinned: false",
+    "---",
+    ""
+  )
+  lines <- readLines(readme, warn = FALSE)
+  if (length(lines) > 0L && trimws(lines[1L]) == "---") {
+    message("HuggingFace YAML frontmatter is already present in ", readme, ".")
+    return(invisible(NULL))
+  }
+  writeLines(c(hf_yaml, lines), readme)
+  message("HuggingFace YAML frontmatter added to ", readme, ".")
+  message("Run: git add README.md && git commit -m 'Restore HF YAML'")
+}
+
+ensure_hf_readme()

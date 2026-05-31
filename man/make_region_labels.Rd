@@ -37,3 +37,8 @@ poly <- sf::st_sf(
 )
 make_region_labels(poly, region_col = "region")
 }
+\seealso{
+\code{\link[=as_drag_labels]{as_drag_labels()}} for user-supplied labels; \code{\link[=as_drag_annotations]{as_drag_annotations()}}
+for draggable info boxes; \code{\link[=apply_label_state]{apply_label_state()}} to restore saved positions;
+\code{\link[=drag_map_prototype]{drag_map_prototype()}} which accepts the result as its \code{labels} argument.
+}
