@@ -14,3 +14,4 @@
 ^pkgdown$
 ^dev$
 ^cran-comments\.md$
+^drag-map\.html$
