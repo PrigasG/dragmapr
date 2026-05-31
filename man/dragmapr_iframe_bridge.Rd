@@ -9,7 +9,8 @@ dragmapr_iframe_bridge(
   label_input = "label_csv",
   slow_poll_ms = 2000L,
   fast_poll_ms = 500L,
-  allowed_origin = "same-origin"
+  allowed_origin = "same-origin",
+  iframe_selector = "iframe"
 )
 }
 \arguments{
@@ -28,6 +29,12 @@ arrives.  Defaults to \code{500}.}
 \item{allowed_origin}{Origin allowed to send drag state messages. Use
 \code{"same-origin"} to accept the current Shiny app origin, \code{"*"} to accept
 any origin, or a specific origin such as \code{"https://example.com"}.}
+
+\item{iframe_selector}{CSS selector used to find the drag-map helper iframe
+in the parent document.  Defaults to \code{"iframe"} (first iframe found), but
+a more specific selector such as \code{"#my-helper-frame"} or
+\code{"iframe.studio-helper-frame"} is recommended when the page may contain
+other iframes (e.g. Shiny download handlers).}
 }
 \value{
 A character string of JavaScript ready for
@@ -44,8 +51,10 @@ in \code{tags$head(tags$script(HTML(...)))}.
 \dontrun{
 library(shiny)
 ui <- fluidPage(
-  tags$head(tags$script(HTML(dragmapr_iframe_bridge()))),
-  uiOutput("helper")
+  tags$head(tags$script(HTML(
+    dragmapr_iframe_bridge(iframe_selector = "#my-helper-frame")
+  ))),
+  uiOutput("helper")  # render tags$iframe(id = "my-helper-frame", ...)
 )
 }
 }

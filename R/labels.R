@@ -6,6 +6,9 @@
 #' @param point One of `"point_on_surface"` or `"centroid"`.
 #'
 #' @return A drag label table with `label_id`, `region`, `label`, `x`, and `y`.
+#' @seealso [as_drag_labels()] for user-supplied labels; [as_drag_annotations()]
+#'   for draggable info boxes; [apply_label_state()] to restore saved positions;
+#'   [drag_map_prototype()] which accepts the result as its `labels` argument.
 #' @export
 #' @examples
 #' poly <- sf::st_sf(
@@ -31,7 +34,12 @@ make_region_labels <- function(x,
     stop("label_col '", label_col, "' not found.", call. = FALSE)
   }
   if (sf::st_is_longlat(x)) {
-    stop("Project `x` before deriving label anchors in plot coordinates.", call. = FALSE)
+    stop(
+      "Project `x` before deriving label anchors in plot coordinates. ",
+      "Use prepare_dragmapr_sf(x) or sf::st_transform(x, crs = 3857) ",
+      "to convert to a projected CRS first.",
+      call. = FALSE
+    )
   }
   point <- match.arg(point)
 

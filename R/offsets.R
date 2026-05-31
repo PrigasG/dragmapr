@@ -46,7 +46,12 @@ apply_offsets <- function(x, offsets, region_col) {
   }
   offsets <- normalize_offsets(offsets, source = "`offsets`")
   if (sf::st_is_longlat(x)) {
-    stop("Project `x` before applying metre offsets.", call. = FALSE)
+    stop(
+      "Project `x` before applying metre offsets. ",
+      "Use prepare_dragmapr_sf(x) or sf::st_transform(x, crs = 3857) ",
+      "to convert to a projected CRS.",
+      call. = FALSE
+    )
   }
 
   feature_regions <- as.character(x[[region_col]])

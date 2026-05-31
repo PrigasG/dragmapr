@@ -216,7 +216,11 @@ test_that("drag_map_prototype accepts annotation boxes", {
   expect_match(html, '"connector":true', fixed = TRUE)
   expect_match(html, '"connector_type":"squiggle"', fixed = TRUE)
   expect_match(html, '"labelBoxWidth":150', fixed = TRUE)
-  expect_match(html, "connectorLayer.raise()", fixed = TRUE)
+  # connectorLayer.raise() was intentionally removed in 0.1.0 — it inverted the
+  # stacking order so connector lines rendered above label text.  Correct order
+  # (regions → connectors → labels) is achieved by appending in that sequence.
+  expect_false(grepl("connectorLayer.raise()", html, fixed = TRUE))
+  expect_match(html, "root/regions", fixed = TRUE)
   expect_match(html, "Math.abs(dx) <= halfWidth", fixed = TRUE)
 })
 

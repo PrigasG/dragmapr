@@ -427,6 +427,46 @@ test_that("connector starts need both coordinates", {
   expect_error(as_drag_labels(labels), "both `connector_start_x` and `connector_start_y`")
 })
 
+test_that("make_region_labels returns groups in natural numeric order", {
+  x <- sf::st_sf(
+    region = c("10", "2", "1", "9"),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0,0),c(1,0),c(1,1),c(0,1),c(0,0)))),
+      sf::st_polygon(list(rbind(c(2,0),c(3,0),c(3,1),c(2,1),c(2,0)))),
+      sf::st_polygon(list(rbind(c(4,0),c(5,0),c(5,1),c(4,1),c(4,0)))),
+      sf::st_polygon(list(rbind(c(6,0),c(7,0),c(7,1),c(6,1),c(6,0)))),
+      crs = 3857
+    )
+  )
+
+  labels <- make_region_labels(x, "region")
+
+  # Natural sort: "1", "2", "9", "10" not "1", "10", "2", "9"
+  expect_equal(labels$label_id, c("1", "2", "9", "10"))
+})
+
+test_that("as_drag_annotations applies connector arg even when labels come from make_region_labels", {
+  # Regression test: normalize_labels pre-fills connector = FALSE, which used
+  # to cause as_drag_annotations to silently discard connector = TRUE.
+  x <- sf::st_sf(
+    region = c("A", "B"),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0,0),c(1,0),c(1,1),c(0,1),c(0,0)))),
+      sf::st_polygon(list(rbind(c(2,0),c(3,0),c(3,1),c(2,1),c(2,0)))),
+      crs = 3857
+    )
+  )
+
+  labels <- make_region_labels(x, "region")
+  boxes  <- as_drag_annotations(labels,
+                                 width_px = 120, height_px = 60,
+                                 connector = TRUE,
+                                 connector_type = "elbow")
+
+  expect_true(all(boxes$connector))
+  expect_true(all(boxes$connector_type == "elbow"))
+})
+
 test_that("example_hhs_layout is self-contained", {
   hhs <- example_hhs_layout()
 

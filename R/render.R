@@ -41,6 +41,9 @@
 #' @param connector_curvature Curvature used by `"curve"` connectors.
 #' @param connector_squiggle_amplitude,connector_squiggle_waves Appearance of
 #'   `"squiggle"` connectors in static exports.
+#'   `connector_squiggle_amplitude` is in the same coordinate units as the
+#'   projected CRS (metres for EPSG:3857). The default of `12000` is tuned for
+#'   country-scale datasets; scale it up or down to match your data extent.
 #' @param connector_end_gap Distance, in plot units, to trim connector endpoints
 #'   away from label centers. Defaults to an automatic value based on plot size.
 #' @param label_padding Proportional padding added around displaced labels and
@@ -50,6 +53,9 @@
 #' @param width,height,dpi Output settings used when `file` is supplied.
 #'
 #' @return A `ggplot` object.
+#' @seealso [drag_map_prototype()] for the interactive draggable browser helper
+#'   that produces the offset CSVs; [read_offsets()] and [read_label_state()]
+#'   to load saved offsets from disk; [as_drag_annotations()] for info-box labels.
 #' @importFrom rlang .data
 #' @export
 #' @examples

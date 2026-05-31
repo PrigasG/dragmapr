@@ -128,6 +128,9 @@ read_dragmapr_sf_url <- function(url, timeout = 60) {
 #'
 #' @return A projected `sf` object containing only polygon or multipolygon
 #'   features with valid geometry.
+#' @seealso [read_dragmapr_sf_upload()] and [read_dragmapr_sf_url()] to read
+#'   spatial files before passing them to this function; [drag_map_prototype()]
+#'   which requires a projected sf object.
 #' @export
 #' @examples
 #' poly <- sf::st_sf(
@@ -190,6 +193,11 @@ prepare_dragmapr_sf <- function(x, target_crs = 3857) {
 #' @param allowed_origin Origin allowed to send drag state messages. Use
 #'   `"same-origin"` to accept the current Shiny app origin, `"*"` to accept
 #'   any origin, or a specific origin such as `"https://example.com"`.
+#' @param iframe_selector CSS selector used to find the drag-map helper iframe
+#'   in the parent document.  Defaults to `"iframe"` (first iframe found), but
+#'   a more specific selector such as `"#my-helper-frame"` or
+#'   `"iframe.studio-helper-frame"` is recommended when the page may contain
+#'   other iframes (e.g. Shiny download handlers).
 #'
 #' @return A character string of JavaScript ready for
 #'   `tags$head(tags$script(HTML(dragmapr_iframe_bridge())))`.
@@ -199,28 +207,36 @@ prepare_dragmapr_sf <- function(x, target_crs = 3857) {
 #' \dontrun{
 #' library(shiny)
 #' ui <- fluidPage(
-#'   tags$head(tags$script(HTML(dragmapr_iframe_bridge()))),
-#'   uiOutput("helper")
+#'   tags$head(tags$script(HTML(
+#'     dragmapr_iframe_bridge(iframe_selector = "#my-helper-frame")
+#'   ))),
+#'   uiOutput("helper")  # render tags$iframe(id = "my-helper-frame", ...)
 #' )
 #' }
 dragmapr_iframe_bridge <- function(region_input = "region_csv",
                                    label_input  = "label_csv",
                                    slow_poll_ms = 2000L,
                                    fast_poll_ms = 500L,
-                                   allowed_origin = "same-origin") {
-  region_input <- as.character(region_input[1L])
-  label_input  <- as.character(label_input[1L])
-  slow_poll_ms <- as.integer(slow_poll_ms[1L])
-  fast_poll_ms <- as.integer(fast_poll_ms[1L])
-  allowed_origin <- as.character(allowed_origin[1L])
+                                   allowed_origin = "same-origin",
+                                   iframe_selector = "iframe") {
+  region_input    <- as.character(region_input[1L])
+  label_input     <- as.character(label_input[1L])
+  slow_poll_ms    <- as.integer(slow_poll_ms[1L])
+  fast_poll_ms    <- as.integer(fast_poll_ms[1L])
+  allowed_origin  <- as.character(allowed_origin[1L])
+  iframe_selector <- as.character(iframe_selector[1L])
   if (!nzchar(allowed_origin)) {
     stop("`allowed_origin` must be a non-empty character string.", call. = FALSE)
+  }
+  if (!nzchar(iframe_selector)) {
+    stop("`iframe_selector` must be a non-empty CSS selector string.", call. = FALSE)
   }
 
   sprintf(
     '
 var _dragmaprBridgeReceived = false;
 var _dragmaprAllowedOrigin = %s;
+var _dragmaprIframeSelector = %s;
 function _dragmaprOriginAllowed(event) {
   if (_dragmaprAllowedOrigin === "*") return true;
   if (_dragmaprAllowedOrigin === "same-origin") {
@@ -239,7 +255,7 @@ window.addEventListener("message", function(event) {
   Shiny.setInputValue(%s, event.data.labelCsv, {priority: "event"});
 });
 function _dragmaprBridgePoll() {
-  var iframe = document.querySelector("iframe");
+  var iframe = document.querySelector(_dragmaprIframeSelector);
   if (iframe && iframe.contentWindow) {
     iframe.contentWindow.postMessage({type: "dragmapr-request-state"}, _dragmaprTargetOrigin());
   }
@@ -249,9 +265,10 @@ $(document).on("shiny:connected", function() {
   setTimeout(_dragmaprBridgePoll, 100);
 });
 ',
-    jsonlite::toJSON(allowed_origin, auto_unbox = TRUE),
-    jsonlite::toJSON(region_input, auto_unbox = TRUE),
-    jsonlite::toJSON(label_input,  auto_unbox = TRUE),
+    jsonlite::toJSON(allowed_origin,  auto_unbox = TRUE),
+    jsonlite::toJSON(iframe_selector, auto_unbox = TRUE),
+    jsonlite::toJSON(region_input,    auto_unbox = TRUE),
+    jsonlite::toJSON(label_input,     auto_unbox = TRUE),
     slow_poll_ms,
     fast_poll_ms
   )

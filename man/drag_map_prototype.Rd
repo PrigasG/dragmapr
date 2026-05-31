@@ -121,3 +121,8 @@ drag_map_prototype(poly, region_col = "region", open = TRUE)
 drag_map_prototype(poly, region_col = "region",
                   file = tempfile(fileext = ".html"))
 }
+\seealso{
+\code{\link[=render_dragged_map]{render_dragged_map()}} for the optional static ggplot2 render after
+dragging; \code{\link[=make_region_labels]{make_region_labels()}} and \code{\link[=as_drag_annotations]{as_drag_annotations()}} to build
+custom label tables; \code{\link[=prepare_dragmapr_sf]{prepare_dragmapr_sf()}} to project uploaded geometry.
+}
