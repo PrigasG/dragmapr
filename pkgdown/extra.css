@@ -1,0 +1,10 @@
+/*
+ * pkgdown/extra.css - site-wide CSS additions.
+ *
+ * The README includes a right-aligned logo for GitHub, but pkgdown already
+ * adds the package logo to the home page header. Hide only the README copy on
+ * the generated site so the logo is not shown twice.
+ */
+.template-home img[src="reference/figures/logo.png"] {
+  display: none;
+}
