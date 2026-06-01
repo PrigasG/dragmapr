@@ -213,6 +213,27 @@ drag_map_prototype(
 Likewise, `make_labels()` remains an alias for `make_region_labels()` for older
 scripts.
 
+If the offsets were exported as a Spatial Studio project ZIP, use the one-line
+project renderer instead of wiring the CSV files together manually:
+
+```{r, eval = FALSE}
+render_dragmapr_project(
+  "dragmapr-project.zip",
+  file = "dragged-map.png"
+)
+```
+
+---
+
+### RStudio addin
+
+In RStudio, install the package and use **Addins > Launch dragmapr** to open a
+compact prototype gadget. The addin looks for `sf` objects in `.GlobalEnv`,
+lets you choose the region and label columns, and assigns `region_offsets` and
+`label_offsets` when you click **Done**.
+Create or load the `sf` object before opening the addin. If you call
+`dragmapr_addin()` directly, pass `env =` to work with another environment.
+
 ---
 
 ### Colour palette

@@ -194,9 +194,18 @@ body {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  max-height: calc(100vh - 120px);
+  height: calc(86vh + 172px);
+  min-height: 892px;
+  max-height: 1132px;
   overflow-y: auto;
   padding: 12px;
+}
+@media (max-width: 767px) {
+  .well {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
 }
 h2.studio-title {
   font-size: 1.35rem;
@@ -598,6 +607,13 @@ ui <- fluidPage(
           Shiny.setInputValue('helper_ready_token', Date.now(), {priority: 'event'});
         }
       });
+      document.addEventListener('click', function(event) {
+        var scriptButton = event.target && event.target.closest &&
+          event.target.closest('#download_script');
+        if (scriptButton) {
+          Shiny.setInputValue('script_download_requested', Date.now(), {priority: 'event'});
+        }
+      }, true);
     ")),
     tags$style(HTML(studio_css)),
     # Progress bar shown automatically whenever Shiny is busy
@@ -621,7 +637,7 @@ ui <- fluidPage(
 
   sidebarLayout(
     sidebarPanel(
-      width = 2,
+      width = 3,
 
       tags$div(
         class = "studio-card",
@@ -703,33 +719,43 @@ ui <- fluidPage(
         class = "studio-card",
         tags$div("Export", class = "studio-section"),
         checkboxInput("show_helper_panel", "Show offset panel in drag view", value = TRUE),
+        textInput("static_title", "Static map title", value = "dragmapr spatial studio"),
+        fluidRow(
+          column(4, numericInput("static_width", "Width", value = 10, min = 2, max = 30, step = 0.5)),
+          column(4, numericInput("static_height", "Height", value = 8, min = 2, max = 30, step = 0.5)),
+          column(4, numericInput("static_dpi", "DPI", value = 300, min = 72, max = 600, step = 24))
+        ),
+        tags$p(
+          "The R script expects the Project ZIP in the same folder, or you can edit project_path.",
+          style = "font-size:0.78rem; color:#64748b; line-height:1.35; margin:2px 0 8px;"
+        ),
         tags$div(
           class = "download-grid",
           downloadButton("download_png",        "PNG"),
+          downloadButton(
+            "download_script", "R script",
+            onclick = "Shiny.setInputValue('script_download_requested', Date.now(), {priority: 'event'});"
+          ),
           downloadButton("download_region_csv", "Region CSV"),
           downloadButton("download_label_csv",  "Label CSV"),
           downloadButton("download_labels",     "Labels table"),
           downloadButton("download_geojson",    "GeoJSON"),
           downloadButton("download_gpkg",       "GPKG"),
           downloadButton("download_html",       "HTML helper"),
-          downloadButton("download_bundle",     "Bundle ZIP")
+          downloadButton("download_bundle",     "Project ZIP"),
+          downloadButton("download_static_bundle", "Static bundle")
         )
       )
     ),
 
     mainPanel(
-      width = 10,
+      width = 9,
       uiOutput("status_bar"),
       uiOutput("studio_overlay_ui"),
       tags$div(
         class = "map-control-toolbar",
         tags$span("Map controls", class = "map-control-title"),
-        tags$div(
-          class = "map-control-actions",
-          actionButton("undo_layout", "Undo", class = "btn-sm btn-default"),
-          actionButton("redo_layout", "Redo", class = "btn-sm btn-default"),
-          actionButton("reset_layout", "Reset drag layout", class = "btn-sm btn-warning")
-        )
+        uiOutput("history_controls")
       ),
       tabsetPanel(
         tabPanel(
@@ -801,6 +827,8 @@ server <- function(input, output, session) {
     pending_label_col  = NULL,
     undo_stack = list(),
     redo_stack = list(),
+    history_armed = FALSE,
+    history_ignore_until = NULL,
     restoring_history = FALSE
   )
 
@@ -838,6 +866,8 @@ server <- function(input, output, session) {
     state$pending_label_col <- NULL
     state$undo_stack <- list()
     state$redo_stack <- list()
+    state$history_armed <- FALSE
+    state$history_ignore_until <- NULL
   }
 
   rows_for_message <- function(x) {
@@ -859,6 +889,17 @@ server <- function(input, output, session) {
 
   push_history <- function(snapshot) {
     if (isTRUE(state$restoring_history)) return()
+    ignore_until <- state$history_ignore_until
+    if (!is.null(ignore_until) && Sys.time() < ignore_until) {
+      state$undo_stack <- list(snapshot)
+      state$redo_stack <- list()
+      return()
+    }
+    if (!isTRUE(state$history_armed)) {
+      state$undo_stack <- list(snapshot)
+      state$redo_stack <- list()
+      return()
+    }
     stack <- state$undo_stack
     if (length(stack) > 0L && same_snapshot(stack[[length(stack)]], snapshot)) {
       return()
@@ -1013,6 +1054,12 @@ server <- function(input, output, session) {
 
   observeEvent(input$helper_ready_token, {
     set_helper_loading(FALSE)
+    if (!isTRUE(state$history_armed)) {
+      state$undo_stack <- list(state_snapshot())
+      state$redo_stack <- list()
+      state$history_armed <- TRUE
+    }
+    state$history_ignore_until <- Sys.time() + 2
   }, ignoreInit = TRUE)
 
   # ---- Reactives ----
@@ -1240,7 +1287,7 @@ server <- function(input, output, session) {
       marker_size         = (input$label_radius %||% 14) / 3,
       connector_linewidth = input$connector_linewidth %||% 0.45,
       label_padding       = 0.12,
-      title               = "dragmapr spatial studio"
+      title               = input$static_title %||% "dragmapr spatial studio"
     )
   }
 
@@ -1265,7 +1312,8 @@ server <- function(input, output, session) {
   observeEvent(
     list(projected_sf(), region_col(), label_col(), region_palette(), label_table(),
          input$show_labels, input$show_legend, input$label_marker_shape,
-         input$connector_linewidth, input$legend_show_all, input$legend_position),
+         input$connector_linewidth, input$legend_show_all, input$legend_position,
+         input$static_title),
     do_refresh(),
     ignoreInit = FALSE
   )
@@ -1296,6 +1344,35 @@ server <- function(input, output, session) {
       class = paste("studio-status", level),
       tags$span(icon, class = "status-icon"),
       tags$span(state$status)
+    )
+  })
+
+  output$history_controls <- renderUI({
+    can_undo <- length(state$undo_stack) > 1L
+    can_redo <- length(state$redo_stack) > 0L
+    history_button <- function(id, label, class, enabled, title) {
+      tags$button(
+        id = id,
+        type = "button",
+        class = paste("btn action-button", class),
+        title = title,
+        disabled = if (isTRUE(enabled)) NULL else NA,
+        tags$span(label, class = "action-label")
+      )
+    }
+    tags$div(
+      class = "map-control-actions",
+      history_button(
+        "undo_layout", "Undo", "btn-sm btn-default",
+        can_undo,
+        if (can_undo) "Undo the last drag-state change" else "No drag-state changes to undo"
+      ),
+      history_button(
+        "redo_layout", "Redo", "btn-sm btn-default",
+        can_redo,
+        if (can_redo) "Redo the last undone drag-state change" else "No undone drag-state changes to redo"
+      ),
+      actionButton("reset_layout", "Reset drag layout", class = "btn-sm btn-warning")
     )
   })
 
@@ -1758,6 +1835,20 @@ server <- function(input, output, session) {
     set_status("Reset region and label offsets.", "ok")
   }, ignoreInit = TRUE)
 
+  observeEvent(input$script_download_requested, {
+    showModal(modalDialog(
+      title = "Use the R script with a Project ZIP",
+      tags$p("The R script recreates the static map from a Spatial Studio project bundle."),
+      tags$ul(
+        tags$li("Download Project ZIP and keep it in the same folder as the script."),
+        tags$li("If the ZIP is somewhere else, edit project_path in the script."),
+        tags$li("Use Static bundle when you want the script, project files, PNG, and PDF together.")
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Got it")
+    ))
+  }, ignoreInit = TRUE)
+
   output$helper <- renderUI({
     state$helper_token
     tags$iframe(
@@ -1772,10 +1863,155 @@ server <- function(input, output, session) {
 
   # ---- Download handlers ----
 
+  static_width <- function() {
+    value <- suppressWarnings(as.numeric(input$static_width %||% 10))
+    if (!is.finite(value) || value <= 0) 10 else value
+  }
+  static_height <- function() {
+    value <- suppressWarnings(as.numeric(input$static_height %||% 8))
+    if (!is.finite(value) || value <= 0) 8 else value
+  }
+  static_dpi <- function() {
+    value <- suppressWarnings(as.numeric(input$static_dpi %||% 300))
+    if (!is.finite(value) || value <= 0) 300 else value
+  }
+  static_title <- function() {
+    title <- input$static_title %||% "dragmapr spatial studio"
+    if (is_blank(title)) "dragmapr spatial studio" else title
+  }
+  export_metadata <- function() {
+    list(
+      region_col          = region_col(),
+      label_col           = label_col(),
+      title               = static_title(),
+      width               = static_width(),
+      height              = static_height(),
+      dpi                 = static_dpi(),
+      crs_epsg            = sf::st_crs(projected_sf())$epsg,
+      show_labels         = isTRUE(input$show_labels),
+      show_legend         = isTRUE(input$show_legend),
+      legend_position     = input$legend_position %||% "bottom",
+      label_marker_shape  = input$label_marker_shape %||% "circle",
+      marker_size         = (input$label_radius %||% 14) / 3,
+      connector_linewidth = input$connector_linewidth %||% 0.45,
+      label_padding       = 0.12,
+      label_edits         = state$label_edits,
+      created             = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+      dragmapr_version    = as.character(utils::packageVersion("dragmapr"))
+    )
+  }
+  recreate_script_text <- function(project_path = ".") {
+    paste(
+      "# Recreate a static map from a dragmapr Spatial Studio project.",
+      "#",
+      "# Before running this script:",
+      "# 1. Download the Project ZIP from Spatial Studio.",
+      "# 2. Put that ZIP in the same folder as this script, or edit project_path below.",
+      "# 3. Run install.packages(\"dragmapr\") if dragmapr is not installed yet.",
+      "#",
+      "# The Static bundle download already includes the project files, this script,",
+      "# and ready-made PNG/PDF outputs.",
+      "",
+      "library(dragmapr)",
+      "",
+      paste0("project_path <- ", deparse(project_path)),
+      "",
+      "if (!file.exists(project_path)) {",
+      "  stop(",
+      "    \"Could not find \", project_path, \".\\n\",",
+      "    \"Download Project ZIP from Spatial Studio and place it next to this script, \",",
+      "    \"or edit project_path to the ZIP/project folder location.\",",
+      "    call. = FALSE",
+      "  )",
+      "}",
+      "",
+      "render_dragmapr_project(",
+      "  project_path,",
+      "  file = \"dragmapr-static-map.png\",",
+      paste0("  width = ", static_width(), ","),
+      paste0("  height = ", static_height(), ","),
+      paste0("  dpi = ", static_dpi(), ","),
+      paste0("  title = ", deparse(static_title())),
+      ")",
+      sep = "\n"
+    )
+  }
+  export_validation_message <- function() {
+    groups <- region_groups()
+    offsets <- region_state()
+    labels <- label_table()
+    label_offsets <- label_state()
+    missing_regions <- setdiff(groups, as.character(offsets$region))
+    missing_labels <- setdiff(as.character(labels$label_id), as.character(label_offsets$label_id))
+    details <- character()
+    if (length(missing_regions) > 0L) {
+      details <- c(details, paste0(length(missing_regions), " region offset row(s) missing; zero movement will be used."))
+    }
+    if (length(missing_labels) > 0L) {
+      details <- c(details, paste0(length(missing_labels), " label offset row(s) missing; anchor positions will be used."))
+    }
+    if (length(details) == 0L) {
+      "Static export is ready: geometry, labels, palette, and offsets are aligned."
+    } else {
+      paste(details, collapse = " ")
+    }
+  }
+  write_project_files <- function(bundle_dir, include_static = FALSE) {
+    dir.create(bundle_dir, recursive = TRUE, showWarnings = FALSE)
+    sf::st_write(projected_sf(),
+                 file.path(bundle_dir, "source.gpkg"),
+                 driver = "GPKG", delete_dsn = TRUE, quiet = TRUE)
+    utils::write.csv(region_state(),
+                     file.path(bundle_dir, "drag_region_offsets.csv"),
+                     row.names = FALSE)
+    utils::write.csv(label_state(),
+                     file.path(bundle_dir, "drag_label_offsets.csv"),
+                     row.names = FALSE)
+    utils::write.csv(label_table(),
+                     file.path(bundle_dir, "labels.csv"),
+                     row.names = FALSE)
+    utils::write.csv(
+      data.frame(region = names(region_palette()),
+                 color  = unname(region_palette()),
+                 stringsAsFactors = FALSE),
+      file.path(bundle_dir, "palette.csv"),
+      row.names = FALSE
+    )
+    writeLines(
+      jsonlite::toJSON(export_metadata(), auto_unbox = TRUE, pretty = TRUE),
+      file.path(bundle_dir, "metadata.json")
+    )
+    writeLines(recreate_script_text("."), file.path(bundle_dir, "recreate-static-map.R"))
+    if (isTRUE(include_static)) {
+      plot <- current_plot()
+      ggplot2::ggsave(file.path(bundle_dir, "dragmapr-static-map.png"), plot,
+                      width = static_width(), height = static_height(), dpi = static_dpi())
+      ggplot2::ggsave(file.path(bundle_dir, "dragmapr-static-map.pdf"), plot,
+                      width = static_width(), height = static_height(), dpi = static_dpi())
+    }
+    invisible(bundle_dir)
+  }
+  zip_directory <- function(file, directory) {
+    old_wd <- setwd(directory)
+    on.exit(setwd(old_wd), add = TRUE)
+    utils::zip(file, list.files(".", recursive = TRUE))
+  }
+
   output$download_png <- downloadHandler(
     filename    = function() "dragmapr-spatial-studio.png",
-    content     = function(file) ggplot2::ggsave(file, current_plot(), width = 10, height = 8, dpi = 300),
+    content     = function(file) {
+      set_status(export_validation_message(), "ok")
+      ggplot2::ggsave(file, current_plot(), width = static_width(), height = static_height(), dpi = static_dpi())
+    },
     contentType = "image/png"
+  )
+  output$download_script <- downloadHandler(
+    filename    = function() "recreate-static-map.R",
+    content     = function(file) {
+      set_status("Downloaded an R script that recreates the static map from a project ZIP.", "ok")
+      writeLines(recreate_script_text("dragmapr-project.zip"), file)
+    },
+    contentType = "text/plain"
   )
   output$download_region_csv <- downloadHandler(
     filename    = function() "drag_region_offsets.csv",
@@ -1816,40 +2052,19 @@ server <- function(input, output, session) {
     contentType = "application/zip",
     content     = function(file) {
       bundle_dir <- tempfile("dragmapr_bundle_")
-      dir.create(bundle_dir)
-      sf::st_write(projected_sf(),
-                   file.path(bundle_dir, "source.gpkg"),
-                   driver = "GPKG", delete_dsn = TRUE, quiet = TRUE)
-      utils::write.csv(region_state(),
-                       file.path(bundle_dir, "drag_region_offsets.csv"),
-                       row.names = FALSE)
-      utils::write.csv(label_state(),
-                       file.path(bundle_dir, "drag_label_offsets.csv"),
-                       row.names = FALSE)
-      utils::write.csv(label_table(),
-                       file.path(bundle_dir, "labels.csv"),
-                       row.names = FALSE)
-      utils::write.csv(
-        data.frame(region = names(region_palette()),
-                   color  = unname(region_palette()),
-                   stringsAsFactors = FALSE),
-        file.path(bundle_dir, "palette.csv"),
-        row.names = FALSE
-      )
-      writeLines(
-        jsonlite::toJSON(list(
-          region_col       = region_col(),
-          label_col        = label_col(),
-          crs_epsg         = sf::st_crs(projected_sf())$epsg,
-          label_edits      = state$label_edits,
-          created          = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
-          dragmapr_version = as.character(utils::packageVersion("dragmapr"))
-        ), auto_unbox = TRUE, pretty = TRUE),
-        file.path(bundle_dir, "metadata.json")
-      )
-      old_wd <- setwd(bundle_dir)
-      on.exit(setwd(old_wd), add = TRUE)
-      utils::zip(file, list.files(".", recursive = TRUE))
+      write_project_files(bundle_dir, include_static = FALSE)
+      set_status("Downloaded a project ZIP with geometry, offsets, labels, palette, metadata, and recreate-static-map.R.", "ok")
+      zip_directory(file, bundle_dir)
+    }
+  )
+  output$download_static_bundle <- downloadHandler(
+    filename    = "dragmapr-static-bundle.zip",
+    contentType = "application/zip",
+    content     = function(file) {
+      bundle_dir <- tempfile("dragmapr_static_bundle_")
+      write_project_files(bundle_dir, include_static = TRUE)
+      set_status("Downloaded a static bundle with PNG, PDF, data files, metadata, and recreate-static-map.R.", "ok")
+      zip_directory(file, bundle_dir)
     }
   )
 }

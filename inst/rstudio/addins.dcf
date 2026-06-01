@@ -1,0 +1,4 @@
+Name: Launch dragmapr
+Description: Open the interactive drag-map prototype for a projected sf object. Drag regions and labels, then click Done to assign the offset tables to your global environment.
+Binding: dragmapr_addin
+Interactive: true

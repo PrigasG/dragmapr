@@ -70,6 +70,7 @@ reference:
     source geometry plus exported region and label offset tables.
   contents:
   - render_dragged_map
+  - render_dragmapr_project
 
 - title: Built-in examples
   desc: Self-contained fixtures for testing and demonstrations.
@@ -88,6 +89,11 @@ reference:
   - read_dragmapr_sf_url
   - prepare_dragmapr_sf
   - dragmapr_iframe_bridge
+
+- title: RStudio addin
+  desc: Launch the interactive prototype from the RStudio Addins menu.
+  contents:
+  - dragmapr_addin
 
 - title: Compatibility aliases
   desc: Earlier names kept for backward compatibility.

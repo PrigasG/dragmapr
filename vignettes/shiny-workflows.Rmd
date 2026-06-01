@@ -90,7 +90,8 @@ spatial workspace rather than a fixed demo: users upload local polygon data,
 enter a URL, or reopen a saved project ZIP; pick grouping and label columns;
 edit label text and colors; undo and redo drag-state changes; drag boundaries;
 switch between short labels and info boxes; control text size and connector
-style; preview a static render; and download the current artifacts.
+style; preview a static render; set static export size and DPI; and download
+the current artifacts.
 
 ```{r, eval = FALSE}
 shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
@@ -117,9 +118,33 @@ Available downloads from the studio sidebar:
 - **Labels table** — current label geometry and edited label text
 - **GeoJSON / GPKG** — the adjusted sf geometry with offsets applied
 - **HTML helper** — the standalone D3 drag file you can share or reopen
-- **Bundle ZIP** — all of the above plus `palette.csv` and `metadata.json`;
-  enough to reopen the project in Spatial Studio, reconstruct the layout in a
-  new session, or hand off to a collaborator
+- **Project ZIP** — source geometry, offsets, labels, `palette.csv`,
+  `metadata.json`, and `recreate-static-map.R`; enough to reopen the project in
+  Spatial Studio, reconstruct the layout in a new session, or hand off to a
+  collaborator
+- **Static bundle** — the project bundle plus ready-to-share PNG and PDF files
+
+The export panel also includes a reproducible R script and a static bundle. The
+R script calls `render_dragmapr_project()` and expects `dragmapr-project.zip` to
+be in the same folder unless `project_path` is edited. The static bundle
+includes the project files plus ready-to-share PNG and PDF files. The project
+ZIP is a one-line static rendering input:
+
+```{r, eval = FALSE}
+render_dragmapr_project(
+  "dragmapr-project.zip",
+  file = "final-map.png",
+  width = 10,
+  height = 8,
+  dpi = 300
+)
+```
+
+`render_dragmapr_project()` validates the bundle before rendering. It gives
+file-specific errors for missing metadata, malformed CSVs, unknown region
+columns, and labels that refer to regions that are not present in `source.gpkg`.
+When an offset row is absent, it reports the missing rows and uses zero movement
+for that region or label so users can still inspect the output.
 
 The app names its central reactive values in the State tab so they are easy to
 find when adapting the code:

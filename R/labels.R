@@ -423,6 +423,3 @@ normalize_label_state <- function(state, source) {
   out
 }
 
-normalize_label_offsets <- function(offsets, source) {
-  normalize_label_state(offsets, source)
-}
