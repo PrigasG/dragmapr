@@ -208,3 +208,23 @@ render_dragged_map(
   height = 6
 )
 ```
+
+## Rendering A Spatial Studio Project
+
+When the layout comes from Spatial Studio, the project ZIP is the easiest
+static handoff. It contains the source geometry, region offsets, label offsets,
+labels, palette, metadata, and a generated `recreate-static-map.R` script.
+
+```{r, eval = FALSE}
+render_dragmapr_project(
+  "dragmapr-project.zip",
+  file = "hhs_dragged_layout.png",
+  width = 9,
+  height = 6,
+  dpi = 300
+)
+```
+
+`render_dragmapr_project()` checks the bundle before rendering. Missing offset
+rows are reported and treated as zero movement; malformed CSVs, unknown region
+columns, and labels tied to absent regions produce file-specific errors.

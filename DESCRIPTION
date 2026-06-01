@@ -2,23 +2,22 @@ Package: dragmapr
 Title: Create Draggable Plots from Projected Geometry
 Version: 0.1.0
 Authors@R:
-    person("George", "Arthur", role = c("aut", "cre"), email = "prigasgenthian48@gmail.com")
-Description: Creates interactive draggable plots from grouped projected sf
-    geometry. The primary deliverable is a browser-based D3 helper where
-    regions and labels can be moved freely; users drag, then copy or download
-    the resulting offset tables. Labels can be derived automatically with
-    make_region_labels(), supplied directly with as_drag_labels(), and their
-    moved positions saved and restored with read_label_state() and
-    apply_label_state(). When a reproducible static image is also needed,
-    render_dragged_map() reconstructs the layout as a ggplot2 plot from the
-    source geometry plus the exported offset tables.
+    person("George", "Arthur", , "prigasgenthian48@gmail.com", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-1975-1459"))
+Description: Creates interactive draggable plots from grouped projected
+    'sf' geometry. The primary deliverable is a browser-based 'D3' helper
+    where regions and labels can be moved freely; users drag, then copy or
+    download the resulting offset tables. Labels can be derived
+    automatically with make_region_labels(), supplied directly with
+    as_drag_labels(), and their moved positions saved and restored with
+    read_label_state() and apply_label_state(). When a reproducible static
+    image is also needed, render_dragged_map() reconstructs the layout as
+    a 'ggplot2' plot from the source geometry plus the exported offset
+    tables, and render_dragmapr_project() renders complete Spatial Studio
+    project bundles.
 License: MIT + file LICENSE
 URL: https://prigasg.github.io/dragmapr/
 BugReports: https://github.com/PrigasG/dragmapr/issues
-Encoding: UTF-8
-Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
-VignetteBuilder: knitr
 Imports:
     ggplot2,
     grid,
@@ -31,9 +30,15 @@ Imports:
 Suggests:
     glasstabs,
     knitr,
+    miniUI,
     pkgdown,
     rmarkdown,
     shiny,
     shinyWidgets,
     testthat (>= 3.0.0)
+VignetteBuilder: 
+    knitr
 Config/testthat/edition: 3
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3

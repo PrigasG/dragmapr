@@ -42,7 +42,8 @@ devtools::load_all()
 2. Write a draggable browser plot helper.
 3. Drag regions and labels until the layout works.
 4. Use the draggable plot directly, or download/copy region and label offset CSVs.
-5. Optionally render a static plot or image from the source geometry plus those CSVs.
+5. Render a static image either from those CSVs with `render_dragged_map()` or
+   from a Spatial Studio project ZIP with `render_dragmapr_project()`.
 
 ```r
 library(dragmapr)
@@ -62,6 +63,11 @@ render_dragged_map(
   region_col = "region",
   label_col = "region",
   label_offsets = "drag_label_offsets.csv",
+  file = "dragged-map.png"
+)
+
+render_dragmapr_project(
+  "dragmapr-project.zip",
   file = "dragged-map.png"
 )
 ```
@@ -139,6 +145,26 @@ Shiny app. `render_dragged_map()` applies region movement first, then label
 movement, then optional connectors and labels. It also expands plot limits
 around displaced labels/connectors so exported PNGs do not clip callouts.
 
+If you used Spatial Studio, the most direct static workflow is the project ZIP:
+
+```r
+render_dragmapr_project(
+  "dragmapr-project.zip",
+  file = "final-map.png",
+  width = 10,
+  height = 8,
+  dpi = 300
+)
+```
+
+The project helper reads `source.gpkg`, `drag_region_offsets.csv`,
+`drag_label_offsets.csv`, `labels.csv`, `palette.csv`, and `metadata.json` from
+the bundle. It reports missing offset rows, unknown regions, and malformed
+files with messages intended to point to the exact file that needs attention.
+The R script exported by Spatial Studio is a convenience wrapper around this
+helper; keep `dragmapr-project.zip` in the same folder as the script, or edit
+`project_path` before running it.
+
 Use `read_offsets()` for downloaded region CSVs and `read_label_state()` for
 downloaded label CSVs before passing them into `apply_offsets()`,
 `apply_label_state()`, or `render_dragged_map()`. The older
@@ -150,6 +176,17 @@ For Shiny upload workflows, `read_dragmapr_sf_upload()`,
 geometry before calling `drag_map_prototype()`. `dragmapr_iframe_bridge()`
 provides the JavaScript bridge used by Shiny apps to receive region and label
 state from the helper iframe.
+
+## RStudio Addin
+
+After installing `dragmapr`, RStudio users can open **Addins > Launch dragmapr**
+to start a compact prototype gadget from an `sf` object in the global
+environment. Pick the region and label columns, render the prototype, drag the
+layout, then click **Done**. The addin assigns `region_offsets` and
+`label_offsets` in `.GlobalEnv` so they can be passed directly to
+`render_dragged_map()`.
+Load or create the `sf` object before launching the addin; programmatic calls
+can pass `env =` when the object lives in another environment.
 
 ## Built-in Examples
 
@@ -166,7 +203,7 @@ small self-contained layouts used by these examples and tests.
 - `shiny_custom_labels.R`: Shiny app with user-supplied draggable labels.
 - `shiny_draggable_export.R`: Shiny app that captures drag state, previews a static plot, toggles labels/legends/connectors/info boxes, and exports PNG.
 - `shiny_draggable_plot.R`: embed a draggable plot helper in a Shiny app.
-- `shiny_spatial_studio.R`: first-pass spatial studio for local zipped shapefile, GeoJSON, or GPKG upload; reopen saved project ZIP bundles; choose grouping/labels/colors; edit label text; undo and redo drag-state changes; show the legend in drag and preview panes; switch text labels between circle/rounded-box/text-only markers; drag the map; and export PNG/CSV/GeoJSON/HTML.
+- `shiny_spatial_studio.R`: first-pass spatial studio for local zipped shapefile, GeoJSON, or GPKG upload; reopen saved project ZIP bundles; choose grouping/labels/colors; edit label text; undo and redo drag-state changes; show the legend in drag and preview panes; switch text labels between circle/rounded-box/text-only markers; drag the map; and export PNG/PDF/R-script/CSV/GeoJSON/GPKG/HTML bundles.
 - `shiny_static_export.R`: Shiny static PNG export after offsets are available.
 - `smoke_examples.R`: runs all bundled examples in a temporary directory.
 
