@@ -700,6 +700,25 @@ window.addEventListener("message", function(event) {
     syncLegend();
     render();
   }
+  if (event.data && event.data.type === "dragmapr-set-state") {
+    const regionRows = event.data.regionOffsets || [];
+    const labelRowsState = event.data.labelOffsets || [];
+    for (const r of regions) regionOffsets.set(r, {dx_m: 0, dy_m: 0});
+    for (const row of regionRows) {
+      const region = String(row.region);
+      if (regionOffsets.has(region)) {
+        regionOffsets.set(region, cleanOffset(row));
+      }
+    }
+    for (const label of labelRows) labelOffsets.set(String(label.label_id), {dx_m: 0, dy_m: 0});
+    for (const row of labelRowsState) {
+      const labelId = String(row.label_id);
+      if (labelOffsets.has(labelId)) {
+        labelOffsets.set(labelId, cleanOffset(row));
+      }
+    }
+    render();
+  }
   if (event.data && event.data.type === "dragmapr-reset-state") {
     for (const r of regions) regionOffsets.set(r, {dx_m: 0, dy_m: 0});
     for (const label of labelRows) labelOffsets.set(String(label.label_id), {dx_m: 0, dy_m: 0});

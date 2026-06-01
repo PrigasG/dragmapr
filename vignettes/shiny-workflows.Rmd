@@ -86,10 +86,11 @@ shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragma
 ## Spatial Studio
 
 `shiny_spatial_studio.R` is the most complete Shiny example. It is a small
-spatial workspace rather than a fixed demo: users upload local polygon data or
-enter a URL, pick grouping and label columns, edit colors, drag boundaries,
-switch between short labels and info boxes, control text size and connector
-style, preview a static render, and download the current artifacts.
+spatial workspace rather than a fixed demo: users upload local polygon data,
+enter a URL, or reopen a saved project ZIP; pick grouping and label columns;
+edit label text and colors; undo and redo drag-state changes; drag boundaries;
+switch between short labels and info boxes; control text size and connector
+style; preview a static render; and download the current artifacts.
 
 ```{r, eval = FALSE}
 shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
@@ -113,11 +114,12 @@ Available downloads from the studio sidebar:
 - **PNG** — static render from `render_dragged_map()`
 - **Region CSV** — current region offsets, importable by any later session
 - **Label CSV** — current label offsets
+- **Labels table** — current label geometry and edited label text
 - **GeoJSON / GPKG** — the adjusted sf geometry with offsets applied
 - **HTML helper** — the standalone D3 drag file you can share or reopen
 - **Bundle ZIP** — all of the above plus `palette.csv` and `metadata.json`;
-  enough to fully reconstruct the layout in a new session or hand off to a
-  collaborator
+  enough to reopen the project in Spatial Studio, reconstruct the layout in a
+  new session, or hand off to a collaborator
 
 The app names its central reactive values in the State tab so they are easy to
 find when adapting the code:
