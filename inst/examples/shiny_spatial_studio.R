@@ -14,6 +14,10 @@ read_csv_text <- function(text) {
   utils::read.csv(text = text, stringsAsFactors = FALSE, check.names = FALSE)
 }
 
+csv_text <- function(x) {
+  paste(capture.output(utils::write.csv(x, row.names = FALSE)), collapse = "\n")
+}
+
 is_blank <- function(x) is.null(x) || length(x) == 0L || !nzchar(trimws(x[1]))
 
 valid_hex_color <- function(x) {
@@ -79,6 +83,59 @@ factor_for_display <- function(x) {
 
 label_color_input_id <- function(label_id) {
   paste0("label_color_", gsub("[^A-Za-z0-9_]", "_", as.character(label_id)))
+}
+
+apply_label_edits <- function(labels, edits) {
+  if (is.null(edits) || length(edits) == 0L || nrow(labels) == 0L) {
+    return(labels)
+  }
+  labels$label <- as.character(labels$label)
+  ids <- as.character(labels$label_id)
+  for (id in intersect(names(edits), ids)) {
+    value <- edits[[id]]
+    if (!is.null(value)) {
+      labels$label[ids == id] <- value
+    }
+  }
+  labels
+}
+
+read_dragmapr_project_upload <- function(upload) {
+  if (is.null(upload) || nrow(upload) == 0L) return(NULL)
+  file <- upload$datapath[1]
+  exdir <- tempfile("dragmapr_project_")
+  dir.create(exdir, recursive = TRUE)
+  utils::unzip(file, exdir = exdir)
+
+  source_file <- file.path(exdir, "source.gpkg")
+  if (!file.exists(source_file)) {
+    stop("Project ZIP is missing source.gpkg.", call. = FALSE)
+  }
+
+  read_optional_csv <- function(name) {
+    path <- file.path(exdir, name)
+    if (file.exists(path)) {
+      utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+    } else {
+      NULL
+    }
+  }
+
+  metadata_file <- file.path(exdir, "metadata.json")
+  metadata <- if (file.exists(metadata_file)) {
+    jsonlite::read_json(metadata_file, simplifyVector = TRUE)
+  } else {
+    list()
+  }
+
+  list(
+    source         = sf::st_read(source_file, quiet = TRUE),
+    region_offsets = read_optional_csv("drag_region_offsets.csv"),
+    label_offsets  = read_optional_csv("drag_label_offsets.csv"),
+    palette        = read_optional_csv("palette.csv"),
+    labels         = read_optional_csv("labels.csv"),
+    metadata       = metadata
+  )
 }
 
 choose_column <- function(candidate, cols, fallback = NULL) {
@@ -220,6 +277,37 @@ p.studio-subtitle {
 .studio-status.ok    { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
 .studio-status.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 .studio-status .status-icon { font-size: 1rem; flex-shrink: 0; }
+
+/* ---- Main workspace controls ---- */
+.map-control-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+.map-control-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.map-control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.map-control-actions .btn {
+  margin-bottom: 0;
+}
 
 /* ---- Blocking load veil ---- */
 .studio-load-veil {
@@ -436,6 +524,16 @@ ui <- fluidPage(
           iframe.contentWindow.postMessage({type: 'dragmapr-reset-state'}, helperTargetOrigin());
         }
       });
+      Shiny.addCustomMessageHandler('dragmapr-state', function(message) {
+        var iframe = getHelperFrame();
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage({
+            type: 'dragmapr-set-state',
+            regionOffsets: message.regionOffsets || [],
+            labelOffsets: message.labelOffsets || []
+          }, helperTargetOrigin());
+        }
+      });
       Shiny.addCustomMessageHandler('dragmapr-label-data', function(message) {
         var iframe = getHelperFrame();
         if (iframe && iframe.contentWindow) {
@@ -533,6 +631,11 @@ ui <- fluidPage(
           multiple = TRUE,
           accept = c(".zip", ".shp", ".dbf", ".shx", ".prj", ".cpg", ".gpkg", ".geojson", ".json")
         ),
+        fileInput(
+          "project_upload", "Open project ZIP",
+          multiple = FALSE,
+          accept = ".zip"
+        ),
         tags$div(
           class = "studio-action-row",
           actionButton("load_demo", "Use bundled HHS demo", class = "btn-sm btn-default")
@@ -541,8 +644,7 @@ ui <- fluidPage(
                   placeholder = "https://example.com/regions.geojson"),
         tags$div(
           class = "studio-action-row",
-          actionButton("load_url", "Load URL", class = "btn-sm btn-primary"),
-          actionButton("reset_layout", "Reset drag layout", class = "btn-sm btn-warning")
+          actionButton("load_url", "Load URL", class = "btn-sm btn-primary")
         )
       ),
 
@@ -566,6 +668,7 @@ ui <- fluidPage(
         tags$div("Labels", class = "studio-section"),
         checkboxInput("show_labels", "Show labels", value = TRUE),
         uiOutput("label_filter_ui"),
+        uiOutput("label_editor_ui"),
         uiOutput("label_color_ui"),
         radioButtons(
           "annotation_mode", "Annotation style",
@@ -605,6 +708,7 @@ ui <- fluidPage(
           downloadButton("download_png",        "PNG"),
           downloadButton("download_region_csv", "Region CSV"),
           downloadButton("download_label_csv",  "Label CSV"),
+          downloadButton("download_labels",     "Labels table"),
           downloadButton("download_geojson",    "GeoJSON"),
           downloadButton("download_gpkg",       "GPKG"),
           downloadButton("download_html",       "HTML helper"),
@@ -617,6 +721,16 @@ ui <- fluidPage(
       width = 10,
       uiOutput("status_bar"),
       uiOutput("studio_overlay_ui"),
+      tags$div(
+        class = "map-control-toolbar",
+        tags$span("Map controls", class = "map-control-title"),
+        tags$div(
+          class = "map-control-actions",
+          actionButton("undo_layout", "Undo", class = "btn-sm btn-default"),
+          actionButton("redo_layout", "Redo", class = "btn-sm btn-default"),
+          actionButton("reset_layout", "Reset drag layout", class = "btn-sm btn-warning")
+        )
+      ),
       tabsetPanel(
         tabPanel(
           "Drag",
@@ -651,6 +765,7 @@ ui <- fluidPage(
             "label_table()     make_region_labels() + style flags",
             "region_state()    current region offsets",
             "label_state()     current label offsets",
+            "state$label_edits edited label text keyed by label_id",
             "region_palette()  named color vector",
             "current_plot()    ggplot2 object from render_dragged_map()",
             sep = "\n"
@@ -678,7 +793,15 @@ server <- function(input, output, session) {
     helper_loading  = FALSE,     # TRUE until the new iframe reports ready
     ingesting       = FALSE,
     region_csv_cache = NULL,
-    label_csv_cache  = NULL
+    label_csv_cache  = NULL,
+    label_edits      = list(),
+    region_palette_override = NULL,
+    label_palette_override  = NULL,
+    pending_region_col = NULL,
+    pending_label_col  = NULL,
+    undo_stack = list(),
+    redo_stack = list(),
+    restoring_history = FALSE
   )
 
   helper_dir <- tempfile("dragmapr_spatial_studio_")
@@ -705,11 +828,67 @@ server <- function(input, output, session) {
     set_loading(FALSE)
   }
 
+  clear_project_state <- function() {
+    state$region_csv_cache <- NULL
+    state$label_csv_cache <- NULL
+    state$label_edits <- list()
+    state$region_palette_override <- NULL
+    state$label_palette_override <- NULL
+    state$pending_region_col <- NULL
+    state$pending_label_col <- NULL
+    state$undo_stack <- list()
+    state$redo_stack <- list()
+  }
+
   rows_for_message <- function(x) {
     jsonlite::fromJSON(
       jsonlite::toJSON(x, dataframe = "rows", auto_unbox = TRUE),
       simplifyVector = FALSE
     )
+  }
+
+  state_snapshot <- function() {
+    list(region_offsets = region_state(), label_offsets = label_state())
+  }
+
+  same_snapshot <- function(a, b) {
+    if (is.null(a) || is.null(b)) return(FALSE)
+    identical(csv_text(a$region_offsets), csv_text(b$region_offsets)) &&
+      identical(csv_text(a$label_offsets), csv_text(b$label_offsets))
+  }
+
+  push_history <- function(snapshot) {
+    if (isTRUE(state$restoring_history)) return()
+    stack <- state$undo_stack
+    if (length(stack) > 0L && same_snapshot(stack[[length(stack)]], snapshot)) {
+      return()
+    }
+    stack[[length(stack) + 1L]] <- snapshot
+    if (length(stack) > 50L) {
+      stack <- stack[(length(stack) - 49L):length(stack)]
+    }
+    state$undo_stack <- stack
+    state$redo_stack <- list()
+  }
+
+  apply_history_snapshot <- function(snapshot) {
+    state$restoring_history <- TRUE
+    on.exit({
+      state$restoring_history <- FALSE
+    }, add = TRUE)
+    state$region_csv_cache <- csv_text(snapshot$region_offsets)
+    state$label_csv_cache <- csv_text(snapshot$label_offsets)
+    session$sendCustomMessage("dragmapr-state", list(
+      regionOffsets = rows_for_message(snapshot$region_offsets),
+      labelOffsets  = rows_for_message(snapshot$label_offsets)
+    ))
+    do_refresh()
+  }
+
+  base_label_text <- function(label_id) {
+    labels <- base_label_table()
+    idx <- match(as.character(label_id), as.character(labels$label_id))
+    if (is.na(idx)) "" else as.character(labels$label[idx])
   }
 
   # Called after any successful data load to warn about high-cardinality columns.
@@ -752,8 +931,7 @@ server <- function(input, output, session) {
     on.exit(finish_ingest(), add = TRUE)
     x <- example_hhs_layout()$states
     state$source <- x
-    state$region_csv_cache <- NULL
-    state$label_csv_cache <- NULL
+    clear_project_state()
     post_load_hints(x, "bundled HHS demo")
   })
 
@@ -765,12 +943,50 @@ server <- function(input, output, session) {
       x <- read_dragmapr_sf_upload(input$spatial_upload)
       if (!is.null(x)) {
         state$source <- x
-        state$region_csv_cache <- NULL
-        state$label_csv_cache <- NULL
+        clear_project_state()
         post_load_hints(x, "upload")
       }
     }, error = function(e) {
       set_status(paste("Upload failed:", conditionMessage(e)), "error")
+    })
+  })
+
+  observeEvent(input$project_upload, {
+    set_loading(TRUE)
+    state$ingesting <- TRUE
+    on.exit(finish_ingest(), add = TRUE)
+    tryCatch({
+      project <- read_dragmapr_project_upload(input$project_upload)
+      if (is.null(project)) return()
+
+      metadata <- project$metadata %||% list()
+      state$source <- project$source
+      state$undo_stack <- list()
+      state$redo_stack <- list()
+      state$region_csv_cache <- if (!is.null(project$region_offsets)) csv_text(project$region_offsets) else NULL
+      state$label_csv_cache <- if (!is.null(project$label_offsets)) csv_text(project$label_offsets) else NULL
+      state$pending_region_col <- metadata$region_col %||% NULL
+      state$pending_label_col <- metadata$label_col %||% NULL
+
+      edits <- metadata$label_edits %||% list()
+      if (is.atomic(edits)) edits <- as.list(edits)
+      state$label_edits <- edits
+
+      if (!is.null(project$palette) && all(c("region", "color") %in% names(project$palette))) {
+        state$region_palette_override <- stats::setNames(project$palette$color, as.character(project$palette$region))
+      } else {
+        state$region_palette_override <- NULL
+      }
+
+      if (!is.null(project$labels) && all(c("label_id", "label_color") %in% names(project$labels))) {
+        state$label_palette_override <- stats::setNames(project$labels$label_color, as.character(project$labels$label_id))
+      } else {
+        state$label_palette_override <- NULL
+      }
+
+      set_status("Loaded project bundle. Restored geometry, offsets, labels, and palettes.", "ok")
+    }, error = function(e) {
+      set_status(paste("Project load failed:", conditionMessage(e)), "error")
     })
   })
 
@@ -788,8 +1004,7 @@ server <- function(input, output, session) {
     tryCatch({
       x <- read_dragmapr_sf_url(url)
       state$source <- x
-      state$region_csv_cache <- NULL
-      state$label_csv_cache <- NULL
+      clear_project_state()
       post_load_hints(x, "URL")
     }, error = function(e) {
       set_status(paste("URL load failed:", conditionMessage(e)), "error")
@@ -838,13 +1053,19 @@ server <- function(input, output, session) {
     req(region_col())
     groups <- region_groups()
     n      <- length(groups)
+    override <- state$region_palette_override
+    base_palette <- stats::setNames(rep(default_palette, length.out = n), groups)
+    if (!is.null(override)) {
+      keep <- intersect(names(override), groups)
+      base_palette[keep] <- unname(override[keep])
+    }
 
     if (n > CPICKER_THRESHOLD) {
       # Large mode: read cycle-palette swatches (or text input fallback)
       if (requireNamespace("shinyWidgets", quietly = TRUE)) {
         cycle <- vapply(seq_along(default_palette), function(i) {
           val <- input[[paste0("cycle_color_", i)]]
-          if (!is.null(val) && nzchar(val)) val else default_palette[i]
+          if (!is.null(val) && nzchar(val)) val else unname(base_palette[((i - 1L) %% n) + 1L])
         }, character(1L))
       } else {
         cycle_text <- input$palette_text %||% ""
@@ -852,7 +1073,7 @@ server <- function(input, output, session) {
           cols <- trimws(strsplit(cycle_text, ",", fixed = TRUE)[[1]])
           cols[nzchar(cols)]
         } else {
-          default_palette
+          unname(base_palette)
         }
         if (length(cycle) == 0L) cycle <- default_palette
       }
@@ -863,7 +1084,7 @@ server <- function(input, output, session) {
     }
 
     # Small mode: one picker per region (or text input fallback)
-    pal <- stats::setNames(rep(default_palette, length.out = n), groups)
+    pal <- base_palette
     if (requireNamespace("shinyWidgets", quietly = TRUE)) {
       for (i in seq_along(groups)) {
         val <- input[[paste0("cpicker_", i)]]
@@ -875,7 +1096,7 @@ server <- function(input, output, session) {
     pal
   })
 
-  all_label_table <- reactive({
+  base_label_table <- reactive({
     req(region_col(), label_col())
     labels <- make_region_labels(projected_sf(), region_col = region_col(), label_col = label_col())
     label_levels <- stable_unique(labels$label)
@@ -883,6 +1104,11 @@ server <- function(input, output, session) {
     labels$label <- factor(as.character(labels$label), levels = label_levels, ordered = TRUE)
     labels$region <- factor(as.character(labels$region), levels = region_levels, ordered = TRUE)
     labels[order(labels$label, labels$region, labels$label_id), , drop = FALSE]
+  })
+
+  all_label_table <- reactive({
+    labels <- base_label_table()
+    apply_label_edits(labels, state$label_edits)
   })
 
   visible_label_ids <- reactive({
@@ -902,6 +1128,11 @@ server <- function(input, output, session) {
     if (length(ids) == 0L) {
       return(pal)
     }
+    override <- state$label_palette_override
+    if (!is.null(override)) {
+      keep <- intersect(names(override), ids)
+      pal[keep] <- unname(override[keep])
+    }
 
     if (requireNamespace("shinyWidgets", quietly = TRUE)) {
       if (length(ids) > CPICKER_THRESHOLD) {
@@ -909,7 +1140,7 @@ server <- function(input, output, session) {
           cycle_index <- ((i - 1L) %% length(default_label_colors)) + 1L
           val <- input[[paste0("label_cycle_color_", cycle_index)]]
           if (is.null(val)) {
-            val <- default_label_colors[cycle_index]
+            val <- pal[[ids[i]]] %||% default_label_colors[cycle_index]
           }
           if (valid_hex_color(val)) {
             pal[[ids[i]]] <- val
@@ -921,7 +1152,7 @@ server <- function(input, output, session) {
         id <- ids[i]
         val <- input[[label_color_input_id(id)]]
         if (is.null(val)) {
-          val <- default_label_colors[(i - 1L) %% length(default_label_colors) + 1L]
+          val <- pal[[id]] %||% default_label_colors[(i - 1L) %% length(default_label_colors) + 1L]
         }
         if (valid_hex_color(val)) {
           pal[[id]] <- val
@@ -953,6 +1184,7 @@ server <- function(input, output, session) {
       connector      = isTRUE(input$show_connectors),
       connector_type = input$connector_type  %||% "straight"
     )
+    labels <- apply_label_edits(labels, state$label_edits)
     labels <- labels[labels$label_id %in% visible_label_ids(), , drop = FALSE]
     labels$label_color <- unname(label_palette()[as.character(labels$label_id)])
     labels$label_color[is.na(labels$label_color)] <- "#111827"
@@ -984,6 +1216,10 @@ server <- function(input, output, session) {
   label_state <- reactive({
     read_csv_text(state$label_csv_cache) %||% read_csv_text(label_csv_raw()) %||% empty_label_offsets(label_table())
   })
+
+  observeEvent(list(region_state(), label_state()), {
+    push_history(state_snapshot())
+  }, ignoreInit = FALSE)
 
   build_plot <- function(region_offsets, label_offsets) {
     # Suppress the legend when there are too many groups; the studio handles
@@ -1076,10 +1312,11 @@ server <- function(input, output, session) {
   output$column_controls <- renderUI({
     cols <- available_columns()
     if (length(cols) == 0L) return(tags$p("No non-geometry columns found.", style = "color:#6b7280; font-size:0.83rem;"))
-    default_col <- if ("hhs_region" %in% cols) "hhs_region" else cols[1]
+    default_col <- state$pending_region_col %||% if ("hhs_region" %in% cols) "hhs_region" else cols[1]
+    default_label <- state$pending_label_col %||% default_col
     tagList(
-      selectInput("region_col", "Group / region column", choices = cols, selected = default_col),
-      selectInput("label_col",  "Label column",          choices = cols, selected = default_col)
+      selectInput("region_col", "Group / region column", choices = cols, selected = choose_column(input$region_col, cols, default_col)),
+      selectInput("label_col",  "Label column",          choices = cols, selected = choose_column(input$label_col, cols, default_label))
     )
   })
 
@@ -1087,13 +1324,14 @@ server <- function(input, output, session) {
     req(region_col())
     groups <- region_groups()
     n      <- length(groups)
-    pal    <- rep(default_palette, length.out = n)
+    pal    <- unname(region_palette()[groups])
 
     # Large cardinality: compact cycle-palette editor.
     # With many groups individual pickers are unusable. Instead let the user
     # edit the base palette (up to 10 colors) that cycles across all groups.
     if (n > CPICKER_THRESHOLD) {
       cycle_colors <- paste(default_palette, collapse = ", ")
+      cycle_defaults <- rep(pal, length.out = length(default_palette))
       header <- tags$p(
         style = "font-size:0.78rem; color:#6b7280; margin:2px 0 4px;",
         paste0(n, " groups - colors cycle through the palette below.")
@@ -1113,7 +1351,7 @@ server <- function(input, output, session) {
           shinyWidgets::colorPickr(
             inputId  = paste0("cycle_color_", i),
             label    = NULL,
-            selected = default_palette[i],
+            selected = cycle_defaults[i],
             theme    = "nano",
             update   = "save",
             inline   = FALSE,
@@ -1236,10 +1474,40 @@ server <- function(input, output, session) {
     )
   })
 
+  output$label_editor_ui <- renderUI({
+    labels <- base_label_table()
+    if (nrow(labels) == 0L) {
+      return(NULL)
+    }
+    choices <- stats::setNames(
+      as.character(labels$label_id),
+      paste0(as.character(labels$label), " (", as.character(labels$region), ")")
+    )
+    selected <- input$edit_label_id
+    if (is.null(selected) || !selected %in% unname(choices)) {
+      selected <- unname(choices)[1]
+    }
+    idx <- match(selected, as.character(labels$label_id))
+    edits <- isolate(state$label_edits)
+    value <- edits[[selected]] %||% as.character(labels$label[idx])
+
+    tags$div(
+      class = "label-editor",
+      selectInput("edit_label_id", "Edit label text", choices = choices, selected = selected),
+      textAreaInput("edit_label_text", NULL, value = value, rows = 2, resize = "vertical"),
+      tags$div(
+        class = "studio-action-row",
+        actionButton("reset_label_text", "Reset label", class = "btn-sm btn-default"),
+        actionButton("reset_all_label_text", "Reset all labels", class = "btn-sm btn-default")
+      )
+    )
+  })
+
   output$label_color_ui <- renderUI({
     labels <- all_label_table()
     ids <- as.character(labels$label_id)
     n <- length(ids)
+    current_label_palette <- label_palette()
 
     if (n == 0L) {
       return(NULL)
@@ -1250,6 +1518,7 @@ server <- function(input, output, session) {
         style = "font-size:0.78rem; color:#6b7280; margin:2px 0 4px;",
         paste0(n, " labels - colors cycle through the palette below.")
       )
+      cycle_defaults <- rep(unname(current_label_palette[ids]), length.out = length(default_label_colors))
       if (!requireNamespace("shinyWidgets", quietly = TRUE)) {
         return(tagList(
           header,
@@ -1267,7 +1536,7 @@ server <- function(input, output, session) {
           shinyWidgets::colorPickr(
             inputId  = paste0("label_cycle_color_", i),
             label    = NULL,
-            selected = default_label_colors[i],
+            selected = cycle_defaults[i],
             theme    = "nano",
             update   = "save",
             inline   = FALSE,
@@ -1301,7 +1570,7 @@ server <- function(input, output, session) {
         shinyWidgets::colorPickr(
           inputId  = label_color_input_id(ids[i]),
           label    = NULL,
-          selected = default_label_colors[(i - 1L) %% length(default_label_colors) + 1L],
+          selected = current_label_palette[[ids[i]]],
           theme    = "nano",
           update   = "save",
           inline   = FALSE,
@@ -1318,15 +1587,56 @@ server <- function(input, output, session) {
     )
   })
 
+  observeEvent(input$edit_label_id, {
+    id <- input$edit_label_id
+    if (is.null(id) || !nzchar(id)) return()
+    edits <- state$label_edits
+    value <- edits[[id]] %||% base_label_text(id)
+    updateTextAreaInput(session, "edit_label_text", value = value)
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$edit_label_text, {
+    id <- input$edit_label_id
+    if (is.null(id) || !nzchar(id)) return()
+    value <- input$edit_label_text %||% ""
+    edits <- state$label_edits
+    if (identical(value, base_label_text(id))) {
+      edits[[id]] <- NULL
+    } else {
+      edits[[id]] <- value
+    }
+    state$label_edits <- edits
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$reset_label_text, {
+    id <- input$edit_label_id
+    if (is.null(id) || !nzchar(id)) return()
+    edits <- state$label_edits
+    edits[[id]] <- NULL
+    state$label_edits <- edits
+    updateTextAreaInput(session, "edit_label_text", value = base_label_text(id))
+    set_status("Reset selected label text.", "ok")
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$reset_all_label_text, {
+    state$label_edits <- list()
+    id <- input$edit_label_id
+    if (!is.null(id) && nzchar(id)) {
+      updateTextAreaInput(session, "edit_label_text", value = base_label_text(id))
+    }
+    set_status("Reset all label text.", "ok")
+  }, ignoreInit = TRUE)
+
   observeEvent(available_columns(), {
     cols <- available_columns()
     if (length(cols) == 0L) return()
-    default_col <- if ("hhs_region" %in% cols) "hhs_region" else cols[1]
+    default_col <- state$pending_region_col %||% if ("hhs_region" %in% cols) "hhs_region" else cols[1]
+    default_label <- state$pending_label_col %||% default_col
     if (is.null(input$region_col) || !input$region_col %in% cols) {
-      updateSelectInput(session, "region_col", choices = cols, selected = default_col)
+      updateSelectInput(session, "region_col", choices = cols, selected = choose_column(state$pending_region_col, cols, default_col))
     }
     if (is.null(input$label_col) || !input$label_col %in% cols) {
-      updateSelectInput(session, "label_col", choices = cols, selected = default_col)
+      updateSelectInput(session, "label_col", choices = cols, selected = choose_column(state$pending_label_col, cols, default_label))
     }
   }, ignoreInit = FALSE)
 
@@ -1407,6 +1717,34 @@ server <- function(input, output, session) {
     ignoreInit = TRUE
   )
 
+  observeEvent(input$undo_layout, {
+    stack <- state$undo_stack
+    if (length(stack) <= 1L) {
+      set_status("Nothing to undo yet.", "info")
+      return()
+    }
+    current <- stack[[length(stack)]]
+    stack <- stack[-length(stack)]
+    state$redo_stack <- c(state$redo_stack, list(current))
+    state$undo_stack <- stack
+    apply_history_snapshot(stack[[length(stack)]])
+    set_status("Undid last drag-state change.", "ok")
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$redo_layout, {
+    redo <- state$redo_stack
+    if (length(redo) == 0L) {
+      set_status("Nothing to redo yet.", "info")
+      return()
+    }
+    snapshot <- redo[[length(redo)]]
+    redo <- redo[-length(redo)]
+    state$redo_stack <- redo
+    state$undo_stack <- c(state$undo_stack, list(snapshot))
+    apply_history_snapshot(snapshot)
+    set_status("Redid drag-state change.", "ok")
+  }, ignoreInit = TRUE)
+
   observeEvent(input$reset_layout, {
     zero_regions <- data.frame(
       region = region_groups(), dx_m = 0, dy_m = 0,
@@ -1449,6 +1787,11 @@ server <- function(input, output, session) {
     content     = function(file) utils::write.csv(label_state(), file, row.names = FALSE),
     contentType = "text/csv"
   )
+  output$download_labels <- downloadHandler(
+    filename    = function() "drag_labels.csv",
+    content     = function(file) utils::write.csv(label_table(), file, row.names = FALSE),
+    contentType = "text/csv"
+  )
   output$download_geojson <- downloadHandler(
     filename    = function() "dragmapr-adjusted.geojson",
     content     = function(file) {
@@ -1483,6 +1826,9 @@ server <- function(input, output, session) {
       utils::write.csv(label_state(),
                        file.path(bundle_dir, "drag_label_offsets.csv"),
                        row.names = FALSE)
+      utils::write.csv(label_table(),
+                       file.path(bundle_dir, "labels.csv"),
+                       row.names = FALSE)
       utils::write.csv(
         data.frame(region = names(region_palette()),
                    color  = unname(region_palette()),
@@ -1495,6 +1841,7 @@ server <- function(input, output, session) {
           region_col       = region_col(),
           label_col        = label_col(),
           crs_epsg         = sf::st_crs(projected_sf())$epsg,
+          label_edits      = state$label_edits,
           created          = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
           dragmapr_version = as.character(utils::packageVersion("dragmapr"))
         ), auto_unbox = TRUE, pretty = TRUE),

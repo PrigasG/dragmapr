@@ -166,7 +166,7 @@ small self-contained layouts used by these examples and tests.
 - `shiny_custom_labels.R`: Shiny app with user-supplied draggable labels.
 - `shiny_draggable_export.R`: Shiny app that captures drag state, previews a static plot, toggles labels/legends/connectors/info boxes, and exports PNG.
 - `shiny_draggable_plot.R`: embed a draggable plot helper in a Shiny app.
-- `shiny_spatial_studio.R`: first-pass spatial studio for local zipped shapefile, GeoJSON, or GPKG upload; choose grouping/labels/colors, show the legend in drag and preview panes, switch text labels between circle/rounded-box/text-only markers, drag the map, and export PNG/CSV/GeoJSON/HTML.
+- `shiny_spatial_studio.R`: first-pass spatial studio for local zipped shapefile, GeoJSON, or GPKG upload; reopen saved project ZIP bundles; choose grouping/labels/colors; edit label text; undo and redo drag-state changes; show the legend in drag and preview panes; switch text labels between circle/rounded-box/text-only markers; drag the map; and export PNG/CSV/GeoJSON/HTML.
 - `shiny_static_export.R`: Shiny static PNG export after offsets are available.
 - `smoke_examples.R`: runs all bundled examples in a temporary directory.
 
