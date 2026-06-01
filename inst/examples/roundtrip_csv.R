@@ -1,5 +1,3 @@
-# Write offset CSVs, read them back, and render from files.
-
 library(dragmapr)
 
 hhs <- example_hhs_layout()

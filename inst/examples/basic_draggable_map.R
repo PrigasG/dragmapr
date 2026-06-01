@@ -1,10 +1,3 @@
-# Minimal synthetic map example.
-#
-# Primary step: open the draggable browser helper and drag regions/labels until
-# the layout looks right, then copy or download the offset CSVs.
-# open = interactive() opens the browser in an interactive R session and is a
-# no-op when sourced non-interactively (e.g. from smoke_examples.R).
-
 library(dragmapr)
 
 make_square <- function(x0, y0, size = 100000) {

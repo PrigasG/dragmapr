@@ -1,8 +1,3 @@
-# Shiny app showing a draggable plot helper.
-#
-# Run with:
-# shiny::runApp(system.file("examples", "shiny_draggable_plot.R", package = "dragmapr"))
-
 if (!requireNamespace("shiny", quietly = TRUE)) {
   stop("Install shiny to run this example.", call. = FALSE)
 }

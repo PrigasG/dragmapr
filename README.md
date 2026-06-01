@@ -139,9 +139,24 @@ Shiny app. `render_dragged_map()` applies region movement first, then label
 movement, then optional connectors and labels. It also expands plot limits
 around displaced labels/connectors so exported PNGs do not clip callouts.
 
+Use `read_offsets()` for downloaded region CSVs and `read_label_state()` for
+downloaded label CSVs before passing them into `apply_offsets()`,
+`apply_label_state()`, or `render_dragged_map()`. The older
+`make_labels()`, `read_label_offsets()`, and `apply_label_offsets()` names are
+kept as aliases for existing scripts.
+
+For Shiny upload workflows, `read_dragmapr_sf_upload()`,
+`read_dragmapr_sf_url()`, and `prepare_dragmapr_sf()` read and normalize user
+geometry before calling `drag_map_prototype()`. `dragmapr_iframe_bridge()`
+provides the JavaScript bridge used by Shiny apps to receive region and label
+state from the helper iframe.
+
 ## Built-in Examples
 
 `dragmapr` includes examples that avoid external downloads:
+
+The exported `example_hhs_layout()` and `example_panel_layout()` helpers return
+small self-contained layouts used by these examples and tests.
 
 - `basic_draggable_map.R`: four synthetic map regions.
 - `explodemap_hhs_labels.R`: bundled HHS-style layout with explodemap colors and offsets.

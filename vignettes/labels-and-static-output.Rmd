@@ -162,10 +162,18 @@ The exported label-offset table is also plain data:
 label_id,region,dx_m,dy_m
 ```
 
+Read saved region offsets with `read_offsets()` and saved label offsets with
+`read_label_state()`. Existing code that uses `read_label_offsets()` or
+`apply_label_offsets()` can continue to run because those names are aliases for
+the label state helpers.
+
 ## Region Movement Plus Label Movement
 
 Region offsets are applied to both geometry and default label anchors. Label
 offsets are applied after that.
+
+Use `apply_offsets()` when you need the adjusted `sf` geometry itself, for
+example before writing GeoJSON or GeoPackage output from an app.
 
 ```{r}
 label_offsets <- hhs$label_offsets

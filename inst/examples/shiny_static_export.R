@@ -1,8 +1,3 @@
-# Shiny app showing static export after draggable offsets are available.
-#
-# Run with:
-# shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragmapr"))
-
 if (!requireNamespace("shiny", quietly = TRUE)) {
   stop("Install shiny to run this example.", call. = FALSE)
 }

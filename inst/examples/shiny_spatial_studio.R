@@ -1,8 +1,3 @@
-# Shiny spatial studio: upload or link sf data, drag grouped geometry, annotate, and export.
-#
-# Run with:
-# shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
-
 if (!requireNamespace("shiny", quietly = TRUE)) {
   stop("Install shiny to run this example.", call. = FALSE)
 }
