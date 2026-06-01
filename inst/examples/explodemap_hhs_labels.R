@@ -1,15 +1,3 @@
-# Render a bundled explodemap-style HHS dragged layout with dragmapr labels.
-#
-# This example is self-contained: the HHS membership, region names/colors, and
-# published display offsets from the explodemap paper workflow are bundled in
-# dragmapr. The geometry is a lightweight projected fixture rather than the
-# large generated paper GeoJSON.
-#
-# Primary step: open the draggable helper and move regions/labels until the
-# layout looks right, then copy or download the offset CSVs.
-# open = interactive() opens the browser in an interactive R session and is a
-# no-op when sourced non-interactively (e.g. from smoke_examples.R).
-
 library(dragmapr)
 
 hhs <- example_hhs_layout()

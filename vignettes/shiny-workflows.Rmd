@@ -160,8 +160,9 @@ geographic data to the target projected CRS so metre offsets are meaningful.
 `postMessage` listener and polling loop needed to relay drag state from the
 helper iframe back to Shiny inputs.  Wrap it in `tags$head(tags$script(HTML(
 dragmapr_iframe_bridge())))` in your UI.  The function accepts `region_input`,
-`label_input`, `slow_poll_ms`, and `fast_poll_ms` arguments to customise the
-input names and timing.
+`label_input`, `slow_poll_ms`, `fast_poll_ms`, `allowed_origin`, and
+`iframe_selector` arguments to customise the input names, timing, origin check,
+and helper iframe selection.
 
 ```{r, eval = FALSE}
 library(shiny)

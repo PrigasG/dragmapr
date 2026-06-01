@@ -1,8 +1,3 @@
-# Shiny app showing custom user-supplied labels in a draggable plot.
-#
-# Run with:
-# shiny::runApp(system.file("examples", "shiny_custom_labels.R", package = "dragmapr"))
-
 if (!requireNamespace("shiny", quietly = TRUE)) {
   stop("Install shiny to run this example.", call. = FALSE)
 }

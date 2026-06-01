@@ -9,7 +9,7 @@
 # is set to "Docker".  Push the package repo to the Space remote and the
 # platform builds and serves the container.
 #
-#   git remote add space https://huggingface.co/spaces/prigasg/dragmapr-spatial-studio
+#   git remote add space https://huggingface.co/spaces/Prigas89/dragmapr-spatial-studio
 #   git push space main
 
 FROM rocker/geospatial:4.4.2

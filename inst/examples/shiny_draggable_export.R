@@ -1,8 +1,3 @@
-# Shiny app with a draggable plot, live offset capture, preview, and PNG export.
-#
-# Run with:
-# shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
-
 if (!requireNamespace("shiny", quietly = TRUE)) {
   stop("Install shiny to run this example.", call. = FALSE)
 }

@@ -1,5 +1,3 @@
-# Run all bundled examples in a temporary directory.
-
 example_dir <- system.file("examples", package = "dragmapr", mustWork = TRUE)
 scripts <- c(
   "basic_draggable_map.R",

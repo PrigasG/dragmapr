@@ -197,8 +197,8 @@ dragging can continue from where it left off.
 
 ```{r, eval = FALSE}
 # Resume from previously downloaded CSVs
-region_csv <- read.csv("drag_region_offsets.csv")
-label_csv  <- read.csv("drag_label_offsets.csv")
+region_csv <- read_offsets("drag_region_offsets.csv")
+label_csv  <- read_label_state("drag_label_offsets.csv")
 
 drag_map_prototype(
   regions, region_col = "region",
@@ -207,6 +207,11 @@ drag_map_prototype(
   open = TRUE
 )
 ```
+
+`read_label_offsets()` is retained as an alias for `read_label_state()`, and
+`apply_label_offsets()` is retained as an alias for `apply_label_state()`.
+Likewise, `make_labels()` remains an alias for `make_region_labels()` for older
+scripts.
 
 ---
 

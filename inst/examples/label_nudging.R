@@ -1,5 +1,3 @@
-# Region movement plus independent label nudging.
-
 library(dragmapr)
 
 hhs <- example_hhs_layout()
