@@ -219,6 +219,7 @@ drag_map_prototype <- function(x,
   html <- sub("__REGION_OFFSETS__", json_for_script(region_offset_data, dataframe = "rows"), html, fixed = TRUE)
   html <- sub("__LABEL_OFFSETS__", json_for_script(label_offset_data, dataframe = "rows"), html, fixed = TRUE)
   html <- sub("__OPTIONS__", json_for_script(options), html, fixed = TRUE)
+  html <- sub("__HTML_CLASS__", if (isTRUE(side_panel)) "" else "no-side-panel", html, fixed = TRUE)
 
   writeLines(html, file, useBytes = TRUE)
   if (isTRUE(open)) {

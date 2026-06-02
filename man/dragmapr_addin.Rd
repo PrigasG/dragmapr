@@ -11,16 +11,18 @@ dragmapr_addin(env = dragmapr_global_env())
 tables. Defaults to \code{.GlobalEnv}, which is what RStudio uses for addins.}
 }
 \value{
-Invisibly returns a list with elements \code{region_offsets} and
-\code{label_offsets} (both data frames). The same data frames are also assigned
-into \code{env}.
+Invisibly returns a list with elements \code{region_offsets},
+\code{label_offsets}, and \code{static_options}. The offset data frames are also
+assigned into \code{env} as \code{region_offsets} and \code{label_offsets}; static render
+settings are assigned as \code{dragmapr_static_options}.
 }
 \description{
 Launches a compact Shiny gadget that lets you pick a projected \code{sf} object
-from an environment, choose the region and label columns, and
-interact with the D3 drag-map prototype inside the IDE viewer pane. When you
-click \strong{Done}, the current region and label offsets are assigned as
-\code{region_offsets} and \code{label_offsets} in the same environment, ready to pass to
+from an environment, choose the region and label columns, adjust label,
+connector, legend, colour, and static-output settings, and interact with the
+D3 drag-map prototype inside the IDE viewer pane. When you click \strong{Done},
+the current region and label offsets are assigned as \code{region_offsets} and
+\code{label_offsets} in the same environment, ready to pass to
 \code{\link[=render_dragged_map]{render_dragged_map()}}.
 }
 \details{
