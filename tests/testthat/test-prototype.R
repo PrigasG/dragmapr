@@ -102,6 +102,8 @@ test_that("drag_map_prototype can hide the built-in side panel", {
 
   html <- paste(readLines(file, warn = FALSE), collapse = "\n")
   expect_match(html, '"sidePanel":false', fixed = TRUE)
+  expect_match(html, '<html lang="en" class="no-side-panel">', fixed = TRUE)
+  expect_false(grepl("__HTML_CLASS__", html, fixed = TRUE))
   expect_match(html, "html.no-side-panel aside", fixed = TRUE)
 })
 

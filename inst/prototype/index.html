@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="__HTML_CLASS__">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -328,6 +328,10 @@ function offsetTransform(region) {
 function setActiveRegion(region, mode = "Region") {
   window.clearTimeout(badgeTimer);
   const value = String(region);
+  if (!value || value === "undefined" || value === "null") {
+    clearActiveRegion();
+    return;
+  }
   svg.selectAll("g.region").classed("is-active", d => String(d) === value);
   const badge = document.querySelector("#identity-badge");
   badge.innerHTML = `<span>${mode}</span>${escapeHtml(value)}`;
@@ -697,7 +701,6 @@ window.addEventListener("message", function(event) {
   }
   if (event.data && event.data.type === "dragmapr-set-label-options") {
     Object.assign(options, event.data.options || {});
-    syncLegend();
     render();
   }
   if (event.data && event.data.type === "dragmapr-set-state") {
