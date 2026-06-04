@@ -1885,7 +1885,7 @@ server <- function(input, output, session) {
   # and label-only style changes are sent to the existing iframe with
   # postMessage so color edits do not reset the drag state or show a map overlay.
   observeEvent(
-    list(projected_sf(), region_col(), label_col(), input$show_helper_panel),
+    list(state$source_version, projected_sf(), region_col(), label_col(), input$show_helper_panel),
     {
       signature <- list(
         source_version = state$source_version,
