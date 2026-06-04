@@ -577,6 +577,17 @@ ui <- fluidPage(
       function helperGeneration(value) {
         return value == null ? null : String(value);
       }
+      function currentHelperGeneration() {
+        var iframe = getHelperFrame();
+        if (!iframe || !iframe.src) return null;
+        try {
+          return helperGeneration(
+            new URL(iframe.src, window.location.href).searchParams.get('v')
+          );
+        } catch (e) {
+          return null;
+        }
+      }
       function applyHelperBusy(active) {
         var wrap = document.querySelector('.helper-wrap');
         if (active) {
@@ -611,6 +622,19 @@ ui <- fluidPage(
           {generation: generation, at: Date.now()},
           {priority: 'event'}
         );
+      }
+      function scheduleHelperFallback(generation) {
+        generation = helperGeneration(generation);
+        window.clearTimeout(helperState.fallbackTimer);
+        if (!generation) return;
+        helperState.fallbackTimer = window.setTimeout(function() {
+          if (generation !== helperState.activeGeneration) return;
+          if (currentHelperGeneration() === generation) {
+            markHelperReady(generation);
+          } else {
+            scheduleHelperFallback(generation);
+          }
+        }, 1500);
       }
       Shiny.addCustomMessageHandler('dragmapr-labels', function(message) {
         var iframe = getHelperFrame();
@@ -675,12 +699,14 @@ ui <- fluidPage(
         var active = !!(message && message.active);
         var generation = helperGeneration(message && message.generation);
         if (active) {
-          window.clearTimeout(helperState.fallbackTimer);
           helperState.activeGeneration = generation;
           helperState.readyGeneration = null;
+          scheduleHelperFallback(generation);
         } else if (!generation || generation === helperState.activeGeneration) {
+          window.clearTimeout(helperState.fallbackTimer);
           helperState.activeGeneration = null;
           helperState.readyGeneration = null;
+          helperState.fullLoading = false;
         }
         syncLoadingVisuals();
       });
@@ -707,18 +733,7 @@ ui <- fluidPage(
       document.addEventListener('load', function(event) {
         if (event.target && event.target.matches &&
             event.target.matches('iframe.studio-helper-frame')) {
-          var generation = null;
-          try {
-            generation = new URL(event.target.src, window.location.href).searchParams.get('v');
-          } catch (e) {}
-          generation = helperGeneration(generation);
-          window.clearTimeout(helperState.fallbackTimer);
-          helperState.fallbackTimer = window.setTimeout(function() {
-            if (generation === helperState.activeGeneration &&
-                helperState.readyGeneration !== generation) {
-              markHelperReady(generation);
-            }
-          }, 1500);
+          scheduleHelperFallback(currentHelperGeneration());
         }
       }, true);
       document.addEventListener('click', function(event) {
