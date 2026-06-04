@@ -65,7 +65,7 @@ because it acts as a smoke test for the package surface:
 - change info-box width and height;
 - show connector lines;
 - choose straight, elbow, curve, or squiggle connectors;
-- adjust connector thickness;
+- adjust connector thickness, line pattern, and arrow endpoints;
 - show or hide the region legend;
 - download a static PNG reconstructed from the current region and label offset
   state.
@@ -87,23 +87,23 @@ shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragma
 
 `shiny_spatial_studio.R` is the most complete Shiny example. It is a small
 spatial workspace rather than a fixed demo: users upload local polygon data,
-enter a URL, or reopen a saved project ZIP; pick grouping and label columns;
-edit label text and colors; undo and redo drag-state changes; drag boundaries;
-switch between short labels and info boxes; control text size and connector
-style; preview a static render; set static export size and DPI; and download
-the current artifacts.
+or reopen a saved project ZIP; pick grouping and label columns; edit label text
+and colors; undo and redo drag-state changes; drag boundaries; switch between
+short labels and info boxes; control text size, connector geometry, connector
+line pattern, smart connectors, arrow endpoints, legend title, and map
+background; preview a static render; set static export size and DPI; and
+download the current artifacts.
 
 ```{r, eval = FALSE}
 shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
 ```
 
 Supported inputs: zipped shapefiles, shapefile sidecar files (`.shp` + `.dbf` +
-`.shx`), GeoJSON, and GeoPackage — either uploaded locally or downloaded from
-a URL. The app reads geometry with `sf::st_read()`, repairs it with
-`sf::st_make_valid()`, and transforms longitude/latitude data to EPSG:3857 so
-metre offsets work correctly. Region group names are sorted using a natural
-(numeric-aware) order, so "1", "2", ..., "10" are displayed in the right
-sequence rather than lexicographic order.
+`.shx`), GeoJSON, and GeoPackage files uploaded locally. The app reads geometry
+with `sf::st_read()`, repairs it with `sf::st_make_valid()`, and transforms
+longitude/latitude data to EPSG:3857 so metre offsets work correctly. Region
+group names are sorted using a natural (numeric-aware) order, so "1", "2", ...,
+"10" are displayed in the right sequence rather than lexicographic order.
 
 The label sidebar consolidates controls so only sliders relevant to the current
 label type are shown: text size is always visible; marker size (width + height)
@@ -123,6 +123,13 @@ Available downloads from the studio sidebar:
   Spatial Studio, reconstruct the layout in a new session, or hand off to a
   collaborator
 - **Static bundle** — the project bundle plus ready-to-share PNG and PDF files
+
+Spatial Studio intentionally keeps its adjusted-geometry exports focused on
+GeoJSON and GeoPackage. If another shape format is needed, download either
+file, open it in [Mapshaper](https://mapshaper.org/), and export the required
+format there. The same handoff works for an `sf` object created elsewhere in R:
+write it to a supported spatial file, open that file in Mapshaper, and choose
+the desired export format.
 
 The export panel also includes a reproducible R script and a static bundle. The
 R script calls `render_dragmapr_project()` and expects `dragmapr-project.zip` to
@@ -149,7 +156,7 @@ for that region or label so users can still inspect the output.
 The app names its central reactive values in the State tab so they are easy to
 find when adapting the code:
 
-- `source_sf()` — raw sf from upload / URL / demo
+- `source_sf()` - raw sf from upload / demo / project bundle
 - `projected_sf()` — after `prepare_dragmapr_sf()`
 - `region_col()`, `label_col()` — chosen columns
 - `label_table()` — styled label data frame passed to `drag_map_prototype()`

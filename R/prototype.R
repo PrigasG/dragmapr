@@ -37,6 +37,16 @@
 #'   helper before suppressing the legend. Set to `Inf` to always show it.
 #' @param legend_position Browser-helper legend position. One of `"bottom"`,
 #'   `"top"`, `"left"`, `"right"`, or `"none"`.
+#' @param legend_title Title shown above the browser-helper legend.
+#' @param map_background Browser helper background. One of `"white"`,
+#'   `"transparent"`, `"light_grid"`, or `"dark"`.
+#' @param connector_linetype Browser helper connector line style. One of
+#'   `"solid"`, `"dashed"`, or `"dotted"`.
+#' @param connector_endpoint Browser helper connector endpoint. One of
+#'   `"none"` or `"arrow"`.
+#' @param connector_smart Choose connector geometry dynamically in the browser
+#'   based on label displacement. When `TRUE`, the helper chooses among the
+#'   available connector paths instead of using each row's `connector_type`.
 #' @param side_panel Show the built-in copy/download side panel in the helper
 #'   HTML. Defaults to `TRUE`; Shiny apps that provide their own controls can
 #'   set this to `FALSE`.
@@ -88,6 +98,11 @@ drag_map_prototype <- function(x,
                                show_legend = FALSE,
                                max_legend_keys = 25L,
                                legend_position = c("bottom", "top", "left", "right", "none"),
+                               legend_title = "Region",
+                               map_background = c("white", "transparent", "light_grid", "dark"),
+                               connector_linetype = c("solid", "dashed", "dotted"),
+                               connector_endpoint = c("none", "arrow"),
+                               connector_smart = FALSE,
                                side_panel = TRUE,
                                file = "drag-map.html",
                                open = FALSE) {
@@ -158,8 +173,17 @@ drag_map_prototype <- function(x,
     stop("`max_legend_keys` must be a non-negative number.", call. = FALSE)
   }
   legend_position <- match.arg(legend_position)
+  map_background <- match.arg(map_background)
+  connector_linetype <- match.arg(connector_linetype)
+  connector_endpoint <- match.arg(connector_endpoint)
   if (identical(legend_position, "none")) {
     show_legend <- FALSE
+  }
+  if (!is.character(legend_title) || length(legend_title) != 1L || is.na(legend_title)) {
+    stop("`legend_title` must be a single string.", call. = FALSE)
+  }
+  if (!is.logical(connector_smart) || length(connector_smart) != 1L || is.na(connector_smart)) {
+    stop("`connector_smart` must be TRUE or FALSE.", call. = FALSE)
   }
   if (!is.logical(side_panel) || length(side_panel) != 1L || is.na(side_panel)) {
     stop("`side_panel` must be TRUE or FALSE.", call. = FALSE)
@@ -207,6 +231,11 @@ drag_map_prototype <- function(x,
     showLegend = isTRUE(show_legend),
     maxLegendKeys = unname(max_legend_keys),
     legendPosition = legend_position,
+    legendTitle = unname(legend_title),
+    mapBackground = map_background,
+    connectorLinetype = connector_linetype,
+    connectorEndpoint = connector_endpoint,
+    connectorSmart = isTRUE(connector_smart),
     sidePanel = isTRUE(side_panel)
   )
 

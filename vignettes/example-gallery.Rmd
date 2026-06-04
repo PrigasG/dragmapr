@@ -107,6 +107,10 @@ render_dragged_map(
   region_palette = hhs$region_colors,
   region_labels = hhs$region_names,
   connector_linewidth = 1,
+  connector_linetype = "dashed",
+  connector_endpoint = "arrow",
+  legend_title = "HHS region",
+  map_background = "light_grid",
   label_padding = 0.12,
   title = "Annotation box and connector"
 )
@@ -129,11 +133,13 @@ shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragma
 interactive plot inside Shiny, the helper sends region and label state back to
 the parent app, and the app can export a PNG for a report or document. It also
 shows toggles for labels, legends, marker shapes (circle, rounded box, text
-only), info-box dimensions, connector style, and connector thickness.
+only), info-box dimensions, connector style, connector line pattern, arrow
+endpoints, and connector thickness.
 
 `shiny_spatial_studio.R` is the general spatial workspace. It accepts local
-polygon uploads or a URL, including zipped shapefiles, GeoJSON, and GeoPackage
-files, then lets users choose grouping/label columns, colors, annotation style
-(short labels or info boxes), text size, connector style, legend visibility, and
-export formats. Region groups are sorted in natural numeric order throughout the
+polygon uploads, including zipped shapefiles, GeoJSON, and GeoPackage files,
+then lets users choose grouping/label columns, colors, annotation style
+(short labels or info boxes), text size, connector style, connector line
+pattern, smart connectors, legend visibility/title, map background, and export
+formats. Region groups are sorted in natural numeric order throughout the
 sidebar, the legend, and the exported CSVs.

@@ -56,6 +56,8 @@ render_dragged_map(
   region_col = "region",
   label_col = "region",
   label_offsets = "drag_label_offsets.csv",
+  legend_title = "Region",
+  map_background = "light_grid",
   file = "dragged-map.png"
 )
 
@@ -111,13 +113,15 @@ render_dragged_map(
   labels = notes,
   label_offsets = "drag_label_offsets.csv",
   connector_linewidth = 0.8,
+  connector_linetype = "dashed",
+  connector_endpoint = "arrow",
   show_label_marker = FALSE,
   label_marker_shape = "none",
   file = "annotated-layout.png"
 )
 ```
 
-Supported connector styles are `"straight"`, `"elbow"`, `"curve"`, and `"squiggle"`. Advanced users can set `connector_start_x` / `connector_start_y` or `connector_mid_x` / `connector_mid_y` columns for custom line starts and breakpoints.
+Supported connector geometry styles are `"straight"`, `"elbow"`, `"curve"`, and `"squiggle"`. Connector exports can also use `connector_linetype = "dashed"` or `"dotted"` and `connector_endpoint = "arrow"`. Advanced users can set `connector_start_x` / `connector_start_y` or `connector_mid_x` / `connector_mid_y` columns for custom line starts and breakpoints.
 
 ## Static Export From Offsets
 
@@ -136,7 +140,9 @@ render_dragmapr_project(
   file = "final-map.png",
   width = 10,
   height = 8,
-  dpi = 300
+  dpi = 300,
+  legend_title = "Region",
+  map_background = "white"
 )
 ```
 
@@ -205,6 +211,15 @@ The exported `example_hhs_layout()` and `example_panel_layout()` helpers return 
 -   `shiny_static_export.R`: Shiny static PNG export after offsets are available.
 -   `smoke_examples.R`: runs all bundled examples in a temporary directory.
 
+### Need Another Spatial Export Format?
+
+Spatial Studio exports adjusted geometry as GeoJSON and GeoPackage. If the
+format you need is not available, download either file and open it in
+[Mapshaper](https://mapshaper.org/), then export the shape format required by
+your next workflow. You can use the same approach with any `sf` object created
+in R: write it to a supported spatial file, open that file in Mapshaper, and
+choose the desired export format.
+
 Run the full smoke suite:
 
 ``` r
@@ -220,13 +235,6 @@ The package includes four vignettes:
 -   Example gallery
 -   Shiny workflows
 
-Build the pkgdown site locally with:
-
-``` r
-pkgdown::build_site()
-```
-
-A GitHub Pages workflow is included at `.github/workflows/pkgdown.yaml`. Once the repository has a GitHub remote and Pages is enabled for GitHub Actions, the site will publish to <https://prigasg.github.io/dragmapr/>.
 
 ## Design Goals
 

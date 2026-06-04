@@ -25,6 +25,11 @@ drag_map_prototype(
   show_legend = FALSE,
   max_legend_keys = 25L,
   legend_position = c("bottom", "top", "left", "right", "none"),
+  legend_title = "Region",
+  map_background = c("white", "transparent", "light_grid", "dark"),
+  connector_linetype = c("solid", "dashed", "dotted"),
+  connector_endpoint = c("none", "arrow"),
+  connector_smart = FALSE,
   side_panel = TRUE,
   file = "drag-map.html",
   open = FALSE
@@ -85,6 +90,21 @@ helper before suppressing the legend. Set to \code{Inf} to always show it.}
 
 \item{legend_position}{Browser-helper legend position. One of \code{"bottom"},
 \code{"top"}, \code{"left"}, \code{"right"}, or \code{"none"}.}
+
+\item{legend_title}{Title shown above the browser-helper legend.}
+
+\item{map_background}{Browser helper background. One of \code{"white"},
+\code{"transparent"}, \code{"light_grid"}, or \code{"dark"}.}
+
+\item{connector_linetype}{Browser helper connector line style. One of
+\code{"solid"}, \code{"dashed"}, or \code{"dotted"}.}
+
+\item{connector_endpoint}{Browser helper connector endpoint. One of
+\code{"none"} or \code{"arrow"}.}
+
+\item{connector_smart}{Choose connector geometry dynamically in the browser
+based on label displacement. When \code{TRUE}, the helper chooses among the
+available connector paths instead of using each row's \code{connector_type}.}
 
 \item{side_panel}{Show the built-in copy/download side panel in the helper
 HTML. Defaults to \code{TRUE}; Shiny apps that provide their own controls can

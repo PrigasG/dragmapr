@@ -10,6 +10,17 @@ __D3__
 <style>
 body { margin: 0; font-family: system-ui, sans-serif; color: #172033; }
 main { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: 100vh; }
+body.bg-transparent, body.bg-transparent svg { background: transparent; }
+body.bg-white svg { background: #fbfcfe; }
+body.bg-light-grid svg {
+  background-color: #fbfcfe;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.18) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+body.bg-dark { background: #111827; color: #e5e7eb; }
+body.bg-dark svg { background: #111827; }
 html.no-side-panel main { grid-template-columns: minmax(0, 1fr); }
 html.no-side-panel aside { display: none; }
 svg { width: 100%; height: 100vh; display: block; background: #fbfcfe; cursor: grab; }
@@ -27,6 +38,8 @@ h2 { font-size: 13px; margin: 16px 0 0; }
 .region path { stroke: white; stroke-width: 0.8; vector-effect: non-scaling-stroke; cursor: grab; }
 .region.is-active path { stroke: #111827; stroke-width: 1.8; }
 .connector { fill: none; stroke: #334155; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.82; pointer-events: none; }
+.connector.dashed { stroke-dasharray: 9 6; }
+.connector.dotted { stroke-dasharray: 2 6; }
 .label rect, .label circle { fill: white; stroke: #111827; stroke-width: 1.1; }
 .label rect { filter: drop-shadow(0 2px 5px rgba(15, 23, 42, 0.16)); }
 .label rect.drag-hit { fill: transparent; stroke: transparent; filter: none; }
@@ -67,7 +80,7 @@ h2 { font-size: 13px; margin: 16px 0 0; }
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
   color: #172033;
   font-size: 11px;
-  pointer-events: none;
+  pointer-events: auto;
 }
 .drag-legend.bottom { left: 50%; bottom: 14px; transform: translateX(-50%); }
 .drag-legend.top    { left: 50%; top:    14px; transform: translateX(-50%); }
@@ -78,8 +91,16 @@ h2 { font-size: 13px; margin: 16px 0 0; }
 html:not(.no-side-panel) .drag-legend.right { right: calc(340px + 14px); }
 html:not(.no-side-panel) .drag-legend.top   { left: calc(50% - 170px); }
 .legend-item { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.legend-title { font-weight: 800; color: #172033; margin-bottom: 2px; }
 .legend-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(15, 23, 42, 0.18); flex: 0 0 auto; }
 .legend-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.bg-dark .drag-legend {
+  background: rgba(17, 24, 39, 0.94);
+  border-color: rgba(248, 250, 252, 0.24);
+  color: #f8fafc;
+}
+body.bg-dark .legend-title,
+body.bg-dark .legend-label { color: #f8fafc; }
 </style>
 </head>
 <body>
@@ -118,6 +139,7 @@ const options = __OPTIONS__;
 document.documentElement.classList.toggle("no-side-panel", options.sidePanel === false);
 const svg = d3.select("#map");
 const palette = ["#2166ac", "#d73027", "#1a9850", "#984ea3", "#ff7f00", "#a65628", "#f781bf", "#999999"];
+syncBackground();
 // Natural-order comparator: "1" < "2" < "10" rather than "1" < "10" < "2".
 function naturalCompare(a, b) {
   const re = /(\d+)|(\D+)/g;
@@ -186,6 +208,16 @@ function color(region) {
     return options.regionPalette[region];
   }
   return palette[regions.indexOf(region) % palette.length];
+}
+
+function backgroundClass(value) {
+  const bg = String(value || "white").toLowerCase().replace("_", "-");
+  return ["white", "transparent", "light-grid", "dark"].includes(bg) ? `bg-${bg}` : "bg-white";
+}
+
+function syncBackground() {
+  document.body.classList.remove("bg-white", "bg-transparent", "bg-light-grid", "bg-dark");
+  document.body.classList.add(backgroundClass(options.mapBackground));
 }
 
 function markerShape() {
@@ -306,7 +338,15 @@ function syncLegend() {
     return;
   }
   legend.className = `drag-legend ${["top", "left", "right", "bottom"].includes(position) ? position : "bottom"}`;
-  legend.replaceChildren(...regions.map(region => {
+  const children = [];
+  const title = String(options.legendTitle || "").trim();
+  if (title) {
+    const titleEl = document.createElement("div");
+    titleEl.className = "legend-title";
+    titleEl.textContent = title;
+    children.push(titleEl);
+  }
+  children.push(...regions.map(region => {
     const item = document.createElement("div");
     item.className = "legend-item";
     const swatch = document.createElement("span");
@@ -318,6 +358,23 @@ function syncLegend() {
     item.append(swatch, label);
     return item;
   }));
+  legend.replaceChildren(...children);
+}
+
+function syncRegionColors() {
+  if (root) {
+    root.selectAll("g.region path")
+      .attr("fill", d => color(String(d.properties.drag_region)));
+  }
+  syncLegend();
+}
+
+function syncLabelColors() {
+  if (!labelLayer) return;
+  labelLayer.selectAll("g.label").each(function(d) {
+    d3.select(this).selectAll("text")
+      .attr("fill", labelColor(d));
+  });
 }
 
 function offsetTransform(region) {
@@ -364,6 +421,18 @@ function escapeHtml(value) {
 function render() {
   fit();
   svg.selectAll("*").remove();
+  const defs = svg.append("defs");
+  defs.append("marker")
+    .attr("id", "connector-arrow")
+    .attr("viewBox", "0 0 10 10")
+    .attr("refX", 8)
+    .attr("refY", 5)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto-start-reverse")
+    .append("path")
+    .attr("d", "M 0 0 L 10 5 L 0 10 z")
+    .attr("fill", "#334155");
   root = svg.append("g");
   const groups = root.selectAll("g.region")
     .data(regions)
@@ -383,8 +452,9 @@ function render() {
   connectorLayer.selectAll("path.connector")
     .data(options.labels ? labelRows.filter(d => truthy(d.connector)) : [])
     .join("path")
-    .attr("class", d => `connector ${connectorType(d)}`)
+    .attr("class", d => `connector ${connectorType(d)} ${connectorLineType()}`)
     .style("stroke-width", d => `${positiveNumber(d.connector_linewidth, options.connectorLinewidth || 1.3)}px`)
+    .attr("marker-end", () => connectorEndpoint() === "arrow" ? "url(#connector-arrow)" : null)
     .attr("d", connectorPath);
 
   labelLayer = svg.append("g");
@@ -623,8 +693,31 @@ function labelType(label) {
 }
 
 function connectorType(label) {
+  if (options.connectorSmart === true) {
+    return smartConnectorType(label);
+  }
   const type = String(label.connector_type || "straight").toLowerCase();
   return ["straight", "elbow", "curve", "squiggle"].includes(type) ? type : "straight";
+}
+
+function smartConnectorType(label) {
+  const offset = labelOffsets.get(String(label.label_id)) || {dx_m: 0, dy_m: 0};
+  const dx = Math.abs(Number(offset.dx_m) || 0);
+  const dy = Math.abs(Number(offset.dy_m) || 0);
+  const distance = Math.hypot(dx, dy);
+  if (distance < 20000) return "straight";
+  if (dx > dy * 1.6 || dy > dx * 1.6) return "elbow";
+  return "curve";
+}
+
+function connectorLineType() {
+  const type = String(options.connectorLinetype || "solid").toLowerCase();
+  return ["solid", "dashed", "dotted"].includes(type) ? type : "solid";
+}
+
+function connectorEndpoint() {
+  const type = String(options.connectorEndpoint || "none").toLowerCase();
+  return type === "arrow" ? "arrow" : "none";
 }
 
 function labelColor(label) {
@@ -701,7 +794,22 @@ window.addEventListener("message", function(event) {
   }
   if (event.data && event.data.type === "dragmapr-set-label-options") {
     Object.assign(options, event.data.options || {});
+    syncBackground();
     render();
+  }
+  if (event.data && event.data.type === "dragmapr-set-region-palette") {
+    options.regionPalette = event.data.palette || {};
+    syncRegionColors();
+  }
+  if (event.data && event.data.type === "dragmapr-set-label-colors") {
+    const colors = event.data.colors || {};
+    for (const label of labelRows) {
+      const id = String(label.label_id);
+      if (Object.prototype.hasOwnProperty.call(colors, id)) {
+        label.label_color = colors[id];
+      }
+    }
+    syncLabelColors();
   }
   if (event.data && event.data.type === "dragmapr-set-state") {
     const regionRows = event.data.regionOffsets || [];
@@ -731,13 +839,13 @@ window.addEventListener("message", function(event) {
 syncLabelControls();
 syncLegend();
 render();
-// Tell the parent page (Shiny studio) that the map has finished its first
-// render. The parent listens for this to dismiss the loading veil.
-// postMessage is used instead of the iframe 'load' event because 'load'
-// fires as soon as the HTML document is parsed - before D3 has drawn
-// anything - and can race with the parent's listener setup.
+// Tell the parent page that this helper generation finished its first render.
 if (window.parent !== window) {
-  window.parent.postMessage({ type: 'dragmapr-ready' }, messageTargetOrigin());
+  const generation = new URLSearchParams(window.location.search).get("v");
+  window.parent.postMessage(
+    { type: "dragmapr-ready", generation },
+    messageTargetOrigin()
+  );
 }
 </script>
 </body>

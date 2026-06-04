@@ -159,12 +159,35 @@ test_that("spatial studio uses natural stable display factors", {
   expect_equal(env$stable_unique(c("Region 10", "Region 2", "Region 1")), c("Region 1", "Region 2", "Region 10"))
 })
 
-test_that("spatial studio keys label color inputs by label id", {
-  env <- new.env(parent = globalenv())
-  suppressWarnings(
-    source(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"), local = env)
-  )
+test_that("spatial studio edits one selected label color at a time", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
 
-  expect_equal(env$label_color_input_id("Region 10"), "label_color_Region_10")
-  expect_equal(env$label_color_input_id("1/2"), "label_color_1_2")
+  expect_match(studio_code, "label_color_group")
+  expect_match(studio_code, "label_color_value")
+  expect_false(grepl("label_cycle_color_", studio_code, fixed = TRUE))
+  expect_false(grepl("label_color_input_id", studio_code, fixed = TRUE))
+})
+
+test_that("spatial studio has a fallback for helper readiness", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
+
+  expect_match(studio_code, "function markHelperReady(generation)", fixed = TRUE)
+  expect_match(studio_code, "event.target.matches('iframe.studio-helper-frame')", fixed = TRUE)
+  expect_match(studio_code, "generation !== helperState.activeGeneration", fixed = TRUE)
+  expect_match(studio_code, "}, 1500);", fixed = TRUE)
+  expect_match(studio_code, "req(state$helper_token > 0L, file.exists(helper_file))", fixed = TRUE)
+})
+
+test_that("spatial studio applies text edits explicitly and locks controls during rebuilds", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
+
+  expect_match(studio_code, 'actionButton("apply_label_text"', fixed = TRUE)
+  expect_match(studio_code, 'observeEvent(input$apply_label_text', fixed = TRUE)
+  expect_false(grepl('observeEvent(input$edit_label_text', studio_code, fixed = TRUE))
+  expect_match(studio_code, 'actionButton("apply_static_title"', fixed = TRUE)
+  expect_match(studio_code, 'observeEvent(input$apply_static_title', fixed = TRUE)
+  expect_match(studio_code, "dragmapr-helper-busy", fixed = TRUE)
 })

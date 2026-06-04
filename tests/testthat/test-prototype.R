@@ -88,6 +88,41 @@ test_that("drag_map_prototype writes legend and marker shape options", {
   expect_match(html, "function syncLegend", fixed = TRUE)
 })
 
+test_that("drag_map_prototype writes legend, background, and connector style options", {
+  x <- sf::st_sf(
+    region = c("North", "South"),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      sf::st_polygon(list(rbind(c(5, 0), c(9, 0), c(9, 4), c(5, 4), c(5, 0)))),
+      crs = 3857
+    )
+  )
+  file <- tempfile(fileext = ".html")
+
+  drag_map_prototype(
+    x,
+    region_col = "region",
+    show_legend = TRUE,
+    legend_title = "Municipality",
+    map_background = "light_grid",
+    connector_linetype = "dashed",
+    connector_endpoint = "arrow",
+    connector_smart = TRUE,
+    file = file
+  )
+
+  html <- paste(readLines(file, warn = FALSE), collapse = "\n")
+  expect_match(html, '"legendTitle":"Municipality"', fixed = TRUE)
+  expect_match(html, '"mapBackground":"light_grid"', fixed = TRUE)
+  expect_match(html, '"connectorLinetype":"dashed"', fixed = TRUE)
+  expect_match(html, '"connectorEndpoint":"arrow"', fixed = TRUE)
+  expect_match(html, '"connectorSmart":true', fixed = TRUE)
+  expect_match(html, "dragmapr-set-region-palette", fixed = TRUE)
+  expect_match(html, "connector-arrow", fixed = TRUE)
+  expect_match(html, "body.bg-dark .legend-label", fixed = TRUE)
+  expect_match(html, 'type: "dragmapr-ready", generation', fixed = TRUE)
+})
+
 test_that("drag_map_prototype can hide the built-in side panel", {
   x <- sf::st_sf(
     region = "North",

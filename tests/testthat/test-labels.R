@@ -197,6 +197,55 @@ test_that("render_dragged_map supports legend position and label colors", {
   expect_equal(plot$theme$legend.position, "right")
 })
 
+test_that("render_dragged_map supports legend title, background, and connector styling", {
+  x <- sf::st_sf(
+    region = "North",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+  labels <- as_drag_labels(data.frame(
+    label_id = "north",
+    region = "North",
+    label = "North",
+    x = 2,
+    y = 2,
+    connector = TRUE,
+    connector_type = "straight"
+  ))
+  label_offsets <- data.frame(label_id = "north", region = "North", dx_m = 2, dy_m = 1)
+
+  plot <- render_dragged_map(
+    x,
+    region_col = "region",
+    labels = labels,
+    label_offsets = label_offsets,
+    show_legend = TRUE,
+    legend_title = "Municipality",
+    map_background = "light_grid",
+    connector_linetype = "dashed",
+    connector_endpoint = "arrow"
+  )
+
+  expect_s3_class(plot, "ggplot")
+  expect_equal(plot$scales$scales[[1]]$name, "Municipality")
+  expect_equal(plot$theme$panel.background$fill, "#f8fafc")
+  expect_equal(plot$layers[[2]]$aes_params$linetype, "dashed")
+  expect_s3_class(plot$layers[[2]]$geom_params$arrow, "arrow")
+
+  dark_plot <- render_dragged_map(
+    x,
+    region_col = "region",
+    show_legend = TRUE,
+    title = "Dark map",
+    map_background = "dark"
+  )
+  expect_equal(dark_plot$theme$plot.title$colour, "#f8fafc")
+  expect_equal(dark_plot$theme$legend.title$colour, "#f8fafc")
+  expect_equal(dark_plot$theme$legend.text$colour, "#f8fafc")
+})
+
 test_that("render_dragged_map can render annotation boxes", {
   x <- sf::st_sf(
     region = "North",
