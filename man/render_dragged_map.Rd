@@ -16,6 +16,7 @@ render_dragged_map(
   show_legend = TRUE,
   max_legend_keys = 25L,
   legend_position = c("bottom", "top", "left", "right", "none"),
+  legend_title = "Region",
   title = NULL,
   label_size = 3.4,
   show_label_marker = TRUE,
@@ -31,11 +32,13 @@ render_dragged_map(
   connector_color = "#334155",
   connector_linewidth = 0.35,
   connector_linetype = "solid",
+  connector_endpoint = c("none", "arrow"),
   connector_curvature = 0.18,
   connector_squiggle_amplitude = 12000,
   connector_squiggle_waves = 4,
   connector_end_gap = NULL,
   label_padding = 0.08,
+  map_background = c("white", "transparent", "light_grid", "dark"),
   file = NULL,
   width = 8,
   height = 6,
@@ -71,6 +74,9 @@ automatically hidden.  Defaults to \code{25}.  Set \code{Inf} to always show.}
 \item{legend_position}{Position of the fill legend in static exports.
 One of \code{"bottom"}, \code{"top"}, \code{"left"}, \code{"right"}, or \code{"none"}.}
 
+\item{legend_title}{Title shown above the fill legend. Defaults to
+\code{"Region"}.}
+
 \item{title}{Optional plot title.}
 
 \item{label_size}{Text size passed to \code{\link[ggplot2:geom_text]{ggplot2::geom_text()}}. Defaults to
@@ -104,6 +110,9 @@ exports. One of \code{"circle"}, \code{"rect"}, or \code{"none"}. If
 \item{connector_color, connector_linewidth, connector_linetype}{Static export
 styling for label connector lines.}
 
+\item{connector_endpoint}{Connector endpoint style. One of \code{"none"} or
+\code{"arrow"}.}
+
 \item{connector_curvature}{Curvature used by \code{"curve"} connectors.}
 
 \item{connector_squiggle_amplitude, connector_squiggle_waves}{Appearance of
@@ -117,6 +126,9 @@ away from label centers. Defaults to an automatic value based on plot size.}
 
 \item{label_padding}{Proportional padding added around displaced labels and
 connectors to avoid clipping static exports.}
+
+\item{map_background}{Static map background. One of \code{"white"},
+\code{"transparent"}, \code{"light_grid"}, or \code{"dark"}.}
 
 \item{file}{Optional output image path. When supplied, \code{ggplot2::ggsave()}
 saves the plot.}

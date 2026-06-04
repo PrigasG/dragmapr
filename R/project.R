@@ -56,15 +56,23 @@ render_dragmapr_project <- function(project,
   }
   plot_title <- project_default(title, project_default(metadata$title, NULL))
   validate_dragmapr_project(bundle, region_col = region_col, quiet = quiet)
+  project_labels <- bundle$labels
+  if (isTRUE(project_default(metadata$connector_smart, FALSE)) && !is.null(project_labels)) {
+    project_labels <- project_smart_connector_labels(project_labels, bundle$label_offsets)
+  }
 
   defaults <- list(
     show_legend = project_default(metadata$show_legend, TRUE),
     legend_position = project_default(metadata$legend_position, "bottom"),
-    labels = if (isFALSE(project_default(metadata$show_labels, TRUE))) FALSE else bundle$labels,
+    legend_title = project_default(metadata$legend_title, "Region"),
+    map_background = project_default(metadata$map_background, "white"),
+    labels = if (isFALSE(project_default(metadata$show_labels, TRUE))) FALSE else project_labels,
     label_marker_shape = project_default(metadata$label_marker_shape, "circle"),
     show_label_marker = !identical(project_default(metadata$label_marker_shape, "circle"), "none"),
     marker_size = project_default(metadata$marker_size, 3.2),
     connector_linewidth = project_default(metadata$connector_linewidth, 0.35),
+    connector_linetype = project_default(metadata$connector_linetype, "solid"),
+    connector_endpoint = project_default(metadata$connector_endpoint, "none"),
     label_padding = project_default(metadata$label_padding, 0.12)
   )
   dots <- list(...)
@@ -282,4 +290,22 @@ validate_dragmapr_project <- function(bundle, region_col, quiet = FALSE) {
 
 project_default <- function(x, y) {
   if (is.null(x) || length(x) == 0L || (is.character(x) && !nzchar(x[1]))) y else x
+}
+
+project_smart_connector_labels <- function(labels, label_offsets) {
+  labels <- as_drag_labels(labels)
+  if (is.null(label_offsets) || nrow(labels) == 0L) {
+    return(labels)
+  }
+  offsets <- normalize_label_state(label_offsets, source = "`label_offsets`")
+  idx <- match(as.character(labels$label_id), as.character(offsets$label_id))
+  dx <- ifelse(is.na(idx), 0, offsets$dx_m[idx])
+  dy <- ifelse(is.na(idx), 0, offsets$dy_m[idx])
+  distance <- sqrt(dx^2 + dy^2)
+  labels$connector_type <- ifelse(
+    distance < 20000,
+    "straight",
+    ifelse(abs(dx) > abs(dy) * 1.6 | abs(dy) > abs(dx) * 1.6, "elbow", "curve")
+  )
+  labels
 }

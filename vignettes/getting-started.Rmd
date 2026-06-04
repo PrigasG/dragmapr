@@ -173,12 +173,18 @@ frame — set that flag via `as_drag_annotations(..., connector = TRUE)` or
 | Argument | Default | Description |
 |---|---|---|
 | `connector_linewidth` | `1.3` | Connector line thickness in browser pixels. |
+| `connector_linetype` | `"solid"` | Browser connector line pattern: `"solid"`, `"dashed"`, or `"dotted"`. |
+| `connector_endpoint` | `"none"` | Browser connector endpoint: `"none"` or `"arrow"`. |
+| `connector_smart` | `FALSE` | Let the browser choose straight, elbow, or curved connector geometry from the current label displacement. |
 
 ```{r, eval = FALSE}
 drag_map_prototype(
   regions, region_col = "region",
   labels              = notes,   # labels with connector = TRUE
   connector_linewidth = 2,
+  connector_linetype  = "dashed",
+  connector_endpoint  = "arrow",
+  connector_smart     = TRUE,
   open = TRUE
 )
 ```
@@ -273,6 +279,7 @@ It is hidden by default because many maps are labelled and need no legend.
 | `show_legend` | `FALSE` | Show a colour legend in the helper. |
 | `max_legend_keys` | `25` | Suppress the legend automatically when the number of groups exceeds this value. Set to `Inf` to always show it regardless of group count. |
 | `legend_position` | `"bottom"` | Where the legend appears: `"bottom"`, `"top"`, `"left"`, `"right"`, or `"none"`. |
+| `legend_title` | `"Region"` | Title shown above the legend keys. |
 
 ```{r, eval = FALSE}
 drag_map_prototype(
@@ -280,6 +287,7 @@ drag_map_prototype(
   region_palette  = my_palette,
   show_legend     = TRUE,
   legend_position = "bottom",   # "top" | "left" | "right" | "none"
+  legend_title    = "Region",
   max_legend_keys = 25,
   open = TRUE
 )
@@ -294,12 +302,14 @@ drag_map_prototype(
 | `file` | `"drag-map.html"` | File path for the written standalone HTML. |
 | `open` | `FALSE` | Open the file in the default browser via `browseURL()` after writing. |
 | `side_panel` | `TRUE` | Show the built-in copy/download side panel. Shiny apps that provide their own export controls can set this to `FALSE` to reclaim the full canvas. |
+| `map_background` | `"white"` | Helper background: `"white"`, `"transparent"`, `"light_grid"`, or `"dark"`. |
 
 ```{r, eval = FALSE}
 # Write to a chosen path without opening (e.g. CI, server, or Shiny)
 drag_map_prototype(
   regions, region_col = "region",
   file       = "output/my_map.html",
+  map_background = "light_grid",
   side_panel = TRUE,
   open       = FALSE
 )
@@ -363,6 +373,10 @@ render_dragged_map(
     dx_m = 80000, dy_m = 45000
   ),
   connector_linewidth = 0.8,
+  connector_linetype  = "dotted",
+  connector_endpoint  = "arrow",
+  legend_title        = "Region",
+  map_background      = "light_grid",
   title               = "Static output with an annotation box"
 )
 ```

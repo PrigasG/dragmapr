@@ -17,6 +17,8 @@
 #'   automatically hidden.  Defaults to `25`.  Set `Inf` to always show.
 #' @param legend_position Position of the fill legend in static exports.
 #'   One of `"bottom"`, `"top"`, `"left"`, `"right"`, or `"none"`.
+#' @param legend_title Title shown above the fill legend. Defaults to
+#'   `"Region"`.
 #' @param title Optional plot title.
 #' @param label_size Text size passed to [ggplot2::geom_text()]. Defaults to
 #'   `3.4`.
@@ -38,6 +40,8 @@
 #' @param box_wrap Approximate character width used to wrap annotation-box text.
 #' @param connector_color,connector_linewidth,connector_linetype Static export
 #'   styling for label connector lines.
+#' @param connector_endpoint Connector endpoint style. One of `"none"` or
+#'   `"arrow"`.
 #' @param connector_curvature Curvature used by `"curve"` connectors.
 #' @param connector_squiggle_amplitude,connector_squiggle_waves Appearance of
 #'   `"squiggle"` connectors in static exports.
@@ -48,6 +52,8 @@
 #'   away from label centers. Defaults to an automatic value based on plot size.
 #' @param label_padding Proportional padding added around displaced labels and
 #'   connectors to avoid clipping static exports.
+#' @param map_background Static map background. One of `"white"`,
+#'   `"transparent"`, `"light_grid"`, or `"dark"`.
 #' @param file Optional output image path. When supplied, `ggplot2::ggsave()`
 #'   saves the plot.
 #' @param width,height,dpi Output settings used when `file` is supplied.
@@ -95,6 +101,7 @@ render_dragged_map <- function(x,
                                show_legend = TRUE,
                                max_legend_keys = 25L,
                                legend_position = c("bottom", "top", "left", "right", "none"),
+                               legend_title = "Region",
                                title = NULL,
                                label_size = 3.4,
                                show_label_marker = TRUE,
@@ -110,16 +117,20 @@ render_dragged_map <- function(x,
                                connector_color = "#334155",
                                connector_linewidth = 0.35,
                                connector_linetype = "solid",
+                               connector_endpoint = c("none", "arrow"),
                                connector_curvature = 0.18,
                                connector_squiggle_amplitude = 12000,
                                connector_squiggle_waves = 4,
                                connector_end_gap = NULL,
                                label_padding = 0.08,
+                               map_background = c("white", "transparent", "light_grid", "dark"),
                                file = NULL,
                                width = 8,
                                height = 6,
                                dpi = 300) {
   legend_position <- match.arg(legend_position)
+  connector_endpoint <- match.arg(connector_endpoint)
+  map_background <- match.arg(map_background)
   label_marker_shape <- match.arg(label_marker_shape)
   if (identical(legend_position, "none")) {
     show_legend <- FALSE
@@ -171,7 +182,7 @@ render_dragged_map <- function(x,
   }
   fill_scale <- if (is.null(region_palette)) {
     ggplot2::scale_fill_discrete(
-      name = "Region",
+      name = legend_title,
       labels = if (is.null(region_labels)) ggplot2::waiver() else region_labels,
       guide = if (show_legend) "legend" else "none"
     )
@@ -180,9 +191,16 @@ render_dragged_map <- function(x,
       values = region_palette,
       breaks = regions,
       labels = if (is.null(region_labels)) ggplot2::waiver() else region_labels[regions],
-      name = "Region",
+      name = legend_title,
       guide = if (show_legend) "legend" else "none"
     )
+  }
+
+  background <- map_background_style(map_background)
+  connector_arrow <- if (identical(connector_endpoint, "arrow")) {
+    grid::arrow(type = "closed", length = grid::unit(0.08, "inches"))
+  } else {
+    NULL
   }
 
   plot <- ggplot2::ggplot() +
@@ -196,10 +214,18 @@ render_dragged_map <- function(x,
     ggplot2::coord_sf(xlim = limits$xlim, ylim = limits$ylim, expand = FALSE) +
     ggplot2::theme_void(base_size = 11) +
     ggplot2::theme(
-      plot.background = ggplot2::element_rect(fill = "white", color = NA),
-      panel.background = ggplot2::element_rect(fill = "white", color = NA),
+      plot.background = ggplot2::element_rect(fill = background$plot, color = NA),
+      panel.background = ggplot2::element_rect(fill = background$panel, color = NA),
+      panel.grid.major = background$grid,
       legend.position = legend_position,
-      plot.title = ggplot2::element_text(hjust = 0.5, face = "bold")
+      legend.background = ggplot2::element_rect(fill = background$legend, color = NA),
+      legend.title = ggplot2::element_text(color = background$text),
+      legend.text = ggplot2::element_text(color = background$text),
+      plot.title = ggplot2::element_text(
+        hjust = 0.5,
+        face = "bold",
+        color = background$text
+      )
     ) +
     ggplot2::labs(title = title)
 
@@ -212,7 +238,8 @@ render_dragged_map <- function(x,
           ggplot2::aes(x = .data$x, y = .data$y, xend = .data$xend, yend = .data$yend),
           color = connector_color,
           linewidth = connector_linewidth,
-          linetype = connector_linetype
+          linetype = connector_linetype,
+          arrow = connector_arrow
         )
     }
     if (nrow(connectors$elbow) > 0L) {
@@ -222,14 +249,16 @@ render_dragged_map <- function(x,
           ggplot2::aes(x = .data$x, y = .data$y, xend = .data$xmid, yend = .data$ymid),
           color = connector_color,
           linewidth = connector_linewidth,
-          linetype = connector_linetype
+          linetype = connector_linetype,
+          arrow = NULL
         ) +
         ggplot2::geom_segment(
           data = connectors$elbow,
           ggplot2::aes(x = .data$xmid, y = .data$ymid, xend = .data$xend, yend = .data$yend),
           color = connector_color,
           linewidth = connector_linewidth,
-          linetype = connector_linetype
+          linetype = connector_linetype,
+          arrow = connector_arrow
         )
     }
     if (nrow(connectors$curve) > 0L) {
@@ -240,7 +269,8 @@ render_dragged_map <- function(x,
           color = connector_color,
           linewidth = connector_linewidth,
           linetype = connector_linetype,
-          curvature = connector_curvature
+          curvature = connector_curvature,
+          arrow = connector_arrow
         )
     }
     if (nrow(connectors$squiggle) > 0L) {
@@ -254,7 +284,8 @@ render_dragged_map <- function(x,
           ggplot2::aes(x = .data$x, y = .data$y, group = .data$connector_id),
           color = connector_color,
           linewidth = connector_linewidth,
-          linetype = connector_linetype
+          linetype = connector_linetype,
+          arrow = connector_arrow
         )
     }
     point_labels <- labels[labels$label_type == "label", , drop = FALSE]
@@ -323,6 +354,40 @@ render_dragged_map <- function(x,
     ggplot2::ggsave(file, plot, width = width, height = height, dpi = dpi)
   }
   plot
+}
+
+map_background_style <- function(map_background) {
+  switch(
+    map_background,
+    white = list(
+      plot = "white",
+      panel = "white",
+      legend = "white",
+      text = "#172033",
+      grid = ggplot2::element_blank()
+    ),
+    transparent = list(
+      plot = NA,
+      panel = NA,
+      legend = NA,
+      text = "#172033",
+      grid = ggplot2::element_blank()
+    ),
+    light_grid = list(
+      plot = "white",
+      panel = "#f8fafc",
+      legend = "white",
+      text = "#172033",
+      grid = ggplot2::element_line(color = "#e5e7eb", linewidth = 0.2)
+    ),
+    dark = list(
+      plot = "#111827",
+      panel = "#111827",
+      legend = "#111827",
+      text = "#f8fafc",
+      grid = ggplot2::element_blank()
+    )
+  )
 }
 
 make_connector_data <- function(anchor_labels, labels, end_gap = NULL) {
