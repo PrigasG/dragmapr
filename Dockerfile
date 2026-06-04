@@ -16,10 +16,11 @@ FROM rocker/geospatial:4.4.2
 
 # ---- System-level Shiny dependencies ----------------------------------------
 # rocker/geospatial already ships R, sf, GDAL, GEOS, PROJ, and tidyverse.
-# We only need to add the Shiny stack and one extra package.
+# Add the Shiny stack and the optional widgets used by Spatial Studio.
 RUN install2.r --error --skipinstalled --ncpus -1 \
     shiny \
     shinyWidgets \
+    glasstabs \
     && rm -rf /tmp/downloaded_packages /var/lib/apt/lists/*
 
 # ---- Install dragmapr from the repo source ----------------------------------
