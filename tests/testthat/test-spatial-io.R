@@ -193,4 +193,9 @@ test_that("spatial studio applies text edits explicitly and locks controls durin
   expect_match(studio_code, 'actionButton("apply_static_title"', fixed = TRUE)
   expect_match(studio_code, 'observeEvent(input$apply_static_title', fixed = TRUE)
   expect_match(studio_code, "dragmapr-helper-busy", fixed = TRUE)
+  expect_match(
+    studio_code,
+    "list(state$source_version, projected_sf(), region_col(), label_col(), input$show_helper_panel)",
+    fixed = TRUE
+  )
 })
