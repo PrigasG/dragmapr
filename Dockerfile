@@ -20,7 +20,7 @@ FROM rocker/geospatial:4.4.2
 RUN install2.r --error --skipinstalled --ncpus -1 \
     shiny \
     shinyWidgets \
-    glasstabs \
+    && R --no-save -e "install.packages('glasstabs', repos='https://cloud.r-project.org')" \
     && rm -rf /tmp/downloaded_packages /var/lib/apt/lists/*
 
 # ---- Install dragmapr from the repo source ----------------------------------
