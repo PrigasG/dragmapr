@@ -37,6 +37,9 @@ textarea { width: 100%; height: 28vh; margin-top: 8px; font: 12px/1.35 ui-monosp
 h2 { font-size: 13px; margin: 16px 0 0; }
 .region path { stroke: white; stroke-width: 0.8; vector-effect: non-scaling-stroke; cursor: grab; }
 .region.is-active path { stroke: #111827; stroke-width: 1.8; }
+.origin-outline path { fill: none; stroke: #64748b; stroke-width: 1.25; stroke-dasharray: 6 5; opacity: 0.58; vector-effect: non-scaling-stroke; pointer-events: none; }
+.movement-connector { fill: none; stroke-linecap: round; pointer-events: none; }
+.trail-outline path { fill: none; stroke: #64748b; stroke-width: 0.85; vector-effect: non-scaling-stroke; pointer-events: none; }
 .connector { fill: none; stroke: #334155; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.82; pointer-events: none; }
 .connector.dashed { stroke-dasharray: 9 6; }
 .connector.dotted { stroke-dasharray: 2 6; }
@@ -177,10 +180,13 @@ for (const row of initialLabelOffsets || []) {
 }
 const grouped = d3.group(geojson.features, d => String(d.properties.drag_region));
 const bounds = coordBounds(geojson);
-let projection, path, metricScale, root, labelLayer;
+let projection, path, metricScale, originLayer, movementConnectorLayer, trailLayer, root, labelLayer;
 let layoutFrame = null;
 let activeDragRegion = null;
 let badgeTimer = null;
+let trailSnapshots = [];
+let trailLastScreenX = 0;
+let trailLastScreenY = 0;
 const allowedParentOrigin = parentOrigin();
 
 function parentOrigin() {
@@ -325,13 +331,32 @@ function syncLabelControls() {
   document.querySelector("#label-csv").hidden = hidden;
 }
 
+  function selectedValues(value, allValues) {
+    if (value == null) return allValues.slice();
+    const allowed = new Set(allValues.map(String));
+    const values = Array.isArray(value) ? value : [value];
+    return values.map(String).filter(item => allowed.has(item));
+  }
+
+function visibleLegendRegions() {
+  return selectedValues(options.legendValues, regions);
+}
+
+function visibleLabelRows() {
+  const ids = labelRows.map(label => String(label.label_id));
+  const selected = new Set(selectedValues(options.labelValues, ids));
+  return labelRows.filter(label => selected.has(String(label.label_id)));
+}
+
 function syncLegend() {
   const legend = document.querySelector("#drag-legend");
   const position = String(options.legendPosition || "bottom").toLowerCase();
   const maxKeys = Number(options.maxLegendKeys);
+  const legendRegions = visibleLegendRegions();
   const shouldShow = options.showLegend === true &&
     position !== "none" &&
-    (Number.isFinite(maxKeys) ? regions.length <= maxKeys : true);
+    legendRegions.length > 0 &&
+    (Number.isFinite(maxKeys) ? legendRegions.length <= maxKeys : true);
   legend.hidden = !shouldShow;
   if (!shouldShow) {
     legend.replaceChildren();
@@ -346,7 +371,7 @@ function syncLegend() {
     titleEl.textContent = title;
     children.push(titleEl);
   }
-  children.push(...regions.map(region => {
+  children.push(...legendRegions.map(region => {
     const item = document.createElement("div");
     item.className = "legend-item";
     const swatch = document.createElement("span");
@@ -380,6 +405,74 @@ function syncLabelColors() {
 function offsetTransform(region) {
   const o = regionOffsets.get(region);
   return `translate(${o.dx_m * metricScale},${-o.dy_m * metricScale})`;
+}
+
+function regionMoved(region) {
+  const o = regionOffsets.get(String(region)) || {dx_m: 0, dy_m: 0};
+  return Number.isFinite(o.dx_m) && Number.isFinite(o.dy_m) &&
+    (o.dx_m !== 0 || o.dy_m !== 0);
+}
+
+function syncOriginOutlines() {
+  if (!originLayer) return;
+  originLayer.style(
+    "display",
+    region => options.showOriginOutlines === true && regionMoved(region) ? null : "none"
+  );
+}
+
+function regionRepresentativePoint(region) {
+  const features = grouped.get(String(region)) || [];
+  if (features.length === 0) return [0, 0];
+  const centroid = path.centroid({type: "FeatureCollection", features: features});
+  return Number.isFinite(centroid[0]) && Number.isFinite(centroid[1])
+    ? centroid
+    : [0, 0];
+}
+
+function syncMovementConnectors() {
+  if (!movementConnectorLayer) return;
+  const color = options.movementConnectorColor || "#64748b";
+  const lineType = movementConnectorLineType();
+  const endpoint = movementConnectorEndpoint();
+  svg.select("#movement-connector-arrow-closed path").attr("fill", color);
+  svg.select("#movement-connector-arrow-open path").attr("stroke", color);
+  movementConnectorLayer.selectAll("line.movement-connector")
+    .each(function(region) {
+      const r = String(region);
+      const show = options.showMovementConnectors === true && regionMoved(r);
+      const sel = d3.select(this);
+      sel.attr("visibility", show ? null : "hidden");
+      if (!show) return;
+      const p = regionRepresentativePoint(r);
+      const o = regionOffsets.get(r);
+      sel.style("stroke", color)
+         .style("stroke-width", `${positiveNumber(options.movementConnectorLinewidth, 1.4)}px`)
+         .style("stroke-dasharray", lineType === "dashed" ? "9 6" : lineType === "dotted" ? "2 6" : null)
+         .style("opacity", boundedNumber(options.movementConnectorOpacity, 0.72, 0, 1))
+         .attr("marker-end", endpoint === "none" ? null : `url(#movement-connector-arrow-${endpoint})`)
+         .attr("x1", p[0])
+         .attr("y1", p[1])
+         .attr("x2", p[0] + o.dx_m * metricScale)
+         .attr("y2", p[1] - o.dy_m * metricScale);
+    });
+}
+
+function updateTrail() {
+  if (!trailLayer) return;
+  trailLayer.selectAll("g.trail-outline").remove();
+  if (options.showDragTrail !== true || trailSnapshots.length === 0) return;
+  const n = trailSnapshots.length;
+  trailSnapshots.forEach(function(snap, i) {
+    trailLayer.append("g")
+      .attr("class", "trail-outline")
+      .attr("transform", "translate(" + (snap.dx_m * metricScale) + "," + (-snap.dy_m * metricScale) + ")")
+      .style("opacity", 0.10 + 0.28 * i / Math.max(1, n - 1))
+      .selectAll("path")
+      .data(grouped.get(snap.region) || [])
+      .join("path")
+      .attr("d", path);
+  });
 }
 
 function setActiveRegion(region, mode = "Region") {
@@ -432,7 +525,54 @@ function render() {
     .attr("orient", "auto-start-reverse")
     .append("path")
     .attr("d", "M 0 0 L 10 5 L 0 10 z")
-    .attr("fill", "#334155");
+    .attr("fill", options.connectorColor || "#334155");
+  const movementClosed = defs.append("marker")
+    .attr("id", "movement-connector-arrow-closed")
+    .attr("viewBox", "0 0 10 10")
+    .attr("refX", 9)
+    .attr("refY", 5)
+    .attr("markerWidth", 5)
+    .attr("markerHeight", 5)
+    .attr("orient", "auto");
+  movementClosed.append("path")
+    .attr("d", "M 0 0 L 10 5 L 0 10 z")
+    .attr("fill", "#64748b");
+  const movementOpen = defs.append("marker")
+    .attr("id", "movement-connector-arrow-open")
+    .attr("viewBox", "0 0 10 10")
+    .attr("refX", 9)
+    .attr("refY", 5)
+    .attr("markerWidth", 5)
+    .attr("markerHeight", 5)
+    .attr("orient", "auto");
+  movementOpen.append("path")
+    .attr("d", "M 1 1 L 9 5 L 1 9")
+    .attr("fill", "none")
+    .attr("stroke", "#64748b")
+    .attr("stroke-width", 1.8);
+  // Layer 1: origin outlines (Phase 1)
+  originLayer = svg.append("g")
+    .selectAll("g.origin-outline")
+    .data(regions)
+    .join("g")
+    .attr("class", "origin-outline");
+  originLayer.selectAll("path")
+    .data(d => grouped.get(d) || [])
+    .join("path")
+    .attr("d", path);
+  syncOriginOutlines();
+  // Layer 2: movement connectors (Phase 2)
+  movementConnectorLayer = svg.append("g");
+  movementConnectorLayer.selectAll("line.movement-connector")
+    .data(regions)
+    .join("line")
+    .attr("class", "movement-connector");
+  syncMovementConnectors();
+  // Layer 3: drag preview trail (Phase 3)
+  trailLayer = svg.append("g");
+  trailSnapshots = [];
+  updateTrail();
+  // Layer 4: moved regions
   root = svg.append("g");
   const groups = root.selectAll("g.region")
     .data(regions)
@@ -450,16 +590,17 @@ function render() {
 
   const connectorLayer = svg.append("g");
   connectorLayer.selectAll("path.connector")
-    .data(options.labels ? labelRows.filter(d => truthy(d.connector)) : [])
+    .data(options.labels ? visibleLabelRows().filter(d => truthy(d.connector)) : [])
     .join("path")
     .attr("class", d => `connector ${connectorType(d)} ${connectorLineType()}`)
+    .style("stroke", options.connectorColor || "#334155")
     .style("stroke-width", d => `${positiveNumber(d.connector_linewidth, options.connectorLinewidth || 1.3)}px`)
     .attr("marker-end", () => connectorEndpoint() === "arrow" ? "url(#connector-arrow)" : null)
     .attr("d", connectorPath);
 
   labelLayer = svg.append("g");
   const labelGroups = labelLayer.selectAll("g.label")
-    .data(options.labels ? labelRows : [])
+    .data(options.labels ? visibleLabelRows() : [])
     .join("g")
     .attr("class", d => `label ${labelType(d)}`)
     .attr("transform", labelTransform);
@@ -511,24 +652,45 @@ function render() {
         .call(wrapText, String(d.label), Math.max(12, width - 10));
     }
   });
-  // SVG layer order (bottom → top): root/regions → connectorLayer → labelLayer.
-  // Labels are appended last so they always render above connector lines.
+  // SVG layer order (bottom → top):
+  //   originLayer → movementConnectorLayer → trailLayer → root/regions
+  //   → connectorLayer (label connectors) → labelLayer
   syncLegend();
 
-  const regionDrag = d3.drag().on("start", function(event, region) {
-    activeDragRegion = String(region);
-    setActiveRegion(region, "Dragging");
-  }).on("drag", function(event, region) {
-    const o = regionOffsets.get(region);
-    o.dx_m += event.dx / metricScale;
-    o.dy_m -= event.dy / metricScale;
-    scheduleLayoutUpdate();
-  }).on("end", function(event, region) {
-    updateLayout();
-    activeDragRegion = null;
-    setActiveRegion(region, "Moved");
-    clearActiveRegion(1200);
-  });
+  const regionDrag = d3.drag()
+    .on("start", function(event, region) {
+      activeDragRegion = String(region);
+      setActiveRegion(region, "Dragging");
+      trailLastScreenX = event.sourceEvent ? event.sourceEvent.clientX : event.x;
+      trailLastScreenY = event.sourceEvent ? event.sourceEvent.clientY : event.y;
+      trailSnapshots = [];
+      updateTrail();
+    })
+    .on("drag", function(event, region) {
+      const o = regionOffsets.get(region);
+      o.dx_m += event.dx / metricScale;
+      o.dy_m -= event.dy / metricScale;
+      if (options.showDragTrail === true) {
+        const sx = event.sourceEvent ? event.sourceEvent.clientX : event.x;
+        const sy = event.sourceEvent ? event.sourceEvent.clientY : event.y;
+        if (Math.hypot(sx - trailLastScreenX, sy - trailLastScreenY) >= 12) {
+          trailLastScreenX = sx;
+          trailLastScreenY = sy;
+          trailSnapshots.push({region: String(region), dx_m: o.dx_m, dy_m: o.dy_m});
+          if (trailSnapshots.length > 5) trailSnapshots.shift();
+          updateTrail();
+        }
+      }
+      scheduleLayoutUpdate();
+    })
+    .on("end", function(event, region) {
+      trailSnapshots = [];
+      updateTrail();
+      updateLayout();
+      activeDragRegion = null;
+      setActiveRegion(region, "Moved");
+      clearActiveRegion(1200);
+    });
   const labelDrag = d3.drag().on("drag", function(event, label) {
     const o = labelOffsets.get(String(label.label_id));
     o.dx_m += event.dx / metricScale;
@@ -560,6 +722,8 @@ function scheduleLayoutUpdate() {
 function updateLayout() {
   svg.selectAll("g.region")
     .attr("transform", offsetTransform);
+  syncOriginOutlines();
+  syncMovementConnectors();
   svg.selectAll("path.connector")
     .attr("d", connectorPath);
   svg.selectAll("g.label")
@@ -720,6 +884,16 @@ function connectorEndpoint() {
   return type === "arrow" ? "arrow" : "none";
 }
 
+function movementConnectorLineType() {
+  const type = String(options.movementConnectorLinetype || "solid").toLowerCase();
+  return ["solid", "dashed", "dotted"].includes(type) ? type : "solid";
+}
+
+function movementConnectorEndpoint() {
+  const type = String(options.movementConnectorEndpoint || "closed").toLowerCase();
+  return ["none", "open", "closed"].includes(type) ? type : "closed";
+}
+
 function labelColor(label) {
   const color = String(label.label_color || "#111827");
   return /^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/.test(color) ? color : "#111827";
@@ -733,6 +907,11 @@ function truthy(value) {
 function positiveNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function boundedNumber(value, fallback, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= min && number <= max ? number : fallback;
 }
 
 function wrapText(selection, text, width) {
@@ -767,6 +946,7 @@ document.querySelector("#download-labels").addEventListener("click", () => downl
 document.querySelector("#reset").addEventListener("click", () => {
   for (const r of regions) regionOffsets.set(r, {dx_m: 0, dy_m: 0});
   for (const label of labelRows) labelOffsets.set(String(label.label_id), {dx_m: 0, dy_m: 0});
+  trailSnapshots = [];
   render();
 });
 window.addEventListener("resize", render);
@@ -781,6 +961,19 @@ window.addEventListener("message", function(event) {
     options.labels = !!event.data.labels;
     syncLabelControls();
     syncLegend();
+    render();
+  }
+  if (event.data && event.data.type === "dragmapr-set-legend-values") {
+    options.legendValues = event.data.values == null ? null : event.data.values;
+    syncLegend();
+  }
+  if (event.data && event.data.type === "dragmapr-set-label-values") {
+    options.labelValues = event.data.values == null ? null : event.data.values;
+    render();
+  }
+  if (event.data && event.data.type === "dragmapr-set-side-panel") {
+    options.sidePanel = !!event.data.sidePanel;
+    document.documentElement.classList.toggle("no-side-panel", options.sidePanel === false);
     render();
   }
   if (event.data && event.data.type === "dragmapr-set-label-data") {
@@ -828,11 +1021,13 @@ window.addEventListener("message", function(event) {
         labelOffsets.set(labelId, cleanOffset(row));
       }
     }
+    trailSnapshots = [];
     render();
   }
   if (event.data && event.data.type === "dragmapr-reset-state") {
     for (const r of regions) regionOffsets.set(r, {dx_m: 0, dy_m: 0});
     for (const label of labelRows) labelOffsets.set(String(label.label_id), {dx_m: 0, dy_m: 0});
+    trailSnapshots = [];
     render();
   }
 });

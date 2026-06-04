@@ -104,7 +104,10 @@ test_that("drag_map_prototype writes legend, background, and connector style opt
     region_col = "region",
     show_legend = TRUE,
     legend_title = "Municipality",
+    legend_values = "North",
+    label_values = "North",
     map_background = "light_grid",
+    connector_color = "#AABBCC",
     connector_linetype = "dashed",
     connector_endpoint = "arrow",
     connector_smart = TRUE,
@@ -113,11 +116,16 @@ test_that("drag_map_prototype writes legend, background, and connector style opt
 
   html <- paste(readLines(file, warn = FALSE), collapse = "\n")
   expect_match(html, '"legendTitle":"Municipality"', fixed = TRUE)
+  expect_match(html, '"legendValues":"North"', fixed = TRUE)
+  expect_match(html, '"labelValues":"North"', fixed = TRUE)
   expect_match(html, '"mapBackground":"light_grid"', fixed = TRUE)
+  expect_match(html, '"connectorColor":"#AABBCC"', fixed = TRUE)
   expect_match(html, '"connectorLinetype":"dashed"', fixed = TRUE)
   expect_match(html, '"connectorEndpoint":"arrow"', fixed = TRUE)
   expect_match(html, '"connectorSmart":true', fixed = TRUE)
   expect_match(html, "dragmapr-set-region-palette", fixed = TRUE)
+  expect_match(html, 'event.data.type === "dragmapr-set-legend-values"', fixed = TRUE)
+  expect_match(html, 'event.data.type === "dragmapr-set-label-values"', fixed = TRUE)
   expect_match(html, "connector-arrow", fixed = TRUE)
   expect_match(html, "body.bg-dark .legend-label", fixed = TRUE)
   expect_match(html, 'type: "dragmapr-ready", generation', fixed = TRUE)
@@ -140,6 +148,7 @@ test_that("drag_map_prototype can hide the built-in side panel", {
   expect_match(html, '<html lang="en" class="no-side-panel">', fixed = TRUE)
   expect_false(grepl("__HTML_CLASS__", html, fixed = TRUE))
   expect_match(html, "html.no-side-panel aside", fixed = TRUE)
+  expect_match(html, 'event.data.type === "dragmapr-set-side-panel"', fixed = TRUE)
 })
 
 test_that("drag_map_prototype identifies active regions while dragging", {
@@ -158,6 +167,75 @@ test_that("drag_map_prototype identifies active regions while dragging", {
   expect_match(html, 'id="identity-badge"', fixed = TRUE)
   expect_match(html, "setActiveRegion(region, \"Dragging\")", fixed = TRUE)
   expect_match(html, ".region.is-active path", fixed = TRUE)
+})
+
+test_that("drag_map_prototype writes optional origin outlines", {
+  x <- sf::st_sf(
+    region = "North",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+  default_file <- tempfile(fileext = ".html")
+  enabled_file <- tempfile(fileext = ".html")
+
+  drag_map_prototype(x, region_col = "region", labels = FALSE, file = default_file)
+  drag_map_prototype(
+    x,
+    region_col = "region",
+    labels = FALSE,
+    show_origin_outlines = TRUE,
+    file = enabled_file
+  )
+
+  default_html <- paste(readLines(default_file, warn = FALSE), collapse = "\n")
+  enabled_html <- paste(readLines(enabled_file, warn = FALSE), collapse = "\n")
+  expect_match(default_html, '"showOriginOutlines":false', fixed = TRUE)
+  expect_match(enabled_html, '"showOriginOutlines":true', fixed = TRUE)
+  expect_match(enabled_html, "function syncOriginOutlines()", fixed = TRUE)
+  expect_match(enabled_html, 'attr("class", "origin-outline")', fixed = TRUE)
+})
+
+test_that("drag_map_prototype writes movement connectors and clears drag trails", {
+  x <- sf::st_sf(
+    region = "North",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+  file <- tempfile(fileext = ".html")
+
+  drag_map_prototype(
+    x,
+    region_col = "region",
+    labels = FALSE,
+    show_movement_connectors = TRUE,
+    movement_connector_color = "#123456",
+    movement_connector_opacity = 0.4,
+    movement_connector_linewidth = 2.2,
+    movement_connector_linetype = "dotted",
+    movement_connector_endpoint = "open",
+    show_drag_trail = TRUE,
+    file = file
+  )
+
+  html <- paste(readLines(file, warn = FALSE), collapse = "\n")
+  expect_match(html, '"showMovementConnectors":true', fixed = TRUE)
+  expect_match(html, '"movementConnectorColor":"#123456"', fixed = TRUE)
+  expect_match(html, '"movementConnectorOpacity":0.4', fixed = TRUE)
+  expect_match(html, '"movementConnectorLinewidth":2.2', fixed = TRUE)
+  expect_match(html, '"movementConnectorLinetype":"dotted"', fixed = TRUE)
+  expect_match(html, '"movementConnectorEndpoint":"open"', fixed = TRUE)
+  expect_match(html, "movement-connector-arrow-open", fixed = TRUE)
+  expect_match(html, '"showDragTrail":true', fixed = TRUE)
+  expect_match(html, "function syncMovementConnectors()", fixed = TRUE)
+  expect_match(
+    html,
+    "trailSnapshots = [];\n      updateTrail();\n      updateLayout();",
+    fixed = TRUE
+  )
 })
 
 test_that("drag_map_prototype writes named region palette", {

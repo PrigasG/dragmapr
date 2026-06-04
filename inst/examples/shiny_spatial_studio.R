@@ -77,6 +77,45 @@ is_blank <- function(x) is.null(x) || length(x) == 0L || !nzchar(trimws(x[1]))
 valid_hex_color <- function(x) {
   is.character(x) && length(x) == 1L && grepl("^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$", x)
 }
+studio_color_value <- function(value, default) {
+  if (valid_hex_color(value)) value else default
+}
+studio_color_input <- function(inputId, label, value) {
+  if (requireNamespace("shinyWidgets", quietly = TRUE)) {
+    return(shinyWidgets::colorPickr(
+      inputId = inputId,
+      label = label,
+      selected = value,
+      theme = "nano",
+      update = "save",
+      inline = FALSE,
+      width = "34px"
+    ))
+  }
+  textInput(inputId, label, value = value)
+}
+update_studio_color_input <- function(session, inputId, value) {
+  if (requireNamespace("shinyWidgets", quietly = TRUE)) {
+    shinyWidgets::updateColorPickr(session, inputId, value = value)
+  } else {
+    updateTextInput(session, inputId, value = value)
+  }
+}
+
+studio_sidebar_panel <- function(title, subtitle = NULL, ..., open = FALSE) {
+  tags$details(
+    class = "studio-card studio-panel",
+    open = if (isTRUE(open)) NA else NULL,
+    tags$summary(
+      class = "studio-panel-summary",
+      tags$span(title, class = "studio-panel-title"),
+      if (!is.null(subtitle) && nzchar(subtitle)) {
+        tags$span(subtitle, class = "studio-panel-subtitle")
+      }
+    ),
+    tags$div(class = "studio-panel-body", ...)
+  )
+}
 
 # Legend is suppressed automatically in render_dragged_map() above this count.
 LEGEND_THRESHOLD  <- 25L
@@ -210,6 +249,28 @@ empty_label_offsets <- function(labels) {
   )
 }
 
+normalize_studio_label_offsets <- function(offsets) {
+  empty <- data.frame(
+    label_id = character(), region = character(), dx_m = numeric(), dy_m = numeric(),
+    stringsAsFactors = FALSE
+  )
+  if (is.null(offsets) || !is.data.frame(offsets)) return(empty)
+  names(offsets) <- tolower(names(offsets))
+  required <- c("label_id", "region", "dx_m", "dy_m")
+  if (!all(required %in% names(offsets))) return(empty)
+  out <- data.frame(
+    label_id = trimws(as.character(offsets$label_id)),
+    region = trimws(as.character(offsets$region)),
+    dx_m = suppressWarnings(as.numeric(offsets$dx_m)),
+    dy_m = suppressWarnings(as.numeric(offsets$dy_m)),
+    stringsAsFactors = FALSE
+  )
+  valid <- nzchar(out$label_id) & nzchar(out$region) & is.finite(out$dx_m) & is.finite(out$dy_m)
+  out <- out[valid & !duplicated(out$label_id), , drop = FALSE]
+  rownames(out) <- NULL
+  out
+}
+
 # ---- Inline CSS ---------------------------------------------------------------
 
 studio_css <- "
@@ -255,12 +316,70 @@ p.studio-subtitle {
 
 /* ---- Sidebar sections ---- */
 .studio-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
   background: #ffffff;
-  padding: 10px 12px 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+.studio-card[open] {
+  border-color: #cbd5e1;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.06);
+}
+.studio-panel-summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-bottom: 1px solid transparent;
+}
+.studio-card[open] > .studio-panel-summary {
+  border-bottom-color: #e2e8f0;
+}
+.studio-panel-summary::-webkit-details-marker { display: none; }
+.studio-panel-summary::after {
+  content: '+';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #334155;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.studio-card[open] > .studio-panel-summary::after {
+  content: '-';
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.studio-panel-title {
+  display: block;
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #263445;
+}
+.studio-panel-subtitle {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: #64748b;
+}
+.studio-panel-body {
+  padding: 10px 12px 12px;
 }
 .studio-section {
   font-size: 0.7rem;
@@ -272,8 +391,41 @@ p.studio-subtitle {
   padding-bottom: 4px;
   border-bottom: 1px solid #e5e7eb;
 }
+.studio-subgroup-title {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 12px 0 6px;
+}
+.studio-subgroup-title:first-child { margin-top: 0; }
 .studio-card .form-group { margin-bottom: 10px; }
-.studio-card .checkbox { margin-top: 4px; margin-bottom: 8px; }
+.studio-card .checkbox { margin-top: 4px; margin-bottom: 7px; }
+.studio-card .checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.studio-card .checkbox label:hover {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+.studio-card .checkbox input[type='checkbox'] {
+  position: static;
+  margin: 0 !important;
+  accent-color: #2563eb;
+}
 .studio-card .radio { margin-top: 4px; margin-bottom: 4px; }
 .studio-card .btn { margin-bottom: 4px; }
 .studio-card .selectize-control { margin-bottom: 0; }
@@ -357,13 +509,22 @@ p.studio-subtitle {
   position: fixed;
   inset: 0;
   z-index: 9998;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(248, 250, 252, 0.78);
   backdrop-filter: blur(3px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.18s ease, visibility 0s linear 0.18s;
 }
-body.dragmapr-loading .studio-load-veil { display: flex; }
+body.dragmapr-loading .studio-load-veil {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
 .studio-load-panel {
   display: flex;
   align-items: center;
@@ -445,6 +606,13 @@ body.dragmapr-loading .studio-load-veil { display: flex; }
   margin-top: 8px;
 }
 .download-grid .btn { width: 100%; font-size: 0.78rem; padding: 5px 8px; }
+.studio-card .btn {
+  border-radius: 6px;
+  font-weight: 600;
+}
+.studio-card .shiny-input-container:not(.shiny-input-container-inline) {
+  width: 100%;
+}
 
 /* ---- Main workspace ---- */
 .tabbable > .nav-tabs {
@@ -455,6 +623,71 @@ body.dragmapr-loading .studio-load-veil { display: flex; }
   border-radius: 6px 6px 0 0;
   color: #475569;
   font-weight: 600;
+}
+.workspace-tabs {
+  position: relative;
+}
+.workspace-tabs > .tabbable > .nav-tabs {
+  min-height: 44px;
+  padding-right: 178px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.workspace-tabs > .tabbable > .nav-tabs > li > a {
+  margin-bottom: 0;
+}
+.workspace-offset-toggle {
+  position: absolute;
+  top: 0;
+  right: 10px;
+  min-height: 44px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.workspace-offset-toggle .form-group,
+.workspace-offset-toggle .checkbox {
+  margin: 0;
+}
+.workspace-offset-toggle .checkbox label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid #d9e0ea;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.workspace-offset-toggle .checkbox label:hover {
+  background: #eef2f7;
+  border-color: #cbd5e1;
+}
+.workspace-offset-toggle .checkbox input[type='checkbox'] {
+  position: static;
+  margin: 0;
+}
+@media (max-width: 700px) {
+  .workspace-tabs > .tabbable > .nav-tabs {
+    padding-right: 0;
+  }
+  .workspace-offset-toggle {
+    position: static;
+    min-height: 42px;
+    justify-content: flex-end;
+    padding: 6px 10px;
+    border-right: 1px solid #d9e0ea;
+    border-left: 1px solid #d9e0ea;
+    background: #ffffff;
+  }
 }
 .tab-content {
   background: #ffffff;
@@ -467,11 +700,56 @@ body.dragmapr-loading .studio-load-veil { display: flex; }
 .preview-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
   align-items: center;
+  gap: 8px;
   margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: #f8fafc;
 }
-.preview-toolbar .checkbox { margin: 0; }
+.preview-toolbar .btn {
+  margin: 0;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-weight: 600;
+}
+.preview-toolbar .form-group,
+.preview-toolbar .checkbox {
+  margin: 0;
+}
+.preview-toolbar .checkbox label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  margin: 0;
+  padding: 5px 10px;
+  border: 1px solid #dbe3ee;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.preview-toolbar .checkbox input[type='checkbox'] {
+  position: static;
+  margin: 0;
+}
+@media (max-width: 520px) {
+  .preview-toolbar {
+    align-items: stretch;
+  }
+  .preview-toolbar .btn,
+  .preview-toolbar .checkbox label {
+    width: 100%;
+  }
+}
 .studio-helper-frame {
   width: 100%;
   height: min(86vh, 960px);
@@ -514,19 +792,21 @@ body.shiny-busy .studio-progress-bar { opacity: 1; }
   z-index: 10;
   border-radius: 6px;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.16s ease;
+  transition: opacity 0.16s ease, visibility 0s linear 0.16s;
 }
 .helper-wrap.is-updating .helper-overlay {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
+  transition-delay: 0s;
 }
-body.dragmapr-helper-busy .well,
-body.dragmapr-helper-busy .map-control-toolbar,
-body.dragmapr-helper-busy .nav-tabs {
+body.dragmapr-helper-busy .studio-helper-frame {
+  opacity: 0.55;
+  filter: blur(0.4px);
   pointer-events: none;
-  opacity: 0.68;
-  transition: opacity 0.16s ease;
+  transition: opacity 0.16s ease, filter 0.16s ease;
 }
 .helper-overlay p {
   font-size: 0.85rem;
@@ -572,7 +852,8 @@ ui <- fluidPage(
         fullLoading: false,
         activeGeneration: null,
         readyGeneration: null,
-        fallbackTimer: null
+        fallbackTimer: null,
+        fullLoadingTimer: null
       };
       function helperGeneration(value) {
         return value == null ? null : String(value);
@@ -587,6 +868,52 @@ ui <- fluidPage(
         } catch (e) {
           return null;
         }
+      }
+      function cleanupHelperCornerControls() {
+        // The drag helper can render a tiny empty corner handle for its
+        // internal side panel. Spatial Studio already provides the Offset
+        // panel toggle in the tab row, so hide that stray empty helper control.
+        var iframe = getHelperFrame();
+        if (!iframe || !iframe.contentWindow) return;
+        var doc = null;
+        try {
+          doc = iframe.contentDocument || iframe.contentWindow.document;
+        } catch (e) {
+          return;
+        }
+        if (!doc || !doc.body) return;
+
+        if (!doc.getElementById('studio-helper-corner-cleanup-style')) {
+          var style = doc.createElement('style');
+          style.id = 'studio-helper-corner-cleanup-style';
+          style.textContent = '.studio-hidden-corner-control { display: none !important; }';
+          (doc.head || doc.documentElement).appendChild(style);
+        }
+
+        var nodes = doc.querySelectorAll(
+          'input[type=checkbox], label, button, .btn, .checkbox, .form-check, [role=button]'
+        );
+        nodes.forEach(function(node) {
+          var rect = node.getBoundingClientRect();
+          if (!rect || rect.width === 0 || rect.height === 0) return;
+          var text = (node.textContent || '').replace(/\\s+/g, ' ').trim();
+          var title = (
+            node.getAttribute('title') ||
+            node.getAttribute('aria-label') ||
+            ''
+          ).trim();
+          var isTopLeft = rect.left >= -2 && rect.left <= 64 && rect.top >= -2 && rect.top <= 64;
+          var isSmall = rect.width <= 72 && rect.height <= 44;
+          var isEmpty = !text && !title;
+          if (isTopLeft && isSmall && isEmpty) {
+            node.classList.add('studio-hidden-corner-control');
+          }
+        });
+      }
+      function scheduleHelperCornerCleanup() {
+        window.setTimeout(cleanupHelperCornerControls, 0);
+        window.setTimeout(cleanupHelperCornerControls, 250);
+        window.setTimeout(cleanupHelperCornerControls, 900);
       }
       function applyHelperBusy(active) {
         var wrap = document.querySelector('.helper-wrap');
@@ -606,6 +933,13 @@ ui <- fluidPage(
       }
       function setFullLoading(active) {
         helperState.fullLoading = !!active;
+        window.clearTimeout(helperState.fullLoadingTimer);
+        if (helperState.fullLoading) {
+          helperState.fullLoadingTimer = window.setTimeout(function() {
+            helperState.fullLoading = false;
+            syncLoadingVisuals();
+          }, 120000);
+        }
         syncLoadingVisuals();
       }
       function markHelperReady(generation) {
@@ -615,8 +949,8 @@ ui <- fluidPage(
         }
         window.clearTimeout(helperState.fallbackTimer);
         helperState.readyGeneration = generation;
-        helperState.fullLoading = false;
-        syncLoadingVisuals();
+        setFullLoading(false);
+        scheduleHelperCornerCleanup();
         Shiny.setInputValue(
           'helper_ready_token',
           {generation: generation, at: Date.now()},
@@ -636,12 +970,63 @@ ui <- fluidPage(
           }
         }, 1500);
       }
+      document.addEventListener('click', function(event) {
+        var control = event.target.closest('.gt-ms-option, .gt-ms-all, .gt-ms-clear');
+        if (!control) return;
+        var dropdown = control.closest('.gt-ms-dropdown');
+        var inputId = null;
+        if (dropdown && dropdown.id && dropdown.id.endsWith('-dropdown')) {
+          inputId = dropdown.id.slice(0, -'-dropdown'.length);
+        } else {
+          var wrap = control.closest('#legend_filter-wrap, #label_filter-wrap');
+          inputId = wrap ? wrap.getAttribute('data-input-id') : null;
+        }
+        if (inputId !== 'legend_filter' && inputId !== 'label_filter') return;
+        window.setTimeout(function() {
+          var source = document.getElementById(inputId + '-dropdown') ||
+            document.getElementById(inputId + '-wrap');
+          if (!source) return;
+          var values = Array.from(source.querySelectorAll('.gt-ms-option.checked')).map(function(option) {
+            return option.getAttribute('data-value');
+          });
+          Shiny.setInputValue(
+            'studio_filter_change',
+            {id: inputId, values: values, at: Date.now()},
+            {priority: 'event'}
+          );
+        }, 0);
+      });
       Shiny.addCustomMessageHandler('dragmapr-labels', function(message) {
         var iframe = getHelperFrame();
         if (iframe && iframe.contentWindow) {
           iframe.contentWindow.postMessage(
             {type: 'dragmapr-set-labels', labels: !!message.labels}, helperTargetOrigin()
           );
+        }
+      });
+      Shiny.addCustomMessageHandler('dragmapr-legend-values', function(message) {
+        var iframe = getHelperFrame();
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage(
+            {type: 'dragmapr-set-legend-values', values: message.values}, helperTargetOrigin()
+          );
+        }
+      });
+      Shiny.addCustomMessageHandler('dragmapr-label-values', function(message) {
+        var iframe = getHelperFrame();
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage(
+            {type: 'dragmapr-set-label-values', values: message.values}, helperTargetOrigin()
+          );
+        }
+      });
+      Shiny.addCustomMessageHandler('dragmapr-side-panel', function(message) {
+        var iframe = getHelperFrame();
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage(
+            {type: 'dragmapr-set-side-panel', sidePanel: !!message.sidePanel}, helperTargetOrigin()
+          );
+          scheduleHelperCornerCleanup();
         }
       });
       Shiny.addCustomMessageHandler('dragmapr-reset-state', function(message) {
@@ -706,22 +1091,13 @@ ui <- fluidPage(
           window.clearTimeout(helperState.fallbackTimer);
           helperState.activeGeneration = null;
           helperState.readyGeneration = null;
-          helperState.fullLoading = false;
+          setFullLoading(false);
         }
         syncLoadingVisuals();
       });
-      document.addEventListener('change', function(event) {
-        if (event.target && event.target.id === 'spatial_upload') {
-          setFullLoading(true);
-        }
-      });
-      document.addEventListener('click', function(event) {
-        var loadButton = event.target && event.target.closest &&
-          event.target.closest('#load_demo');
-        if (loadButton) {
-          setFullLoading(true);
-        }
-      }, true);
+      // Full-page loading is controlled from the Shiny server via
+      // the dragmapr-loading custom message. Avoid also starting it from
+      // raw browser events, because that can overlap with the helper overlay.
 
       window.addEventListener('message', function(event) {
         var iframe = getHelperFrame();
@@ -734,6 +1110,7 @@ ui <- fluidPage(
         if (event.target && event.target.matches &&
             event.target.matches('iframe.studio-helper-frame')) {
           scheduleHelperFallback(currentHelperGeneration());
+          scheduleHelperCornerCleanup();
         }
       }, true);
       document.addEventListener('click', function(event) {
@@ -769,9 +1146,10 @@ ui <- fluidPage(
     sidebarPanel(
       width = 3,
 
-      tags$div(
-        class = "studio-card",
-        tags$div("Data source", class = "studio-section"),
+      studio_sidebar_panel(
+        "Data source",
+        "Upload files or start from the demo",
+        open = TRUE,
         fileInput(
           "spatial_upload", "Upload spatial file",
           multiple = TRUE,
@@ -783,37 +1161,26 @@ ui <- fluidPage(
         )
       ),
 
-      tags$div(
-        class = "studio-card",
-        tags$div("Columns & colors", class = "studio-section"),
+      studio_sidebar_panel(
+        "Columns & colors",
+        "Choose the grouping field and palette",
+        open = TRUE,
         uiOutput("column_controls"),
         uiOutput("color_pickers")
       ),
 
-      tags$div(
-        class = "studio-card",
-        tags$div("Legend", class = "studio-section"),
-        checkboxInput("show_legend", "Show legend in drag and preview", value = TRUE),
-        checkboxInput("legend_show_all", "Show all legend keys", value = FALSE),
-        textInput("legend_title", "Legend title", value = "Region"),
-        studio_select(
-          "legend_position",
-          "Legend position",
-          choices = c("Bottom" = "bottom", "Top" = "top", "Left" = "left", "Right" = "right", "None" = "none"),
-          selected = "bottom",
-          placeholder = "Choose legend position"
-        )
-      ),
-
-      tags$div(
-        class = "studio-card",
-        tags$div("Labels", class = "studio-section"),
+      studio_sidebar_panel(
+        "Labels",
+        "Show, edit, filter, and style map labels",
+        open = TRUE,
+        tags$div("Visibility", class = "studio-subgroup-title"),
         checkboxInput("show_labels", "Show labels", value = TRUE),
         uiOutput("label_filter_ui"),
+
+        tags$div("Label text", class = "studio-subgroup-title"),
         uiOutput("label_editor_ui"),
 
-        tags$div(class = "studio-divider"),
-
+        tags$div("Label style", class = "studio-subgroup-title"),
         uiOutput("label_color_ui"),
         tags$div(class = "studio-field-gap"),
         studio_select(
@@ -835,11 +1202,34 @@ ui <- fluidPage(
         uiOutput("label_size_controls")
       ),
 
-      tags$div(
-        class = "studio-card",
-        tags$div("Connectors", class = "studio-section"),
+      studio_sidebar_panel(
+        "Legend",
+        "Control map keys and placement",
+        tags$div("Visibility", class = "studio-subgroup-title"),
+        checkboxInput("show_legend", "Show legend in drag and preview", value = TRUE),
+        checkboxInput("legend_show_all", "Allow more than 25 legend keys", value = FALSE),
+        uiOutput("legend_filter_ui"),
+
+        tags$div("Placement", class = "studio-subgroup-title"),
+        textInput("legend_title", "Legend title", value = "Region"),
+        studio_select(
+          "legend_position",
+          "Legend position",
+          choices = c("Bottom" = "bottom", "Top" = "top", "Left" = "left", "Right" = "right", "None" = "none"),
+          selected = "bottom",
+          placeholder = "Choose legend position"
+        )
+      ),
+
+      studio_sidebar_panel(
+        "Connectors",
+        "Lines between labels and regions",
+        tags$div("Visibility", class = "studio-subgroup-title"),
         checkboxInput("show_connectors", "Show connector lines", value = FALSE),
         checkboxInput("connector_smart", "Smart connector style", value = FALSE),
+
+        tags$div("Line style", class = "studio-subgroup-title"),
+        studio_color_input("connector_color", "Line color", value = "#334155"),
         studio_select(
           "connector_type", "Connector style",
           choices  = c("Straight" = "straight", "Elbow" = "elbow",
@@ -866,10 +1256,39 @@ ui <- fluidPage(
                     min = 0.25, max = 2.5, value = 0.45, step = 0.05)
       ),
 
-      tags$div(
-        class = "studio-card",
-        tags$div("Export", class = "studio-section"),
-        checkboxInput("show_helper_panel", "Show offset panel in drag view", value = TRUE),
+      studio_sidebar_panel(
+        "Movement context",
+        "Original outlines, motion lines, and trails",
+        tags$div("Context layers", class = "studio-subgroup-title"),
+        checkboxInput("show_origin_outlines", "Show origin outlines", value = FALSE),
+        checkboxInput("show_movement_connectors", "Show movement connectors", value = FALSE),
+        checkboxInput("show_drag_trail", "Show drag preview trail", value = FALSE),
+
+        tags$div("Movement connector style", class = "studio-subgroup-title"),
+        studio_color_input("movement_connector_color", "Movement connector color", value = "#64748b"),
+        sliderInput("movement_connector_opacity", "Movement connector opacity",
+                    min = 0, max = 1, value = 0.72, step = 0.05),
+        sliderInput("movement_connector_linewidth", "Movement connector thickness",
+                    min = 0.25, max = 3, value = 0.45, step = 0.05),
+        studio_select(
+          "movement_connector_linetype", "Movement connector line style",
+          choices = c("Solid" = "solid", "Dashed" = "dashed", "Dotted" = "dotted"),
+          selected = "solid",
+          placeholder = "Choose movement line style"
+        ),
+        tags$div(class = "studio-field-gap"),
+        studio_select(
+          "movement_connector_endpoint", "Movement connector arrow",
+          choices = c("Closed arrow" = "closed", "Open arrow" = "open", "None" = "none"),
+          selected = "closed",
+          placeholder = "Choose movement arrow"
+        )
+      ),
+
+      studio_sidebar_panel(
+        "Export",
+        "Download images, data, helper files, and bundles",
+        tags$div("Static output", class = "studio-subgroup-title"),
         textInput("static_title", "Static map title", value = "dragmapr spatial studio"),
         tags$div(
           class = "studio-action-row",
@@ -893,6 +1312,8 @@ ui <- fluidPage(
           "The R script expects the Project ZIP in the same folder, or you can edit project_path.",
           class = "studio-help"
         ),
+
+        tags$div("Downloads", class = "studio-subgroup-title"),
         tags$div(
           class = "download-grid",
           downloadButton("download_png",        "PNG"),
@@ -909,7 +1330,8 @@ ui <- fluidPage(
           downloadButton("download_bundle",     "Project ZIP"),
           downloadButton("download_static_bundle", "Static bundle")
         ),
-        tags$div(class = "studio-divider"),
+
+        tags$div("Open saved project", class = "studio-subgroup-title"),
         tags$p(
           "Reopen a Project ZIP previously downloaded from Spatial Studio.",
           class = "studio-help"
@@ -930,49 +1352,58 @@ ui <- fluidPage(
         tags$span("Map controls", class = "map-control-title"),
         uiOutput("history_controls")
       ),
-      tabsetPanel(
-        tabPanel(
-          "Drag",
-          tags$div(
-            class = "helper-wrap",
-            uiOutput("helper"),
+      tags$div(
+        class = "workspace-tabs",
+        tabsetPanel(
+          id = "workspace_tab",
+          tabPanel(
+            "Drag",
             tags$div(
-              id = "helper-overlay",
-              class = "helper-overlay",
-              tags$div(class = "studio-spinner"),
-              tags$p("Updating drag map...")
+              class = "helper-wrap",
+              uiOutput("helper"),
+              tags$div(
+                id = "helper-overlay",
+                class = "helper-overlay",
+                tags$div(class = "studio-spinner"),
+                tags$p("Updating drag map...")
+              )
             )
+          ),
+          tabPanel(
+            "Preview",
+            tags$div(
+              class = "preview-toolbar",
+              actionButton("refresh_preview", "Refresh preview", class = "btn-sm btn-default"),
+              checkboxInput("auto_preview", "Auto-refresh after dragging", value = FALSE)
+            ),
+            plotOutput("preview", height = 620)
+          ),
+          tabPanel(
+            "State",
+            tags$h4("Key reactives"),
+            tags$pre(paste(
+              "source_sf()       raw sf from upload / demo / project bundle",
+              "projected_sf()    after prepare_dragmapr_sf()",
+              "region_col()      chosen grouping column",
+              "label_col()       chosen label column",
+              "label_table()     make_region_labels() + style flags",
+              "region_state()    current region offsets",
+              "label_state()     current label offsets",
+              "state$label_edits edited label text keyed by label_id",
+              "region_palette()  named color vector",
+              "current_plot()    ggplot2 object from render_dragged_map()",
+              sep = "\n"
+            )),
+            tags$h4("Region offsets"),
+            verbatimTextOutput("region_state_text", placeholder = TRUE),
+            tags$h4("Label offsets"),
+            verbatimTextOutput("label_state_text", placeholder = TRUE)
           )
         ),
-        tabPanel(
-          "Preview",
-          tags$div(
-            class = "preview-toolbar",
-            actionButton("refresh_preview", "Refresh preview", class = "btn-sm btn-default"),
-            checkboxInput("auto_preview", "Auto-refresh preview", value = FALSE)
-          ),
-          plotOutput("preview", height = 620)
-        ),
-        tabPanel(
-          "State",
-          tags$h4("Key reactives"),
-          tags$pre(paste(
-            "source_sf()       raw sf from upload / demo / project bundle",
-            "projected_sf()    after prepare_dragmapr_sf()",
-            "region_col()      chosen grouping column",
-            "label_col()       chosen label column",
-            "label_table()     make_region_labels() + style flags",
-            "region_state()    current region offsets",
-            "label_state()     current label offsets",
-            "state$label_edits edited label text keyed by label_id",
-            "region_palette()  named color vector",
-            "current_plot()    ggplot2 object from render_dragged_map()",
-            sep = "\n"
-          )),
-          tags$h4("Region offsets"),
-          verbatimTextOutput("region_state_text", placeholder = TRUE),
-          tags$h4("Label offsets"),
-          verbatimTextOutput("label_state_text", placeholder = TRUE)
+        conditionalPanel(
+          condition = "input.workspace_tab === 'Drag'",
+          class = "workspace-offset-toggle",
+          checkboxInput("show_helper_panel", "Offset panel", value = TRUE)
         )
       )
     )
@@ -1002,6 +1433,8 @@ server <- function(input, output, session) {
     static_title = "dragmapr spatial studio",
     pending_region_col = NULL,
     pending_label_col  = NULL,
+    legend_filter_selection = NULL,
+    label_filter_selection = NULL,
     column_select_signature = NULL,
     undo_stack = list(),
     redo_stack = list(),
@@ -1045,6 +1478,12 @@ server <- function(input, output, session) {
 
   finish_ingest <- function() {
     state$ingesting <- FALSE
+    session$onFlushed(function() {
+      helper_busy <- isolate(isTRUE(state$helper_loading) || isTRUE(state$helper_building))
+      if (!helper_busy) {
+        set_loading(FALSE)
+      }
+    }, once = TRUE)
   }
 
   clear_project_state <- function() {
@@ -1055,6 +1494,8 @@ server <- function(input, output, session) {
     state$label_palette_override <- NULL
     state$pending_region_col <- NULL
     state$pending_label_col <- NULL
+    state$legend_filter_selection <- NULL
+    state$label_filter_selection <- NULL
     state$column_select_signature <- NULL
     state$undo_stack <- list()
     state$redo_stack <- list()
@@ -1133,7 +1574,13 @@ server <- function(input, output, session) {
       length(unique(stats::na.omit(as.character(x[[col]]))))
     }, integer(1L))
     if (length(col_cards) == 0L) {
-      set_status(paste0("Loaded ", n_feat, " features from ", source_label, "."), "ok")
+      set_status(
+        paste0(
+          "Loaded ", n_feat, " features from ", source_label, ", but no usable attribute columns were found. ",
+          "Add a grouping column to the spatial data, then upload it again."
+        ),
+        "error"
+      )
       return()
     }
     best_col  <- names(which.min(col_cards))
@@ -1204,12 +1651,38 @@ server <- function(input, output, session) {
       set_source(project$source)
       state$static_title <- metadata$title %||% "dragmapr spatial studio"
       updateTextInput(session, "static_title", value = state$static_title)
+      updateCheckboxInput(session, "show_legend", value = isTRUE(metadata$show_legend %||% TRUE))
+      updateTextInput(session, "legend_title", value = metadata$legend_title %||% "Region")
+      updateSelectInput(session, "legend_position", selected = metadata$legend_position %||% "bottom")
+      updateCheckboxInput(
+        session,
+        "show_origin_outlines",
+        value = isTRUE(metadata$show_origin_outlines %||% FALSE)
+      )
+      updateCheckboxInput(
+        session,
+        "show_movement_connectors",
+        value = isTRUE(metadata$show_movement_connectors %||% FALSE)
+      )
+      updateCheckboxInput(
+        session,
+        "legend_show_all",
+        value = isTRUE(metadata$legend_show_all %||% FALSE)
+      )
+      update_studio_color_input(session, "connector_color", value = metadata$connector_color %||% "#334155")
+      update_studio_color_input(session, "movement_connector_color", value = metadata$movement_connector_color %||% "#64748b")
+      updateSliderInput(session, "movement_connector_opacity", value = metadata$movement_connector_opacity %||% 0.72)
+      updateSliderInput(session, "movement_connector_linewidth", value = metadata$movement_connector_linewidth %||% 0.45)
+      updateSelectInput(session, "movement_connector_linetype", selected = metadata$movement_connector_linetype %||% "solid")
+      updateSelectInput(session, "movement_connector_endpoint", selected = metadata$movement_connector_endpoint %||% "closed")
       state$undo_stack <- list()
       state$redo_stack <- list()
       state$region_csv_cache <- if (!is.null(project$region_offsets)) csv_text(project$region_offsets) else NULL
       state$label_csv_cache <- if (!is.null(project$label_offsets)) csv_text(project$label_offsets) else NULL
       state$pending_region_col <- metadata$region_col %||% NULL
       state$pending_label_col <- metadata$label_col %||% NULL
+      state$legend_filter_selection <- if (is.null(metadata$legend_values)) NULL else as.character(metadata$legend_values)
+      state$label_filter_selection <- if (is.null(metadata$label_values)) NULL else as.character(metadata$label_values)
 
       edits <- metadata$label_edits %||% list()
       if (is.atomic(edits)) edits <- as.list(edits)
@@ -1302,6 +1775,39 @@ server <- function(input, output, session) {
     base_palette
   })
 
+  legend_values <- reactive({
+    groups <- region_groups()
+    selected <- state$legend_filter_selection
+    if (is.null(selected)) {
+      groups
+    } else {
+      intersect(as.character(selected), groups)
+    }
+  })
+
+  visible_legend_values <- reactive({
+    values <- legend_values()
+    if (!isTRUE(input$legend_show_all) && length(values) > LEGEND_THRESHOLD) {
+      character()
+    } else {
+      values
+    }
+  })
+
+  helper_region_palette <- reactive({
+    pal <- region_palette()
+    selected <- legend_values()
+    selected <- intersect(selected, names(pal))
+    c(pal[selected], pal[setdiff(names(pal), selected)])
+  })
+
+  legend_max_keys <- reactive({
+    # Keep the dragmapr renderer from suppressing the legend when the user
+    # selects fewer legend values than the total number of region groups.
+    # The selected values are applied through legend breaks/options instead.
+    as.integer(max(length(region_groups()), length(legend_values()), LEGEND_THRESHOLD, 1L))
+  })
+
   observeEvent(input$region_color_group, {
     groups <- region_groups()
     selected <- input$region_color_group
@@ -1345,7 +1851,7 @@ server <- function(input, output, session) {
 
   visible_label_ids <- reactive({
     ids <- all_label_table()$label_id
-    selected <- input$label_filter
+    selected <- state$label_filter_selection
     if (is.null(selected)) {
       ids
     } else {
@@ -1409,7 +1915,6 @@ server <- function(input, output, session) {
       connector_type = input$connector_type  %||% "straight"
     )
     labels <- apply_label_edits(labels, state$label_edits)
-    labels <- labels[labels$label_id %in% visible_label_ids(), , drop = FALSE]
     labels$label_color <- unname(label_palette()[as.character(labels$label_id)])
     labels$label_color[is.na(labels$label_color)] <- "#111827"
     labels
@@ -1446,11 +1951,17 @@ server <- function(input, output, session) {
   }, ignoreInit = FALSE)
 
   build_plot <- function(region_offsets, label_offsets) {
-    # Suppress the legend when there are too many groups; the studio handles
-    # this directly so it works regardless of which package version is installed.
-    max_keys <- if (isTRUE(input$legend_show_all)) Inf else LEGEND_THRESHOLD
+    # Keep the renderer's internal legend limit high enough for the full data,
+    # then use scale breaks below to control which keys are actually displayed.
+    legend_breaks <- visible_legend_values()
+    all_legend_values <- region_groups()
+    legend_active <- isTRUE(input$show_legend) &&
+      !identical(input$legend_position %||% "bottom", "none") &&
+      length(legend_breaks) > 0L
+    max_keys <- legend_max_keys()
     plot_labels <- if (isTRUE(input$show_labels)) {
       labels <- label_table()
+      labels <- labels[as.character(labels$label_id) %in% visible_label_ids(), , drop = FALSE]
       if (isTRUE(input$connector_smart)) {
         labels <- apply_smart_connector_types(labels, label_offsets)
       }
@@ -1463,37 +1974,61 @@ server <- function(input, output, session) {
       region_offsets      = region_offsets,
       region_col          = region_col(),
       labels              = plot_labels,
+      label_values        = visible_label_ids(),
       label_offsets       = label_offsets,
       region_palette      = region_palette(),
-      show_legend         = isTRUE(input$show_legend),
+      legend_values       = visible_legend_values(),
+      show_legend         = legend_active,
       max_legend_keys     = max_keys,
       legend_position     = input$legend_position %||% "bottom",
       legend_title        = input$legend_title %||% "Region",
       show_label_marker   = !identical(input$label_marker_shape %||% "circle", "none"),
       label_marker_shape  = input$label_marker_shape %||% "circle",
       marker_size         = (input$label_radius %||% 14) / 3,
+      connector_color     = studio_color_value(input$connector_color, "#334155"),
       connector_linewidth = input$connector_linewidth %||% 0.45,
       connector_linetype  = input$connector_linetype %||% "solid",
       connector_endpoint  = input$connector_endpoint %||% "none",
+      show_origin_outlines = isTRUE(input$show_origin_outlines),
+      show_movement_connectors = isTRUE(input$show_movement_connectors),
+      movement_connector_color = studio_color_value(input$movement_connector_color, "#64748b"),
+      movement_connector_opacity = input$movement_connector_opacity %||% 0.72,
+      movement_connector_linewidth = input$movement_connector_linewidth %||% 0.45,
+      movement_connector_linetype = input$movement_connector_linetype %||% "solid",
+      movement_connector_endpoint = input$movement_connector_endpoint %||% "closed",
       label_padding       = 0.12,
       map_background      = input$map_background %||% "white",
       title               = state$static_title
     )
-    if (isTRUE(input$show_legend) && !identical(input$legend_position %||% "bottom", "none")) {
-      key_count <- length(region_groups())
-      if (key_count > 0L) {
-        horizontal <- input$legend_position %in% c("top", "bottom")
-        legend_cols <- if (horizontal) min(4L, key_count) else 1L
-        plot <- plot +
-          ggplot2::guides(
-            fill = ggplot2::guide_legend(ncol = legend_cols, byrow = TRUE)
-          ) +
-          ggplot2::theme(
-            legend.box = if (horizontal) "horizontal" else "vertical",
-            legend.key.size = ggplot2::unit(0.42, "lines"),
-            legend.text = ggplot2::element_text(size = 8)
+    if (legend_active) {
+      key_count <- length(legend_breaks)
+      horizontal <- input$legend_position %in% c("top", "bottom")
+      legend_cols <- if (horizontal) min(4L, key_count) else 1L
+
+      # Only replace the fill scale when the user has chosen a subset of keys.
+      # suppressMessages() prevents ggplot2's harmless "Scale for fill is already
+      # present" message from appearing each time the multiselect changes.
+      if (!identical(as.character(legend_breaks), as.character(all_legend_values))) {
+        plot <- suppressMessages(
+          plot + ggplot2::scale_fill_manual(
+            values = region_palette(),
+            breaks = legend_breaks,
+            drop = FALSE
           )
+        )
       }
+
+      plot <- plot +
+        ggplot2::guides(
+          fill = ggplot2::guide_legend(ncol = legend_cols, byrow = TRUE)
+        ) +
+        ggplot2::theme(
+          legend.box = if (horizontal) "horizontal" else "vertical",
+          legend.key.size = ggplot2::unit(0.42, "lines"),
+          legend.text = ggplot2::element_text(size = 8)
+        )
+    } else {
+      plot <- plot + ggplot2::theme(legend.position = "none")
     }
     plot
   }
@@ -1519,9 +2054,14 @@ server <- function(input, output, session) {
   observeEvent(
     list(projected_sf(), region_col(), label_col(), region_palette(), label_table(),
          input$show_labels, input$show_legend, input$label_marker_shape,
-         input$connector_linewidth, input$legend_show_all, input$legend_position,
-         input$legend_title, input$connector_linetype, input$connector_endpoint,
-         input$connector_smart, input$map_background, state$static_title),
+         input$connector_color, input$connector_linewidth, input$legend_show_all, input$legend_filter,
+         input$legend_position, input$legend_title, input$connector_linetype, input$connector_endpoint,
+         input$connector_smart, input$show_origin_outlines, input$show_movement_connectors,
+         input$movement_connector_color, input$movement_connector_opacity,
+         input$movement_connector_linewidth, input$movement_connector_linetype,
+         input$movement_connector_endpoint,
+         input$map_background,
+         state$static_title),
     do_refresh(),
     ignoreInit = FALSE
   )
@@ -1558,6 +2098,11 @@ server <- function(input, output, session) {
   output$history_controls <- renderUI({
     can_undo <- length(state$undo_stack) > 1L
     can_redo <- length(state$redo_stack) > 0L
+    label_offsets <- label_state()
+    can_reset_labels <- nrow(label_offsets) > 0L && any(
+      is.finite(label_offsets$dx_m) & is.finite(label_offsets$dy_m) &
+        (label_offsets$dx_m != 0 | label_offsets$dy_m != 0)
+    )
     history_button <- function(id, label, class, enabled, title) {
       tags$button(
         id = id,
@@ -1579,6 +2124,15 @@ server <- function(input, output, session) {
         "redo_layout", "Redo", "btn-sm btn-default",
         can_redo,
         if (can_redo) "Redo the last undone drag-state change" else "No undone drag-state changes to redo"
+      ),
+      history_button(
+        "reset_label_positions", "Reset label positions", "btn-sm btn-default",
+        can_reset_labels,
+        if (can_reset_labels) {
+          "Return all dragged labels to their regions without moving regions"
+        } else {
+          "No dragged label positions to reset"
+        }
       ),
       actionButton("reset_layout", "Reset drag layout", class = "btn-sm btn-warning")
     )
@@ -1692,26 +2246,58 @@ server <- function(input, output, session) {
     }
   })
 
-  output$label_filter_ui <- renderUI({
-    labels <- all_label_table()
-    choices <- stats::setNames(
-      as.character(labels$label_id),
-      paste0(as.character(labels$label), " (", as.character(labels$region), ")")
-    )
-    selected <- isolate(input$label_filter)
+  output$legend_filter_ui <- renderUI({
+    groups <- region_groups()
+    if (length(groups) == 0L) {
+      return(NULL)
+    }
+    choices <- stats::setNames(groups, groups)
+    selected <- isolate(state$legend_filter_selection)
     if (is.null(selected)) {
       selected <- unname(choices)
     } else {
       selected <- intersect(as.character(selected), unname(choices))
     }
 
-    studio_multi_select(
-      "label_filter",
-      "Visible labels",
-      choices = choices,
-      selected = selected,
-      placeholder = "Choose labels to show",
-      all_label = "All labels"
+    tagList(
+      tags$p(
+        "Choose which categories appear in the legend. This does not filter the map itself.",
+        class = "studio-help"
+      ),
+      studio_multi_select(
+        "legend_filter",
+        "Legend values",
+        choices = choices,
+        selected = selected,
+        placeholder = "Choose legend keys to show",
+        all_label = "All legend values"
+      )
+    )
+  })
+
+  output$label_filter_ui <- renderUI({
+    labels <- all_label_table()
+    choices <- stats::setNames(
+      as.character(labels$label_id),
+      paste0(as.character(labels$label), " (", as.character(labels$region), ")")
+    )
+    selected <- isolate(state$label_filter_selection)
+    if (is.null(selected)) {
+      selected <- unname(choices)
+    } else {
+      selected <- intersect(as.character(selected), unname(choices))
+    }
+
+    tagList(
+      studio_multi_select(
+        "label_filter",
+        "Visible labels",
+        choices = choices,
+        selected = selected,
+        placeholder = "Choose labels to show",
+        all_label = "All labels"
+      ),
+      tags$div(class = "studio-field-gap")
     )
   })
 
@@ -1881,17 +2467,26 @@ server <- function(input, output, session) {
     state$pending_label_col <- NULL
   }, ignoreInit = FALSE)
 
-  # Rebuild helper HTML for data, grouping, or label-column changes. Palette
-  # and label-only style changes are sent to the existing iframe with
-  # postMessage so color edits do not reset the drag state or show a map overlay.
+  observeEvent(input$studio_filter_change, {
+    change <- input$studio_filter_change
+    values <- as.character(change$values %||% character())
+    if (identical(change$id, "legend_filter")) {
+      state$legend_filter_selection <- values
+    } else if (identical(change$id, "label_filter")) {
+      state$label_filter_selection <- values
+    }
+  }, ignoreInit = TRUE)
+
+  # Rebuild helper HTML only for data, grouping, or label-column changes.
+  # Presentation-only changes are sent to the existing iframe so they do not
+  # reset drag state or show a map overlay.
   observeEvent(
-    list(state$source_version, projected_sf(), region_col(), label_col(), input$show_helper_panel),
+    list(state$source_version, projected_sf(), region_col(), label_col()),
     {
       signature <- list(
         source_version = state$source_version,
         region_col = region_col(),
-        label_col = label_col(),
-        show_helper_panel = isTRUE(input$show_helper_panel %||% TRUE)
+        label_col = label_col()
       )
       if (identical(signature, state$helper_signature)) {
         return()
@@ -1908,6 +2503,7 @@ server <- function(input, output, session) {
           region_col          = region_col(),
           label_col           = label_col(),
           labels              = label_table(),
+          label_values        = visible_label_ids(),
           label_marker        = !identical(input$label_marker_shape %||% "circle", "none"),
           label_marker_shape  = input$label_marker_shape %||% "circle",
           label_text_size     = input$label_text_size %||% 11,
@@ -1916,18 +2512,28 @@ server <- function(input, output, session) {
           label_height        = input$label_height %||% 30,
           label_box_width     = input$box_width  %||% 170,
           label_box_height    = input$box_height %||% 76,
+          connector_color     = studio_color_value(input$connector_color, "#334155"),
           connector_linewidth = (input$connector_linewidth %||% 0.45) * 3,
           region_offsets      = isolate(region_state()),
           label_offsets       = isolate(label_state()),
-          region_palette      = region_palette(),
-          show_legend         = isTRUE(input$show_legend),
-          max_legend_keys     = if (isTRUE(input$legend_show_all)) 1000000 else LEGEND_THRESHOLD,
+          region_palette      = helper_region_palette(),
+          show_legend         = isTRUE(input$show_legend) && length(visible_legend_values()) > 0L,
+          max_legend_keys     = legend_max_keys(),
           legend_position     = input$legend_position %||% "bottom",
           legend_title        = input$legend_title %||% "Region",
+          legend_values       = visible_legend_values(),
           map_background      = input$map_background %||% "white",
           connector_linetype  = input$connector_linetype %||% "solid",
           connector_endpoint  = input$connector_endpoint %||% "none",
           connector_smart     = isTRUE(input$connector_smart),
+          show_origin_outlines = isTRUE(input$show_origin_outlines),
+          show_movement_connectors = isTRUE(input$show_movement_connectors),
+          movement_connector_color = studio_color_value(input$movement_connector_color, "#64748b"),
+          movement_connector_opacity = input$movement_connector_opacity %||% 0.72,
+          movement_connector_linewidth = (input$movement_connector_linewidth %||% 0.45) * 3,
+          movement_connector_linetype = input$movement_connector_linetype %||% "solid",
+          movement_connector_endpoint = input$movement_connector_endpoint %||% "closed",
+          show_drag_trail      = isTRUE(input$show_drag_trail),
           side_panel          = isTRUE(input$show_helper_panel %||% TRUE),
           file                = helper_file
         )
@@ -1946,15 +2552,36 @@ server <- function(input, output, session) {
     session$sendCustomMessage("dragmapr-labels", list(labels = isTRUE(input$show_labels)))
   }, ignoreInit = FALSE)
 
+  observeEvent(visible_legend_values(), {
+    session$sendCustomMessage(
+      "dragmapr-legend-values",
+      list(values = as.list(visible_legend_values()))
+    )
+  }, ignoreInit = TRUE)
+
+  observeEvent(visible_label_ids(), {
+    session$sendCustomMessage(
+      "dragmapr-label-values",
+      list(values = as.list(visible_label_ids()))
+    )
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$show_helper_panel, {
+    session$sendCustomMessage(
+      "dragmapr-side-panel",
+      list(sidePanel = isTRUE(input$show_helper_panel %||% TRUE))
+    )
+  }, ignoreInit = TRUE)
+
   observeEvent(label_table(), {
     if (isTRUE(state$helper_loading) || isTRUE(state$helper_building)) return()
     session$sendCustomMessage("dragmapr-label-data", list(labels = rows_for_message(label_table())))
   }, ignoreInit = TRUE)
 
-  observeEvent(region_palette(), {
+  observeEvent(helper_region_palette(), {
     if (isTRUE(state$helper_loading) || isTRUE(state$helper_building)) return()
     session$sendCustomMessage("dragmapr-region-palette", list(
-      palette = as.list(region_palette())
+      palette = as.list(helper_region_palette())
     ))
   }, ignoreInit = TRUE)
 
@@ -1968,10 +2595,14 @@ server <- function(input, output, session) {
   observeEvent(
     list(input$label_marker_shape, input$label_text_size,
          input$label_radius, input$label_width, input$label_height,
-         input$box_width, input$box_height, input$connector_linewidth,
+         input$box_width, input$box_height, input$connector_color, input$connector_linewidth,
          input$connector_linetype, input$connector_endpoint, input$connector_smart,
-         input$show_legend, input$legend_show_all, input$legend_position,
-         input$legend_title, input$map_background),
+         input$show_legend, input$legend_show_all, input$legend_filter,
+         input$legend_position, input$legend_title, input$show_origin_outlines, input$show_movement_connectors,
+         input$movement_connector_color, input$movement_connector_opacity,
+         input$movement_connector_linewidth, input$movement_connector_linetype,
+         input$movement_connector_endpoint,
+         input$show_drag_trail, input$map_background),
     {
       session$sendCustomMessage("dragmapr-label-options", list(options = list(
         labelMarker = !identical(input$label_marker_shape %||% "circle", "none"),
@@ -1982,12 +2613,22 @@ server <- function(input, output, session) {
         labelHeight = input$label_height %||% 30,
         labelBoxWidth = input$box_width %||% 170,
         labelBoxHeight = input$box_height %||% 76,
+        connectorColor = studio_color_value(input$connector_color, "#334155"),
         connectorLinewidth = (input$connector_linewidth %||% 0.45) * 3,
         connectorLinetype = input$connector_linetype %||% "solid",
         connectorEndpoint = input$connector_endpoint %||% "none",
         connectorSmart = isTRUE(input$connector_smart),
-        showLegend = isTRUE(input$show_legend),
-        maxLegendKeys = if (isTRUE(input$legend_show_all)) 1000000 else LEGEND_THRESHOLD,
+        showOriginOutlines = isTRUE(input$show_origin_outlines),
+        showMovementConnectors = isTRUE(input$show_movement_connectors),
+        movementConnectorColor = studio_color_value(input$movement_connector_color, "#64748b"),
+        movementConnectorOpacity = input$movement_connector_opacity %||% 0.72,
+        movementConnectorLinewidth = (input$movement_connector_linewidth %||% 0.45) * 3,
+        movementConnectorLinetype = input$movement_connector_linetype %||% "solid",
+        movementConnectorEndpoint = input$movement_connector_endpoint %||% "closed",
+        showDragTrail = isTRUE(input$show_drag_trail),
+        showLegend = isTRUE(input$show_legend) && length(visible_legend_values()) > 0L,
+        maxLegendKeys = legend_max_keys(),
+        legendValues = as.list(visible_legend_values()),
         legendPosition = input$legend_position %||% "bottom",
         legendTitle = input$legend_title %||% "Region",
         mapBackground = input$map_background %||% "white"
@@ -2035,6 +2676,18 @@ server <- function(input, output, session) {
     session$sendCustomMessage("dragmapr-reset-state", list())
     do_refresh()
     set_status("Reset region and label offsets.", "ok")
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$reset_label_positions, {
+    region_offsets <- region_state()
+    zero_labels <- empty_label_offsets(all_label_table())
+    state$label_csv_cache <- csv_text(zero_labels)
+    session$sendCustomMessage("dragmapr-state", list(
+      regionOffsets = rows_for_message(region_offsets),
+      labelOffsets = rows_for_message(zero_labels)
+    ))
+    do_refresh()
+    set_status("Reset label positions without moving regions.", "ok")
   }, ignoreInit = TRUE)
 
   observeEvent(input$script_download_requested, {
@@ -2091,15 +2744,26 @@ server <- function(input, output, session) {
       crs_epsg            = sf::st_crs(projected_sf())$epsg,
       show_labels         = isTRUE(input$show_labels),
       show_legend         = isTRUE(input$show_legend),
+      legend_show_all     = isTRUE(input$legend_show_all),
+      legend_values       = legend_values(),
+      label_values        = visible_label_ids(),
       legend_position     = input$legend_position %||% "bottom",
       legend_title        = input$legend_title %||% "Region",
       map_background      = input$map_background %||% "white",
       label_marker_shape  = input$label_marker_shape %||% "circle",
       marker_size         = (input$label_radius %||% 14) / 3,
+      connector_color     = studio_color_value(input$connector_color, "#334155"),
       connector_linewidth = input$connector_linewidth %||% 0.45,
       connector_linetype  = input$connector_linetype %||% "solid",
       connector_endpoint  = input$connector_endpoint %||% "none",
       connector_smart     = isTRUE(input$connector_smart),
+      show_origin_outlines = isTRUE(input$show_origin_outlines),
+      show_movement_connectors = isTRUE(input$show_movement_connectors),
+      movement_connector_color = studio_color_value(input$movement_connector_color, "#64748b"),
+      movement_connector_opacity = input$movement_connector_opacity %||% 0.72,
+      movement_connector_linewidth = input$movement_connector_linewidth %||% 0.45,
+      movement_connector_linetype = input$movement_connector_linetype %||% "solid",
+      movement_connector_endpoint = input$movement_connector_endpoint %||% "closed",
       label_padding       = 0.12,
       label_edits         = state$label_edits,
       created             = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
@@ -2277,7 +2941,7 @@ server <- function(input, output, session) {
 
 apply_smart_connector_types <- function(labels, label_offsets) {
   if (nrow(labels) == 0L) return(labels)
-  offsets <- normalize_label_state(label_offsets, source = "`label_offsets`")
+  offsets <- normalize_studio_label_offsets(label_offsets)
   idx <- match(as.character(labels$label_id), as.character(offsets$label_id))
   dx <- ifelse(is.na(idx), 0, offsets$dx_m[idx])
   dy <- ifelse(is.na(idx), 0, offsets$dy_m[idx])

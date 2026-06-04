@@ -169,6 +169,83 @@ test_that("render_dragged_map can omit labels", {
   expect_equal(length(plot$layers), 1)
 })
 
+test_that("render_dragged_map shows origin outlines only for moved regions", {
+  x <- sf::st_sf(
+    region = c("North", "South"),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      sf::st_polygon(list(rbind(c(5, 0), c(9, 0), c(9, 4), c(5, 4), c(5, 0)))),
+      crs = 3857
+    )
+  )
+  offsets <- data.frame(
+    region = c("North", "South"),
+    dx_m = c(5, 0),
+    dy_m = c(0, 0)
+  )
+
+  hidden <- render_dragged_map(
+    x,
+    region_offsets = offsets,
+    region_col = "region",
+    labels = FALSE
+  )
+  shown <- render_dragged_map(
+    x,
+    region_offsets = offsets,
+    region_col = "region",
+    labels = FALSE,
+    show_origin_outlines = TRUE
+  )
+  zero <- render_dragged_map(
+    x,
+    region_col = "region",
+    labels = FALSE,
+    show_origin_outlines = TRUE
+  )
+
+  expect_equal(length(hidden$layers), 1)
+  expect_equal(length(shown$layers), 2)
+  expect_equal(as.character(shown$layers[[1]]$data$region), "North")
+  expect_equal(shown$layers[[1]]$aes_params$linetype, "dashed")
+  expect_equal(length(zero$layers), 1)
+})
+
+test_that("render_dragged_map shows movement connectors only for moved regions", {
+  x <- sf::st_sf(
+    region = c("North", "South"),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      sf::st_polygon(list(rbind(c(5, 0), c(9, 0), c(9, 4), c(5, 4), c(5, 0)))),
+      crs = 3857
+    )
+  )
+  offsets <- data.frame(region = c("North", "South"), dx_m = c(5, 0), dy_m = c(2, 0))
+
+  plot <- render_dragged_map(
+    x,
+    region_offsets = offsets,
+    region_col = "region",
+    labels = FALSE,
+    show_movement_connectors = TRUE,
+    movement_connector_color = "#123456",
+    movement_connector_opacity = 0.4,
+    movement_connector_linewidth = 1.2,
+    movement_connector_linetype = "dotted",
+    movement_connector_endpoint = "open"
+  )
+
+  expect_equal(length(plot$layers), 2)
+  expect_equal(as.character(plot$layers[[1]]$data$region), "North")
+  expect_equal(plot$layers[[1]]$data$xend - plot$layers[[1]]$data$x, 5)
+  expect_equal(plot$layers[[1]]$data$yend - plot$layers[[1]]$data$y, 2)
+  expect_equal(plot$layers[[1]]$aes_params$colour, "#123456")
+  expect_equal(plot$layers[[1]]$aes_params$alpha, 0.4)
+  expect_equal(plot$layers[[1]]$aes_params$linewidth, 1.2)
+  expect_equal(plot$layers[[1]]$aes_params$linetype, "dotted")
+  expect_equal(plot$layers[[1]]$geom_params$arrow$type, 1L)
+})
+
 test_that("render_dragged_map supports legend position and label colors", {
   x <- sf::st_sf(
     region = "North",
@@ -224,6 +301,7 @@ test_that("render_dragged_map supports legend title, background, and connector s
     show_legend = TRUE,
     legend_title = "Municipality",
     map_background = "light_grid",
+    connector_color = "#AABBCC",
     connector_linetype = "dashed",
     connector_endpoint = "arrow"
   )
@@ -232,6 +310,7 @@ test_that("render_dragged_map supports legend title, background, and connector s
   expect_equal(plot$scales$scales[[1]]$name, "Municipality")
   expect_equal(plot$theme$panel.background$fill, "#f8fafc")
   expect_equal(plot$layers[[2]]$aes_params$linetype, "dashed")
+  expect_equal(plot$layers[[2]]$aes_params$colour, "#AABBCC")
   expect_s3_class(plot$layers[[2]]$geom_params$arrow, "arrow")
 
   dark_plot <- render_dragged_map(
@@ -550,4 +629,29 @@ test_that("example_panel_layout exercises non-map geometry", {
     title = "Panel smoke test"
   )
   expect_s3_class(plot, "ggplot")
+})
+
+test_that("render_dragged_map filters legend keys and label IDs", {
+  x <- sf::st_sf(
+    region = c("North", "South"),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0,0), c(4,0), c(4,4), c(0,4), c(0,0)))),
+      sf::st_polygon(list(rbind(c(5,0), c(9,0), c(9,4), c(5,4), c(5,0)))),
+      crs = 3857
+    )
+  )
+
+  plot <- render_dragged_map(
+    x,
+    region_col = "region",
+    legend_values = "South",
+    label_values = "North"
+  )
+
+  expect_equal(plot$scales$scales[[1]]$breaks, "South")
+  label_layers <- Filter(function(layer) "label_id" %in% names(layer$data), plot$layers)
+  expect_true(length(label_layers) > 0L)
+  expect_true(all(vapply(label_layers, function(layer) {
+    all(as.character(layer$data$label_id) == "North")
+  }, logical(1))))
 })
