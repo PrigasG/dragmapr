@@ -11,12 +11,14 @@ render_dragged_map(
   label_col = region_col,
   label_offsets = NULL,
   labels = NULL,
+  label_values = NULL,
   region_palette = NULL,
   region_labels = NULL,
   show_legend = TRUE,
   max_legend_keys = 25L,
   legend_position = c("bottom", "top", "left", "right", "none"),
   legend_title = "Region",
+  legend_values = NULL,
   title = NULL,
   label_size = 3.4,
   show_label_marker = TRUE,
@@ -37,6 +39,13 @@ render_dragged_map(
   connector_squiggle_amplitude = 12000,
   connector_squiggle_waves = 4,
   connector_end_gap = NULL,
+  show_origin_outlines = FALSE,
+  show_movement_connectors = FALSE,
+  movement_connector_color = "#64748b",
+  movement_connector_opacity = 0.72,
+  movement_connector_linewidth = 0.45,
+  movement_connector_linetype = c("solid", "dashed", "dotted"),
+  movement_connector_endpoint = c("closed", "open", "none"),
   label_padding = 0.08,
   map_background = c("white", "transparent", "light_grid", "dark"),
   file = NULL,
@@ -60,6 +69,9 @@ render_dragged_map(
 \item{labels}{Optional label table from \code{make_region_labels()} or
 \code{as_drag_labels()}. Use \code{FALSE} to omit labels from the static render.}
 
+\item{label_values}{Optional character vector of label IDs to render.
+\code{NULL} renders all labels.}
+
 \item{region_palette}{Optional named vector of fill colors keyed by region.}
 
 \item{region_labels}{Optional named vector of legend labels keyed by region.}
@@ -76,6 +88,9 @@ One of \code{"bottom"}, \code{"top"}, \code{"left"}, \code{"right"}, or \code{"n
 
 \item{legend_title}{Title shown above the fill legend. Defaults to
 \code{"Region"}.}
+
+\item{legend_values}{Optional character vector of region values to include
+in the legend. \code{NULL} includes all region values.}
 
 \item{title}{Optional plot title.}
 
@@ -123,6 +138,20 @@ country-scale datasets; scale it up or down to match your data extent.}
 
 \item{connector_end_gap}{Distance, in plot units, to trim connector endpoints
 away from label centers. Defaults to an automatic value based on plot size.}
+
+\item{show_origin_outlines}{Show the original, unshifted outlines of regions
+with non-zero offsets beneath the moved regions.}
+
+\item{show_movement_connectors}{Draw a connector from each moved region's
+original representative point to its translated location.}
+
+\item{movement_connector_color, movement_connector_opacity, movement_connector_linewidth}{Static export styling for movement connectors.}
+
+\item{movement_connector_linetype}{Movement connector line style. One of
+\code{"solid"}, \code{"dashed"}, or \code{"dotted"}.}
+
+\item{movement_connector_endpoint}{Movement connector endpoint. One of
+\code{"none"}, \code{"open"}, or \code{"closed"}.}
 
 \item{label_padding}{Proportional padding added around displaced labels and
 connectors to avoid clipping static exports.}

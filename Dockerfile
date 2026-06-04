@@ -1,16 +1,4 @@
 # Dockerfile for the dragmapr Spatial Studio on HuggingFace Spaces.
-#
-# Build and run locally:
-#   docker build -t dragmapr-studio .
-#   docker run --rm -p 7860:7860 dragmapr-studio
-#   open http://localhost:7860
-#
-# HuggingFace Spaces picks this file up automatically when the Space SDK
-# is set to "Docker".  Push the package repo to the Space remote and the
-# platform builds and serves the container.
-#
-#   git remote add space https://huggingface.co/spaces/Prigas89/dragmapr-spatial-studio
-#   git push space main
 
 FROM rocker/geospatial:4.4.2
 
@@ -24,8 +12,6 @@ RUN install2.r --error --skipinstalled --ncpus -1 \
     && rm -rf /tmp/downloaded_packages /var/lib/apt/lists/*
 
 # ---- Install dragmapr from the repo source ----------------------------------
-# The full package source is copied in so the installed package matches
-# exactly what is in this commit, including inst/examples/shiny_spatial_studio.R.
 WORKDIR /pkg
 COPY . /pkg
 
@@ -37,8 +23,7 @@ RUN R --no-save -e " \
 # ---- Runtime ----------------------------------------------------------------
 EXPOSE 7860
 
-# shiny.maxRequestSize is also set inside the app, but we set it here too
-# so it applies before the app script is sourced.
+# shiny.maxRequestSize is also set here
 ENV SHINY_MAX_REQUEST_SIZE=104857600
 
 CMD ["R", "--no-save", "-e", \

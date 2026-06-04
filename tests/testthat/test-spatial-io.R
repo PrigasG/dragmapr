@@ -146,6 +146,94 @@ test_that("spatial studio creates valid empty label offsets", {
   expect_named(out, c("label_id", "region", "dx_m", "dy_m"))
 })
 
+test_that("spatial studio smart connectors do not depend on package internals", {
+  env <- new.env(parent = globalenv())
+  suppressWarnings(
+    source(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"), local = env)
+  )
+  labels <- data.frame(
+    label_id = c("a", "b"),
+    region = c("A", "B"),
+    connector_type = c("straight", "straight"),
+    stringsAsFactors = FALSE
+  )
+  offsets <- data.frame(
+    label_id = c("a", "b"),
+    region = c("A", "B"),
+    dx_m = c(1000, 50000),
+    dy_m = c(1000, 1000),
+    stringsAsFactors = FALSE
+  )
+
+  out <- env$apply_smart_connector_types(labels, offsets)
+
+  expect_equal(out$connector_type, c("straight", "elbow"))
+})
+
+test_that("spatial studio finishes ingest when an upload cannot build a helper", {
+  env <- new.env(parent = globalenv())
+  suppressWarnings(
+    source(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"), local = env)
+  )
+  x <- sf::st_sf(
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0, 0)))),
+      crs = 4326
+    )
+  )
+  path <- tempfile(fileext = ".geojson")
+  sf::st_write(x, path, driver = "GeoJSON", quiet = TRUE)
+  upload <- data.frame(
+    name = basename(path),
+    size = file.info(path)$size,
+    type = "application/geo+json",
+    datapath = path,
+    stringsAsFactors = FALSE
+  )
+
+  shiny::testServer(env$server, {
+    session$setInputs(spatial_upload = upload)
+    session$flushReact()
+
+    expect_equal(state$source_version, 1L)
+    expect_false(state$helper_loading)
+    expect_false(state$helper_building)
+    expect_match(state$status, "no usable attribute columns", fixed = TRUE)
+  })
+})
+
+test_that("spatial studio keeps loading while a valid upload helper is rebuilding", {
+  env <- new.env(parent = globalenv())
+  suppressWarnings(
+    source(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"), local = env)
+  )
+  x <- sf::st_sf(
+    group = "A",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0, 0)))),
+      crs = 4326
+    )
+  )
+  path <- tempfile(fileext = ".geojson")
+  sf::st_write(x, path, driver = "GeoJSON", quiet = TRUE)
+  upload <- data.frame(
+    name = basename(path),
+    size = file.info(path)$size,
+    type = "application/geo+json",
+    datapath = path,
+    stringsAsFactors = FALSE
+  )
+
+  shiny::testServer(env$server, {
+    session$setInputs(spatial_upload = upload)
+    session$flushReact()
+
+    expect_equal(state$source_version, 1L)
+    expect_true(state$helper_loading)
+    expect_equal(state$helper_loading_generation, state$helper_token)
+  })
+})
+
 test_that("spatial studio uses natural stable display factors", {
   env <- new.env(parent = globalenv())
   suppressWarnings(
@@ -180,6 +268,14 @@ test_that("spatial studio has a fallback for helper readiness", {
   expect_match(studio_code, "event.target.matches('iframe.studio-helper-frame')", fixed = TRUE)
   expect_match(studio_code, "generation !== helperState.activeGeneration", fixed = TRUE)
   expect_match(studio_code, "}, 1500);", fixed = TRUE)
+  expect_match(studio_code, "fullLoadingTimer", fixed = TRUE)
+  expect_match(studio_code, "}, 120000);", fixed = TRUE)
+  expect_match(studio_code, "session$onFlushed(function()", fixed = TRUE)
+  expect_match(
+    studio_code,
+    "isolate(isTRUE(state$helper_loading) || isTRUE(state$helper_building))",
+    fixed = TRUE
+  )
   expect_match(studio_code, "req(state$helper_token > 0L, file.exists(helper_file))", fixed = TRUE)
 })
 
@@ -195,7 +291,116 @@ test_that("spatial studio applies text edits explicitly and locks controls durin
   expect_match(studio_code, "dragmapr-helper-busy", fixed = TRUE)
   expect_match(
     studio_code,
-    "list(state$source_version, projected_sf(), region_col(), label_col(), input$show_helper_panel)",
+    "list(state$source_version, projected_sf(), region_col(), label_col())",
     fixed = TRUE
   )
+  expect_match(studio_code, "Shiny.addCustomMessageHandler('dragmapr-side-panel'", fixed = TRUE)
+  expect_match(studio_code, '"dragmapr-side-panel"', fixed = TRUE)
+  expect_false(grepl(
+    "list(state$source_version, projected_sf(), region_col(), label_col(), input$show_helper_panel)",
+    studio_code,
+    fixed = TRUE
+  ))
+})
+
+test_that("spatial studio places the offset panel toggle beside Drag tabs", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
+
+  expect_match(studio_code, 'class = "workspace-tabs"', fixed = TRUE)
+  expect_match(studio_code, 'id = "workspace_tab"', fixed = TRUE)
+  expect_match(studio_code, 'condition = "input.workspace_tab === \'Drag\'"', fixed = TRUE)
+  expect_match(studio_code, 'class = "workspace-offset-toggle"', fixed = TRUE)
+  expect_match(studio_code, 'checkboxInput("show_helper_panel", "Offset panel", value = TRUE)', fixed = TRUE)
+  expect_false(grepl(
+    'checkboxInput("show_helper_panel", "Show offset panel in drag view", value = TRUE)',
+    studio_code,
+    fixed = TRUE
+  ))
+})
+
+test_that("spatial studio can reset label positions without moving regions", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
+
+  expect_match(
+    studio_code,
+    '"reset_label_positions", "Reset label positions", "btn-sm btn-default"',
+    fixed = TRUE
+  )
+  expect_match(studio_code, "observeEvent(input$reset_label_positions", fixed = TRUE)
+  expect_match(studio_code, "region_offsets <- region_state()", fixed = TRUE)
+  expect_match(studio_code, "zero_labels <- empty_label_offsets(all_label_table())", fixed = TRUE)
+  expect_match(studio_code, 'set_status("Reset label positions without moving regions.", "ok")', fixed = TRUE)
+})
+
+test_that("spatial studio demonstrates movement context controls", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
+
+  expect_match(
+    studio_code,
+    'checkboxInput("show_origin_outlines", "Show origin outlines", value = FALSE)',
+    fixed = TRUE
+  )
+  expect_match(studio_code, "show_origin_outlines = isTRUE(input$show_origin_outlines)", fixed = TRUE)
+  expect_match(studio_code, "showOriginOutlines = isTRUE(input$show_origin_outlines)", fixed = TRUE)
+  expect_match(studio_code, "metadata$show_origin_outlines %||% FALSE", fixed = TRUE)
+  expect_match(
+    studio_code,
+    'checkboxInput("show_movement_connectors", "Show movement connectors", value = FALSE)',
+    fixed = TRUE
+  )
+  expect_match(
+    studio_code,
+    'checkboxInput("show_drag_trail", "Show drag preview trail", value = FALSE)',
+    fixed = TRUE
+  )
+  expect_match(studio_code, "showMovementConnectors = isTRUE(input$show_movement_connectors)", fixed = TRUE)
+  expect_match(studio_code, "showDragTrail = isTRUE(input$show_drag_trail)", fixed = TRUE)
+  expect_match(studio_code, "metadata$show_movement_connectors %||% FALSE", fixed = TRUE)
+  expect_match(studio_code, 'studio_color_input("connector_color", "Line color", value = "#334155")', fixed = TRUE)
+  expect_match(studio_code, 'studio_color_input("movement_connector_color", "Movement connector color", value = "#64748b")', fixed = TRUE)
+  expect_match(studio_code, '"movement_connector_opacity", "Movement connector opacity"', fixed = TRUE)
+  expect_match(studio_code, '"movement_connector_linewidth", "Movement connector thickness"', fixed = TRUE)
+  expect_match(studio_code, '"movement_connector_linetype", "Movement connector line style"', fixed = TRUE)
+  expect_match(studio_code, '"movement_connector_endpoint", "Movement connector arrow"', fixed = TRUE)
+  expect_match(studio_code, "movementConnectorColor = studio_color_value", fixed = TRUE)
+  expect_match(studio_code, "movement_connector_endpoint = input$movement_connector_endpoint", fixed = TRUE)
+})
+
+test_that("spatial studio sends legend and label value filters live", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
+
+  expect_match(studio_code, "Shiny.addCustomMessageHandler('dragmapr-legend-values'", fixed = TRUE)
+  expect_match(studio_code, "Shiny.addCustomMessageHandler('dragmapr-label-values'", fixed = TRUE)
+  expect_match(studio_code, '"dragmapr-legend-values"', fixed = TRUE)
+  expect_match(studio_code, '"dragmapr-label-values"', fixed = TRUE)
+  expect_match(studio_code, "legend_values       = legend_values()", fixed = TRUE)
+  expect_match(studio_code, "label_values        = visible_label_ids()", fixed = TRUE)
+})
+
+test_that("spatial studio initializes legend and label multiselects with all choices", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
+
+  expect_match(studio_code, "legend_filter_selection = NULL", fixed = TRUE)
+  expect_match(studio_code, "label_filter_selection = NULL", fixed = TRUE)
+  expect_match(studio_code, "'studio_filter_change'", fixed = TRUE)
+  expect_match(studio_code, "observeEvent(input$studio_filter_change", fixed = TRUE)
+  expect_match(studio_code, "inputId = dropdown.id.slice", fixed = TRUE)
+  expect_match(studio_code, "document.getElementById(inputId + '-dropdown')", fixed = TRUE)
+  expect_match(studio_code, "selected <- state$legend_filter_selection", fixed = TRUE)
+  expect_match(studio_code, "selected <- state$label_filter_selection", fixed = TRUE)
+  expect_false(grepl(
+    "state$pending_legend_values",
+    studio_code,
+    fixed = TRUE
+  ))
+  expect_false(grepl(
+    "state$pending_label_values",
+    studio_code,
+    fixed = TRUE
+  ))
 })

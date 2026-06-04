@@ -8,6 +8,8 @@
 #' @param label_offsets Label state as a data frame, CSV path, or `NULL`.
 #' @param labels Optional label table from `make_region_labels()` or
 #'   `as_drag_labels()`. Use `FALSE` to omit labels from the static render.
+#' @param label_values Optional character vector of label IDs to render.
+#'   `NULL` renders all labels.
 #' @param region_palette Optional named vector of fill colors keyed by region.
 #' @param region_labels Optional named vector of legend labels keyed by region.
 #' @param show_legend Show the region fill legend.  When the number of distinct
@@ -19,6 +21,8 @@
 #'   One of `"bottom"`, `"top"`, `"left"`, `"right"`, or `"none"`.
 #' @param legend_title Title shown above the fill legend. Defaults to
 #'   `"Region"`.
+#' @param legend_values Optional character vector of region values to include
+#'   in the legend. `NULL` includes all region values.
 #' @param title Optional plot title.
 #' @param label_size Text size passed to [ggplot2::geom_text()]. Defaults to
 #'   `3.4`.
@@ -50,6 +54,16 @@
 #'   country-scale datasets; scale it up or down to match your data extent.
 #' @param connector_end_gap Distance, in plot units, to trim connector endpoints
 #'   away from label centers. Defaults to an automatic value based on plot size.
+#' @param show_origin_outlines Show the original, unshifted outlines of regions
+#'   with non-zero offsets beneath the moved regions.
+#' @param show_movement_connectors Draw a connector from each moved region's
+#'   original representative point to its translated location.
+#' @param movement_connector_color,movement_connector_opacity,movement_connector_linewidth
+#'   Static export styling for movement connectors.
+#' @param movement_connector_linetype Movement connector line style. One of
+#'   `"solid"`, `"dashed"`, or `"dotted"`.
+#' @param movement_connector_endpoint Movement connector endpoint. One of
+#'   `"none"`, `"open"`, or `"closed"`.
 #' @param label_padding Proportional padding added around displaced labels and
 #'   connectors to avoid clipping static exports.
 #' @param map_background Static map background. One of `"white"`,
@@ -96,12 +110,14 @@ render_dragged_map <- function(x,
                                label_col = region_col,
                                label_offsets = NULL,
                                labels = NULL,
+                               label_values = NULL,
                                region_palette = NULL,
                                region_labels = NULL,
                                show_legend = TRUE,
                                max_legend_keys = 25L,
                                legend_position = c("bottom", "top", "left", "right", "none"),
                                legend_title = "Region",
+                               legend_values = NULL,
                                title = NULL,
                                label_size = 3.4,
                                show_label_marker = TRUE,
@@ -122,6 +138,13 @@ render_dragged_map <- function(x,
                                connector_squiggle_amplitude = 12000,
                                connector_squiggle_waves = 4,
                                connector_end_gap = NULL,
+                               show_origin_outlines = FALSE,
+                               show_movement_connectors = FALSE,
+                               movement_connector_color = "#64748b",
+                               movement_connector_opacity = 0.72,
+                               movement_connector_linewidth = 0.45,
+                               movement_connector_linetype = c("solid", "dashed", "dotted"),
+                               movement_connector_endpoint = c("closed", "open", "none"),
                                label_padding = 0.08,
                                map_background = c("white", "transparent", "light_grid", "dark"),
                                file = NULL,
@@ -130,8 +153,34 @@ render_dragged_map <- function(x,
                                dpi = 300) {
   legend_position <- match.arg(legend_position)
   connector_endpoint <- match.arg(connector_endpoint)
+  movement_connector_linetype <- match.arg(movement_connector_linetype)
+  movement_connector_endpoint <- match.arg(movement_connector_endpoint)
   map_background <- match.arg(map_background)
   label_marker_shape <- match.arg(label_marker_shape)
+  if (!is.null(legend_values) && !is.character(legend_values)) {
+    stop("`legend_values` must be a character vector or NULL.", call. = FALSE)
+  }
+  if (!is.null(label_values) && !is.character(label_values)) {
+    stop("`label_values` must be a character vector or NULL.", call. = FALSE)
+  }
+  if (!is.logical(show_origin_outlines) || length(show_origin_outlines) != 1L || is.na(show_origin_outlines)) {
+    stop("`show_origin_outlines` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.logical(show_movement_connectors) || length(show_movement_connectors) != 1L || is.na(show_movement_connectors)) {
+    stop("`show_movement_connectors` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.character(movement_connector_color) || length(movement_connector_color) != 1L ||
+      is.na(movement_connector_color) || !nzchar(movement_connector_color)) {
+    stop("`movement_connector_color` must be a single color string.", call. = FALSE)
+  }
+  if (!is.numeric(movement_connector_opacity) || length(movement_connector_opacity) != 1L ||
+      !is.finite(movement_connector_opacity) || movement_connector_opacity < 0 || movement_connector_opacity > 1) {
+    stop("`movement_connector_opacity` must be a number between 0 and 1.", call. = FALSE)
+  }
+  if (!is.numeric(movement_connector_linewidth) || length(movement_connector_linewidth) != 1L ||
+      !is.finite(movement_connector_linewidth) || movement_connector_linewidth <= 0) {
+    stop("`movement_connector_linewidth` must be a positive number.", call. = FALSE)
+  }
   if (identical(legend_position, "none")) {
     show_legend <- FALSE
   }
@@ -154,6 +203,20 @@ render_dragged_map <- function(x,
   }
   region_offsets <- normalize_offsets(region_offsets, source = "`region_offsets`")
   adjusted <- apply_offsets(x, region_offsets, region_col = region_col)
+  moved_regions <- region_offsets$region[
+    is.finite(region_offsets$dx_m) & is.finite(region_offsets$dy_m) &
+      (region_offsets$dx_m != 0 | region_offsets$dy_m != 0)
+  ]
+  origin_outlines <- if (isTRUE(show_origin_outlines) && length(moved_regions) > 0L) {
+    x[as.character(x[[region_col]]) %in% moved_regions, , drop = FALSE]
+  } else {
+    x[FALSE, , drop = FALSE]
+  }
+  movement_connectors <- if (isTRUE(show_movement_connectors)) {
+    make_movement_connector_data(x, region_offsets, region_col)
+  } else {
+    data.frame(x = numeric(), y = numeric(), xend = numeric(), yend = numeric())
+  }
   show_labels <- !identical(labels, FALSE)
   base_labels <- if (is.null(labels)) {
     make_region_labels(x, region_col = region_col, label_col = label_col)
@@ -162,6 +225,9 @@ render_dragged_map <- function(x,
   } else {
     as_drag_labels(labels)
   }
+  if (!is.null(label_values)) {
+    base_labels <- base_labels[as.character(base_labels$label_id) %in% label_values, , drop = FALSE]
+  }
   anchor_labels <- apply_region_offsets_to_labels(base_labels, region_offsets)
   labels <- apply_label_state(anchor_labels, label_offsets)
   connectors <- if (show_labels) make_connector_data(
@@ -169,9 +235,15 @@ render_dragged_map <- function(x,
     labels,
     end_gap = connector_end_gap
   ) else empty_connector_data()
-  limits <- plot_limits(adjusted, if (show_labels) labels else NULL, connectors, padding = label_padding)
+  limit_geometry <- if (nrow(origin_outlines) > 0L) rbind(adjusted, origin_outlines) else adjusted
+  limit_connectors <- c(connectors, list(movement = movement_connectors))
+  limits <- plot_limits(limit_geometry, if (show_labels) labels else NULL, limit_connectors, padding = label_padding)
 
   regions <- natural_sort(unique(as.character(adjusted[[region_col]])))
+  legend_breaks <- if (is.null(legend_values)) regions else intersect(legend_values, regions)
+  if (length(legend_breaks) == 0L) {
+    show_legend <- FALSE
+  }
   if (show_legend && length(regions) > max_legend_keys) {
     message(
       "dragmapr: legend suppressed - ", length(regions), " groups exceeds ",
@@ -183,14 +255,15 @@ render_dragged_map <- function(x,
   fill_scale <- if (is.null(region_palette)) {
     ggplot2::scale_fill_discrete(
       name = legend_title,
-      labels = if (is.null(region_labels)) ggplot2::waiver() else region_labels,
+      breaks = legend_breaks,
+      labels = if (is.null(region_labels)) ggplot2::waiver() else region_labels[legend_breaks],
       guide = if (show_legend) "legend" else "none"
     )
   } else {
     ggplot2::scale_fill_manual(
       values = region_palette,
-      breaks = regions,
-      labels = if (is.null(region_labels)) ggplot2::waiver() else region_labels[regions],
+      breaks = legend_breaks,
+      labels = if (is.null(region_labels)) ggplot2::waiver() else region_labels[legend_breaks],
       name = legend_title,
       guide = if (show_legend) "legend" else "none"
     )
@@ -202,8 +275,39 @@ render_dragged_map <- function(x,
   } else {
     NULL
   }
+  movement_connector_arrow <- switch(
+    movement_connector_endpoint,
+    open = grid::arrow(type = "open", length = grid::unit(0.06, "inches")),
+    closed = grid::arrow(type = "closed", length = grid::unit(0.06, "inches")),
+    NULL
+  )
 
-  plot <- ggplot2::ggplot() +
+  plot <- ggplot2::ggplot()
+  if (nrow(origin_outlines) > 0L) {
+    plot <- plot +
+      ggplot2::geom_sf(
+        data = origin_outlines,
+        fill = NA,
+        color = "#64748b",
+        linewidth = 0.45,
+        linetype = "dashed",
+        alpha = 0.58
+      )
+  }
+  if (nrow(movement_connectors) > 0L) {
+    plot <- plot +
+      ggplot2::geom_segment(
+        data = movement_connectors,
+        ggplot2::aes(x = .data$x, y = .data$y, xend = .data$xend, yend = .data$yend),
+        inherit.aes = FALSE,
+        color = movement_connector_color,
+        linewidth = movement_connector_linewidth,
+        linetype = movement_connector_linetype,
+        alpha = movement_connector_opacity,
+        arrow = movement_connector_arrow
+      )
+  }
+  plot <- plot +
     ggplot2::geom_sf(
       data = adjusted,
       ggplot2::aes(fill = factor(.data[[region_col]], levels = regions)),
@@ -388,6 +492,41 @@ map_background_style <- function(map_background) {
       grid = ggplot2::element_blank()
     )
   )
+}
+
+make_movement_connector_data <- function(x, region_offsets, region_col) {
+  moved <- region_offsets[
+    is.finite(region_offsets$dx_m) & is.finite(region_offsets$dy_m) &
+      (region_offsets$dx_m != 0 | region_offsets$dy_m != 0),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(moved) == 0L) {
+    return(data.frame(x = numeric(), y = numeric(), xend = numeric(), yend = numeric()))
+  }
+  grouped <- split(seq_len(nrow(x)), as.character(x[[region_col]]))
+  rows <- lapply(moved$region, function(region) {
+    idx <- grouped[[as.character(region)]]
+    if (is.null(idx) || length(idx) == 0L) return(NULL)
+    point <- suppressWarnings(sf::st_point_on_surface(sf::st_union(sf::st_geometry(x[idx, , drop = FALSE]))))
+    coords <- sf::st_coordinates(point)[1L, c("X", "Y")]
+    offset <- moved[moved$region == region, , drop = FALSE][1L, ]
+    data.frame(
+      region = as.character(region),
+      x = unname(coords[["X"]]),
+      y = unname(coords[["Y"]]),
+      xend = unname(coords[["X"]]) + offset$dx_m,
+      yend = unname(coords[["Y"]]) + offset$dy_m,
+      stringsAsFactors = FALSE
+    )
+  })
+  out <- do.call(rbind, rows)
+  if (is.null(out)) {
+    data.frame(x = numeric(), y = numeric(), xend = numeric(), yend = numeric())
+  } else {
+    rownames(out) <- NULL
+    out
+  }
 }
 
 make_connector_data <- function(anchor_labels, labels, end_gap = NULL) {

@@ -32,7 +32,24 @@ test_that("render_dragmapr_project renders an extracted Spatial Studio bundle", 
     row.names = FALSE
   )
   writeLines(
-    jsonlite::toJSON(list(region_col = "region", label_col = "name", title = "Project map"), auto_unbox = TRUE),
+    jsonlite::toJSON(
+      list(
+        region_col = "region",
+        label_col = "name",
+        title = "Project map",
+        legend_values = "South",
+        label_values = "North",
+        show_origin_outlines = TRUE,
+        show_movement_connectors = TRUE,
+        connector_color = "#AABBCC",
+        movement_connector_color = "#123456",
+        movement_connector_opacity = 0.4,
+        movement_connector_linewidth = 1.2,
+        movement_connector_linetype = "dotted",
+        movement_connector_endpoint = "open"
+      ),
+      auto_unbox = TRUE
+    ),
     file.path(project_dir, "metadata.json")
   )
 
@@ -40,6 +57,16 @@ test_that("render_dragmapr_project renders an extracted Spatial Studio bundle", 
 
   expect_s3_class(plot, "ggplot")
   expect_equal(plot$labels$title, "Project map")
+  expect_equal(as.character(plot$layers[[1]]$data$region), "North")
+  expect_equal(plot$layers[[1]]$aes_params$linetype, "dashed")
+  expect_equal(as.character(plot$layers[[2]]$data$region), "North")
+  expect_equal(plot$layers[[2]]$aes_params$colour, "#123456")
+  expect_equal(plot$layers[[2]]$aes_params$linetype, "dotted")
+  expect_equal(plot$scales$scales[[1]]$breaks, "South")
+  label_layers <- Filter(function(layer) "label_id" %in% names(layer$data), plot$layers)
+  expect_true(all(vapply(label_layers, function(layer) {
+    all(as.character(layer$data$label_id) == "North")
+  }, logical(1))))
 })
 
 test_that("render_dragmapr_project gives a useful error for missing region columns", {

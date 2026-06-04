@@ -18,6 +18,7 @@ drag_map_prototype(
   label_height = 30,
   label_box_width = 150,
   label_box_height = 72,
+  connector_color = "#334155",
   connector_linewidth = 1.3,
   region_offsets = NULL,
   label_offsets = NULL,
@@ -26,10 +27,20 @@ drag_map_prototype(
   max_legend_keys = 25L,
   legend_position = c("bottom", "top", "left", "right", "none"),
   legend_title = "Region",
+  legend_values = NULL,
+  label_values = NULL,
   map_background = c("white", "transparent", "light_grid", "dark"),
   connector_linetype = c("solid", "dashed", "dotted"),
   connector_endpoint = c("none", "arrow"),
   connector_smart = FALSE,
+  show_origin_outlines = FALSE,
+  show_movement_connectors = FALSE,
+  movement_connector_color = "#64748b",
+  movement_connector_opacity = 0.72,
+  movement_connector_linewidth = 1.4,
+  movement_connector_linetype = c("solid", "dashed", "dotted"),
+  movement_connector_endpoint = c("closed", "open", "none"),
+  show_drag_trail = FALSE,
   side_panel = TRUE,
   file = "drag-map.html",
   open = FALSE
@@ -68,6 +79,8 @@ draggable text-label markers.}
 \item{label_box_width, label_box_height}{Default browser dimensions for
 draggable annotation boxes.}
 
+\item{connector_color}{Browser label-connector color.}
+
 \item{connector_linewidth}{Browser connector line width in pixels.}
 
 \item{region_offsets}{Optional data frame with \code{region}, \code{dx_m}, and \code{dy_m}
@@ -93,6 +106,12 @@ helper before suppressing the legend. Set to \code{Inf} to always show it.}
 
 \item{legend_title}{Title shown above the browser-helper legend.}
 
+\item{legend_values}{Optional character vector of region values to include
+in the browser-helper legend. \code{NULL} includes all region values.}
+
+\item{label_values}{Optional character vector of label IDs to display.
+\code{NULL} displays all labels while preserving all label offsets.}
+
 \item{map_background}{Browser helper background. One of \code{"white"},
 \code{"transparent"}, \code{"light_grid"}, or \code{"dark"}.}
 
@@ -105,6 +124,26 @@ helper before suppressing the legend. Set to \code{Inf} to always show it.}
 \item{connector_smart}{Choose connector geometry dynamically in the browser
 based on label displacement. When \code{TRUE}, the helper chooses among the
 available connector paths instead of using each row's \code{connector_type}.}
+
+\item{show_origin_outlines}{Show the original, unshifted outlines of regions
+with non-zero offsets beneath the moved regions.}
+
+\item{show_movement_connectors}{Draw a connector from each moved region's
+original representative point to its current location. Hidden for zero-
+offset regions. Defaults to \code{FALSE}.}
+
+\item{movement_connector_color, movement_connector_opacity, movement_connector_linewidth}{Browser styling for movement connectors.}
+
+\item{movement_connector_linetype}{Movement connector line style. One of
+\code{"solid"}, \code{"dashed"}, or \code{"dotted"}.}
+
+\item{movement_connector_endpoint}{Movement connector endpoint. One of
+\code{"none"}, \code{"open"}, or \code{"closed"}.}
+
+\item{show_drag_trail}{Show a short fading trail of outline snapshots while
+a region is actively being dragged. The trail is cleared immediately when
+dragging ends and does not appear in static exports or project metadata.
+Defaults to \code{FALSE}.}
 
 \item{side_panel}{Show the built-in copy/download side panel in the helper
 HTML. Defaults to \code{TRUE}; Shiny apps that provide their own controls can

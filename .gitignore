@@ -12,3 +12,5 @@ docs
 ~$*
 # Default drag_map_prototype() output — created during development, never shipped
 drag-map.html
+# Development folder — not shipped to CRAN or pushed to git
+dev/

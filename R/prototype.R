@@ -21,6 +21,7 @@
 #'   draggable text-label markers.
 #' @param label_box_width,label_box_height Default browser dimensions for
 #'   draggable annotation boxes.
+#' @param connector_color Browser label-connector color.
 #' @param connector_linewidth Browser connector line width in pixels.
 #' @param region_offsets Optional data frame with `region`, `dx_m`, and `dy_m`
 #'   columns used to initialize region positions in the browser helper.
@@ -38,6 +39,10 @@
 #' @param legend_position Browser-helper legend position. One of `"bottom"`,
 #'   `"top"`, `"left"`, `"right"`, or `"none"`.
 #' @param legend_title Title shown above the browser-helper legend.
+#' @param legend_values Optional character vector of region values to include
+#'   in the browser-helper legend. `NULL` includes all region values.
+#' @param label_values Optional character vector of label IDs to display.
+#'   `NULL` displays all labels while preserving all label offsets.
 #' @param map_background Browser helper background. One of `"white"`,
 #'   `"transparent"`, `"light_grid"`, or `"dark"`.
 #' @param connector_linetype Browser helper connector line style. One of
@@ -47,6 +52,21 @@
 #' @param connector_smart Choose connector geometry dynamically in the browser
 #'   based on label displacement. When `TRUE`, the helper chooses among the
 #'   available connector paths instead of using each row's `connector_type`.
+#' @param show_origin_outlines Show the original, unshifted outlines of regions
+#'   with non-zero offsets beneath the moved regions.
+#' @param show_movement_connectors Draw a connector from each moved region's
+#'   original representative point to its current location. Hidden for zero-
+#'   offset regions. Defaults to `FALSE`.
+#' @param movement_connector_color,movement_connector_opacity,movement_connector_linewidth
+#'   Browser styling for movement connectors.
+#' @param movement_connector_linetype Movement connector line style. One of
+#'   `"solid"`, `"dashed"`, or `"dotted"`.
+#' @param movement_connector_endpoint Movement connector endpoint. One of
+#'   `"none"`, `"open"`, or `"closed"`.
+#' @param show_drag_trail Show a short fading trail of outline snapshots while
+#'   a region is actively being dragged. The trail is cleared immediately when
+#'   dragging ends and does not appear in static exports or project metadata.
+#'   Defaults to `FALSE`.
 #' @param side_panel Show the built-in copy/download side panel in the helper
 #'   HTML. Defaults to `TRUE`; Shiny apps that provide their own controls can
 #'   set this to `FALSE`.
@@ -91,6 +111,7 @@ drag_map_prototype <- function(x,
                                label_height = 30,
                                label_box_width = 150,
                                label_box_height = 72,
+                               connector_color = "#334155",
                                connector_linewidth = 1.3,
                                region_offsets = NULL,
                                label_offsets = NULL,
@@ -99,10 +120,20 @@ drag_map_prototype <- function(x,
                                max_legend_keys = 25L,
                                legend_position = c("bottom", "top", "left", "right", "none"),
                                legend_title = "Region",
+                               legend_values = NULL,
+                               label_values = NULL,
                                map_background = c("white", "transparent", "light_grid", "dark"),
                                connector_linetype = c("solid", "dashed", "dotted"),
                                connector_endpoint = c("none", "arrow"),
                                connector_smart = FALSE,
+                               show_origin_outlines = FALSE,
+                               show_movement_connectors = FALSE,
+                               movement_connector_color = "#64748b",
+                               movement_connector_opacity = 0.72,
+                               movement_connector_linewidth = 1.4,
+                               movement_connector_linetype = c("solid", "dashed", "dotted"),
+                               movement_connector_endpoint = c("closed", "open", "none"),
+                               show_drag_trail = FALSE,
                                side_panel = TRUE,
                                file = "drag-map.html",
                                open = FALSE) {
@@ -157,6 +188,9 @@ drag_map_prototype <- function(x,
   if (!is.numeric(connector_linewidth) || length(connector_linewidth) != 1L || !is.finite(connector_linewidth) || connector_linewidth <= 0) {
     stop("`connector_linewidth` must be a positive number.", call. = FALSE)
   }
+  if (!is.character(connector_color) || length(connector_color) != 1L || is.na(connector_color) || !nzchar(connector_color)) {
+    stop("`connector_color` must be a single color string.", call. = FALSE)
+  }
   if (!is.null(region_offsets) && !is.data.frame(region_offsets)) {
     stop("`region_offsets` must be a data frame when supplied.", call. = FALSE)
   }
@@ -176,14 +210,43 @@ drag_map_prototype <- function(x,
   map_background <- match.arg(map_background)
   connector_linetype <- match.arg(connector_linetype)
   connector_endpoint <- match.arg(connector_endpoint)
+  movement_connector_linetype <- match.arg(movement_connector_linetype)
+  movement_connector_endpoint <- match.arg(movement_connector_endpoint)
   if (identical(legend_position, "none")) {
     show_legend <- FALSE
   }
   if (!is.character(legend_title) || length(legend_title) != 1L || is.na(legend_title)) {
     stop("`legend_title` must be a single string.", call. = FALSE)
   }
+  if (!is.null(legend_values) && !is.character(legend_values)) {
+    stop("`legend_values` must be a character vector or NULL.", call. = FALSE)
+  }
+  if (!is.null(label_values) && !is.character(label_values)) {
+    stop("`label_values` must be a character vector or NULL.", call. = FALSE)
+  }
   if (!is.logical(connector_smart) || length(connector_smart) != 1L || is.na(connector_smart)) {
     stop("`connector_smart` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.logical(show_origin_outlines) || length(show_origin_outlines) != 1L || is.na(show_origin_outlines)) {
+    stop("`show_origin_outlines` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.logical(show_movement_connectors) || length(show_movement_connectors) != 1L || is.na(show_movement_connectors)) {
+    stop("`show_movement_connectors` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.character(movement_connector_color) || length(movement_connector_color) != 1L ||
+      is.na(movement_connector_color) || !nzchar(movement_connector_color)) {
+    stop("`movement_connector_color` must be a single color string.", call. = FALSE)
+  }
+  if (!is.numeric(movement_connector_opacity) || length(movement_connector_opacity) != 1L ||
+      !is.finite(movement_connector_opacity) || movement_connector_opacity < 0 || movement_connector_opacity > 1) {
+    stop("`movement_connector_opacity` must be a number between 0 and 1.", call. = FALSE)
+  }
+  if (!is.numeric(movement_connector_linewidth) || length(movement_connector_linewidth) != 1L ||
+      !is.finite(movement_connector_linewidth) || movement_connector_linewidth <= 0) {
+    stop("`movement_connector_linewidth` must be a positive number.", call. = FALSE)
+  }
+  if (!is.logical(show_drag_trail) || length(show_drag_trail) != 1L || is.na(show_drag_trail)) {
+    stop("`show_drag_trail` must be TRUE or FALSE.", call. = FALSE)
   }
   if (!is.logical(side_panel) || length(side_panel) != 1L || is.na(side_panel)) {
     stop("`side_panel` must be TRUE or FALSE.", call. = FALSE)
@@ -226,16 +289,27 @@ drag_map_prototype <- function(x,
     labelHeight = unname(label_height),
     labelBoxWidth = unname(label_box_width),
     labelBoxHeight = unname(label_box_height),
+    connectorColor = unname(connector_color),
     connectorLinewidth = unname(connector_linewidth),
     regionPalette = if (is.null(region_palette)) NULL else as.list(region_palette),
     showLegend = isTRUE(show_legend),
     maxLegendKeys = unname(max_legend_keys),
     legendPosition = legend_position,
     legendTitle = unname(legend_title),
+    legendValues = if (is.null(legend_values)) NULL else unname(legend_values),
+    labelValues = if (is.null(label_values)) NULL else unname(label_values),
     mapBackground = map_background,
     connectorLinetype = connector_linetype,
     connectorEndpoint = connector_endpoint,
     connectorSmart = isTRUE(connector_smart),
+    showOriginOutlines = isTRUE(show_origin_outlines),
+    showMovementConnectors = isTRUE(show_movement_connectors),
+    movementConnectorColor = unname(movement_connector_color),
+    movementConnectorOpacity = unname(movement_connector_opacity),
+    movementConnectorLinewidth = unname(movement_connector_linewidth),
+    movementConnectorLinetype = movement_connector_linetype,
+    movementConnectorEndpoint = movement_connector_endpoint,
+    showDragTrail = isTRUE(show_drag_trail),
     sidePanel = isTRUE(side_panel)
   )
 
