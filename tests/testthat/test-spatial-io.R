@@ -174,6 +174,9 @@ test_that("spatial studio has a fallback for helper readiness", {
   studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
 
   expect_match(studio_code, "function markHelperReady(generation)", fixed = TRUE)
+  expect_match(studio_code, "function scheduleHelperFallback(generation)", fixed = TRUE)
+  expect_match(studio_code, "scheduleHelperFallback(generation);", fixed = TRUE)
+  expect_match(studio_code, "scheduleHelperFallback(currentHelperGeneration());", fixed = TRUE)
   expect_match(studio_code, "event.target.matches('iframe.studio-helper-frame')", fixed = TRUE)
   expect_match(studio_code, "generation !== helperState.activeGeneration", fixed = TRUE)
   expect_match(studio_code, "}, 1500);", fixed = TRUE)
