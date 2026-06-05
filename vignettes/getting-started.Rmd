@@ -172,6 +172,7 @@ frame — set that flag via `as_drag_annotations(..., connector = TRUE)` or
 
 | Argument | Default | Description |
 |---|---|---|
+| `connector_color` | `"#334155"` | Browser connector line colour. |
 | `connector_linewidth` | `1.3` | Connector line thickness in browser pixels. |
 | `connector_linetype` | `"solid"` | Browser connector line pattern: `"solid"`, `"dashed"`, or `"dotted"`. |
 | `connector_endpoint` | `"none"` | Browser connector endpoint: `"none"` or `"arrow"`. |
@@ -181,11 +182,57 @@ frame — set that flag via `as_drag_annotations(..., connector = TRUE)` or
 drag_map_prototype(
   regions, region_col = "region",
   labels              = notes,   # labels with connector = TRUE
+  connector_color     = "#334155",
   connector_linewidth = 2,
   connector_linetype  = "dashed",
   connector_endpoint  = "arrow",
   connector_smart     = TRUE,
   open = TRUE
+)
+```
+
+---
+
+### Movement context
+
+Movement context is optional and off by default. It helps explain where a moved
+region came from without changing the underlying offset data.
+
+| Argument | Default | Description |
+|---|---|---|
+| `show_origin_outlines` | `FALSE` | Draw the original outline for regions with non-zero offsets. |
+| `show_movement_connectors` | `FALSE` | Draw a line from each moved region's original representative point to its current location. |
+| `movement_connector_color` | `"#64748b"` | Movement connector colour. |
+| `movement_connector_opacity` | `0.72` | Movement connector opacity from 0 to 1. |
+| `movement_connector_linewidth` | `1.4` | Browser movement connector thickness in pixels. |
+| `movement_connector_linetype` | `"solid"` | Movement connector pattern: `"solid"`, `"dashed"`, or `"dotted"`. |
+| `movement_connector_endpoint` | `"closed"` | Movement connector endpoint: `"closed"`, `"open"`, or `"none"`. |
+| `show_drag_trail` | `FALSE` | Browser-only fading outline trail while a region is actively dragged. |
+
+```{r, eval = FALSE}
+drag_map_prototype(
+  regions, region_col = "region",
+  show_origin_outlines = TRUE,
+  show_movement_connectors = TRUE,
+  movement_connector_color = "#64748b",
+  movement_connector_linetype = "dashed",
+  movement_connector_endpoint = "open",
+  show_drag_trail = TRUE,
+  open = TRUE
+)
+```
+
+Static exports support origin outlines and movement connectors too:
+
+```{r, eval = FALSE}
+render_dragged_map(
+  regions,
+  region_offsets = region_offsets,
+  region_col = "region",
+  show_origin_outlines = TRUE,
+  show_movement_connectors = TRUE,
+  movement_connector_linetype = "dotted",
+  movement_connector_endpoint = "closed"
 )
 ```
 
@@ -280,6 +327,7 @@ It is hidden by default because many maps are labelled and need no legend.
 | `max_legend_keys` | `25` | Suppress the legend automatically when the number of groups exceeds this value. Set to `Inf` to always show it regardless of group count. |
 | `legend_position` | `"bottom"` | Where the legend appears: `"bottom"`, `"top"`, `"left"`, `"right"`, or `"none"`. |
 | `legend_title` | `"Region"` | Title shown above the legend keys. |
+| `legend_values` | `NULL` | Optional character vector of region values to include in the legend. `NULL` includes all values. |
 
 ```{r, eval = FALSE}
 drag_map_prototype(
@@ -288,7 +336,19 @@ drag_map_prototype(
   show_legend     = TRUE,
   legend_position = "bottom",   # "top" | "left" | "right" | "none"
   legend_title    = "Region",
+  legend_values   = c("North", "East"),
   max_legend_keys = 25,
+  open = TRUE
+)
+```
+
+Use `label_values` when an app should temporarily display only selected labels
+while preserving all label offsets:
+
+```{r, eval = FALSE}
+drag_map_prototype(
+  regions, region_col = "region",
+  label_values = c("North", "East"),
   open = TRUE
 )
 ```

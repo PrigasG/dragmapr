@@ -16,5 +16,5 @@ apply_label_offsets(labels, label_offsets = NULL)
 A label data frame with adjusted \code{x} and \code{y}.
 }
 \description{
-\code{apply_label_offsets()} is retained as an alias for \code{\link[=apply_label_state]{apply_label_state()}}.
+\code{apply_label_offsets()} is deprecated. Use \code{\link[=apply_label_state]{apply_label_state()}} instead.
 }

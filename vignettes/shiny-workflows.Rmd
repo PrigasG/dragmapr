@@ -67,6 +67,8 @@ because it acts as a smoke test for the package surface:
 - choose straight, elbow, curve, or squiggle connectors;
 - adjust connector thickness, line pattern, and arrow endpoints;
 - show or hide the region legend;
+- filter visible legend keys and labels while preserving offsets;
+- show origin outlines, movement connectors, and browser-only drag trails;
 - download a static PNG reconstructed from the current region and label offset
   state.
 
@@ -90,9 +92,10 @@ spatial workspace rather than a fixed demo: users upload local polygon data,
 or reopen a saved project ZIP; pick grouping and label columns; edit label text
 and colors; undo and redo drag-state changes; drag boundaries; switch between
 short labels and info boxes; control text size, connector geometry, connector
-line pattern, smart connectors, arrow endpoints, legend title, and map
-background; preview a static render; set static export size and DPI; and
-download the current artifacts.
+line color, line pattern, smart connectors, arrow endpoints, legend title,
+visible legend keys, visible labels, origin outlines, movement connectors, drag
+preview trails, and map background; preview a static render; set static export
+size and DPI; and download the current artifacts.
 
 ```{r, eval = FALSE}
 shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
@@ -120,8 +123,8 @@ Available downloads from the studio sidebar:
 - **HTML helper** — the standalone D3 drag file you can share or reopen
 - **Project ZIP** — source geometry, offsets, labels, `palette.csv`,
   `metadata.json`, and `recreate-static-map.R`; enough to reopen the project in
-  Spatial Studio, reconstruct the layout in a new session, or hand off to a
-  collaborator
+  Spatial Studio, reconstruct the layout in a new session, including legend and
+  label selections plus movement context settings, or hand off to a collaborator
 - **Static bundle** — the project bundle plus ready-to-share PNG and PDF files
 
 Spatial Studio intentionally keeps its adjusted-geometry exports focused on

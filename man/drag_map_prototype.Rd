@@ -42,7 +42,7 @@ drag_map_prototype(
   movement_connector_endpoint = c("closed", "open", "none"),
   show_drag_trail = FALSE,
   side_panel = TRUE,
-  file = "drag-map.html",
+  file = NULL,
   open = FALSE
 )
 }
@@ -149,7 +149,8 @@ Defaults to \code{FALSE}.}
 HTML. Defaults to \code{TRUE}; Shiny apps that provide their own controls can
 set this to \code{FALSE}.}
 
-\item{file}{Output HTML path.}
+\item{file}{Output HTML path. When \code{NULL}, a temporary \code{.html} file is
+created. Pass an explicit path to save the helper somewhere durable.}
 
 \item{open}{Open the written file in the default browser via
 \code{\link[utils:browseURL]{utils::browseURL()}}. Defaults to \code{FALSE}.}

@@ -36,9 +36,11 @@ for offset tables. Static plots should be regenerated from:
 `dragmapr` should not know about `explodemap` specifically. It should accept any
 projected `sf` object and a group column. `explodemap` can call into it later.
 
-## Open Questions
+## Resolved Design Notes
 
-- Should label dragging export separate label offsets or region-relative label
-  coordinates?
-- Should the widget support snapping, undo, and keyboard nudging?
-- Should static rendering live in this package or be left to `ggplot2` recipes?
+- Label dragging exports separate label offset tables keyed by `label_id`.
+- Undo/redo and keyboard nudging are implemented in the Spatial Studio app and
+  can continue to mature there before becoming lower-level package APIs.
+- Static rendering lives in this package through `render_dragged_map()` and
+  `render_dragmapr_project()` so interactive layouts can be reproduced from
+  saved state.

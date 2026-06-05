@@ -119,6 +119,23 @@ render_dragged_map(
 )
 ```
 
+Use `label_values` when you want to render only selected labels while keeping
+the full label table and saved offsets available for later sessions:
+
+```{r}
+render_dragged_map(
+  hhs$states,
+  region_offsets = hhs$region_offsets,
+  region_col = "hhs_region",
+  labels = hhs$labels,
+  label_offsets = hhs$label_offsets,
+  label_values = c("1", "2", "3"),
+  region_palette = hhs$region_colors,
+  region_labels = hhs$region_names,
+  title = "Only selected labels"
+)
+```
+
 ## Connector Lines
 
 Labels and annotation boxes can have connector lines. The connector starts from
@@ -148,6 +165,9 @@ render_dragged_map(
   region_palette = hhs$region_colors,
   region_labels = hhs$region_names,
   connector_linewidth = 0.9,
+  connector_color = "#334155",
+  connector_linetype = "dashed",
+  connector_endpoint = "arrow",
   label_padding = 0.12,
   title = "Annotation box with connector"
 )
@@ -189,6 +209,49 @@ render_dragged_map(
   region_palette = hhs$region_colors,
   region_labels = hhs$region_names,
   title = "HHS regions with label nudge"
+)
+```
+
+## Legend Filtering And Movement Context
+
+Static exports can include a subset of legend keys without removing geometry
+from the map. This is useful when a workflow wants to emphasize a small set of
+groups while keeping the full layout visible.
+
+```{r}
+render_dragged_map(
+  hhs$states,
+  region_offsets = hhs$region_offsets,
+  region_col = "hhs_region",
+  labels = hhs$labels,
+  label_offsets = hhs$label_offsets,
+  region_palette = hhs$region_colors,
+  region_labels = hhs$region_names,
+  legend_values = c("1", "2", "3"),
+  title = "Selected legend keys"
+)
+```
+
+Movement context can also be rendered statically. Origin outlines show where
+moved regions started, and movement connectors point from the original location
+to the current translated location.
+
+```{r}
+render_dragged_map(
+  hhs$states,
+  region_offsets = hhs$region_offsets,
+  region_col = "hhs_region",
+  labels = hhs$labels,
+  label_offsets = hhs$label_offsets,
+  region_palette = hhs$region_colors,
+  region_labels = hhs$region_names,
+  show_origin_outlines = TRUE,
+  show_movement_connectors = TRUE,
+  movement_connector_color = "#64748b",
+  movement_connector_opacity = 0.65,
+  movement_connector_linetype = "dotted",
+  movement_connector_endpoint = "open",
+  title = "Movement context"
 )
 ```
 

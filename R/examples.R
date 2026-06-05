@@ -3,6 +3,8 @@
 #' This copies the HHS region membership, names, colors, and published display
 #' offsets used by the explodemap paper workflow into a lightweight fixture that
 #' does not depend on the explodemap package or its generated paper outputs.
+#' See the explodemap vignette "Reproducing the paper examples", section 6:
+#' <https://stat.ethz.ch/CRAN/web/packages/explodemap/vignettes/reproducing-paper-examples.html>.
 #'
 #' @return A list with `states`, `labels`, `region_offsets`, `label_offsets`,
 #'   `region_names`, and `region_colors`.
@@ -57,7 +59,7 @@ example_hhs_layout <- function() {
     package = "dragmapr",
     mustWork = TRUE
   ))
-  label_offsets <- read_label_offsets(system.file(
+  label_offsets <- read_label_state(system.file(
     "extdata",
     "explodemap_hhs_label_offsets.csv",
     package = "dragmapr",

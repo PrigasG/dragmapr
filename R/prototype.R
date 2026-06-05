@@ -70,7 +70,8 @@
 #' @param side_panel Show the built-in copy/download side panel in the helper
 #'   HTML. Defaults to `TRUE`; Shiny apps that provide their own controls can
 #'   set this to `FALSE`.
-#' @param file Output HTML path.
+#' @param file Output HTML path. When `NULL`, a temporary `.html` file is
+#'   created. Pass an explicit path to save the helper somewhere durable.
 #' @param open Open the written file in the default browser via
 #'   [utils::browseURL()]. Defaults to `FALSE`.
 #'
@@ -135,7 +136,7 @@ drag_map_prototype <- function(x,
                                movement_connector_endpoint = c("closed", "open", "none"),
                                show_drag_trail = FALSE,
                                side_panel = TRUE,
-                               file = "drag-map.html",
+                               file = NULL,
                                open = FALSE) {
   if (!inherits(x, "sf")) {
     stop("`x` must be an sf object.", call. = FALSE)
@@ -253,6 +254,12 @@ drag_map_prototype <- function(x,
   }
   if (!is.logical(open) || length(open) != 1L || is.na(open)) {
     stop("`open` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (is.null(file)) {
+    file <- tempfile("drag-map-", fileext = ".html")
+  }
+  if (!is.character(file) || length(file) != 1L || is.na(file) || !nzchar(file)) {
+    stop("`file` must be a single output path or NULL.", call. = FALSE)
   }
 
   tmp <- tempfile(fileext = ".geojson")

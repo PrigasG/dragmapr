@@ -133,8 +133,10 @@ styling for label connector lines.}
 \item{connector_squiggle_amplitude, connector_squiggle_waves}{Appearance of
 \code{"squiggle"} connectors in static exports.
 \code{connector_squiggle_amplitude} is in the same coordinate units as the
-projected CRS (metres for EPSG:3857). The default of \code{12000} is tuned for
-country-scale datasets; scale it up or down to match your data extent.}
+projected CRS. For common metre-based CRSs such as EPSG:3857, the value is
+metres; for degree-based or custom projected CRSs, use that CRS's units.
+The default of \code{12000} is tuned for country-scale metre-based datasets;
+scale it up or down to match your data extent.}
 
 \item{connector_end_gap}{Distance, in plot units, to trim connector endpoints
 away from label centers. Defaults to an automatic value based on plot size.}
