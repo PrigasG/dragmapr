@@ -594,20 +594,27 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
           !nzchar(region_col) || !nzchar(label_col)) {
         return(data.frame())
       }
-      label_data_for(
-        x = x,
-        region_col = region_col,
-        label_col = label_col,
-        show_labels = isTRUE(input$show_labels),
-        visible_labels = visible_labels,
-        label_edits = rv$label_edits,
-        annotation_mode = input$annotation_mode %||% "labels",
-        show_connectors = isTRUE(input$show_connectors),
-        connector_type = input$connector_type %||% "straight",
-        label_width = input$label_width %||% 64,
-        label_height = input$label_height %||% 30,
-        box_width = input$box_width %||% 170,
-        box_height = input$box_height %||% 76
+      tryCatch(
+        label_data_for(
+          x = x,
+          region_col = region_col,
+          label_col = label_col,
+          show_labels = isTRUE(input$show_labels),
+          visible_labels = visible_labels,
+          label_edits = rv$label_edits,
+          annotation_mode = input$annotation_mode %||% "labels",
+          show_connectors = isTRUE(input$show_connectors),
+          connector_type = input$connector_type %||% "straight",
+          label_width = input$label_width %||% 64,
+          label_height = input$label_height %||% 30,
+          box_width = input$box_width %||% 170,
+          box_height = input$box_height %||% 76
+        ),
+        error = function(e) {
+          rv$status <- paste("Could not derive label rows:", conditionMessage(e))
+          rv$status_class <- "warn"
+          data.frame()
+        }
       )
     }
 

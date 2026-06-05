@@ -29,6 +29,21 @@ test_that("prepare_dragmapr_sf drops non-polygon features", {
   expect_equal(out$region, "A")
 })
 
+test_that("prepare_dragmapr_sf warns before assuming missing CRS", {
+  x <- sf::st_sf(
+    region = "A",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0, 0))))
+    )
+  )
+
+  expect_warning(
+    out <- prepare_dragmapr_sf(x),
+    "no CRS found"
+  )
+  expect_equal(sf::st_crs(out)$epsg, 3857)
+})
+
 test_that("read_dragmapr_sf_upload returns NULL for no upload", {
   expect_null(read_dragmapr_sf_upload(NULL))
   expect_null(read_dragmapr_sf_upload(data.frame()))
@@ -71,6 +86,8 @@ test_that("dragmapr_iframe_bridge names configured Shiny inputs", {
   expect_match(js, '"labels"', fixed = TRUE)
   expect_match(js, "dragmapr-request-state", fixed = TRUE)
   expect_match(js, "_dragmaprOriginAllowed", fixed = TRUE)
+  expect_match(js, "_dragmaprBridgeStop", fixed = TRUE)
+  expect_match(js, "beforeunload", fixed = TRUE)
 })
 
 test_that("dragmapr_iframe_bridge respects custom iframe_selector", {
@@ -403,4 +420,30 @@ test_that("spatial studio initializes legend and label multiselects with all cho
     studio_code,
     fixed = TRUE
   ))
+})
+
+test_that("spatial studio guards confirmed demo stability issues", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
+
+  expect_match(studio_code, "if (nrow(x) == 0L)", fixed = TRUE)
+  expect_match(studio_code, "}, ignoreInit = TRUE)\n\n  build_plot <- function", fixed = TRUE)
+  expect_match(studio_code, "choose_column(isolate(input$region_col)", fixed = TRUE)
+  expect_match(studio_code, "choose_column(isolate(input$label_col)", fixed = TRUE)
+  expect_match(studio_code, "pal <- isolate(region_palette())", fixed = TRUE)
+  expect_match(studio_code, "selected <- isolate(input$region_color_group)", fixed = TRUE)
+  expect_match(studio_code, "selected <- isolate(input$edit_label_id)", fixed = TRUE)
+  expect_match(studio_code, "Project legend selection did not match", fixed = TRUE)
+  expect_match(studio_code, "Project label selection did not match", fixed = TRUE)
+  expect_match(studio_code, "req(file.exists(helper_file))", fixed = TRUE)
+})
+
+test_that("spatial studio avoids id-like columns as upload defaults", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
+
+  expect_match(studio_code, "default_studio_region_col <- function", fixed = TRUE)
+  expect_match(studio_code, 'exact_priority <- c("hhs_region", "region", "group", "county"', fixed = TRUE)
+  expect_match(studio_code, "id_like <- grepl", fixed = TRUE)
+  expect_match(studio_code, "default_studio_region_col(projected_sf(), cols)", fixed = TRUE)
 })

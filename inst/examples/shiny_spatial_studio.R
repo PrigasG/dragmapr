@@ -26,7 +26,8 @@ studio_select <- function(inputId, label, choices, selected = NULL,
       )
     ))
   }
-  selectInput(inputId, label, choices = choices, selected = selected)
+  selectizeInput(inputId, label, choices = choices, selected = selected,
+                 options = list(placeholder = placeholder))
 }
 
 studio_multi_select <- function(inputId, label, choices, selected = NULL,
@@ -221,6 +222,33 @@ choose_column <- function(candidate, cols, fallback = NULL) {
   } else {
     cols[1]
   }
+}
+
+default_studio_region_col <- function(x, cols) {
+  if (length(cols) == 0L) return(NULL)
+  lower <- tolower(cols)
+  exact_priority <- c("hhs_region", "region", "group", "county", "district", "zone")
+  for (candidate in exact_priority) {
+    idx <- which(lower == candidate)
+    if (length(idx) > 0L) return(cols[idx[1]])
+  }
+
+  n <- max(1L, nrow(x))
+  cardinality <- vapply(cols, function(col) {
+    length(unique(stats::na.omit(as.character(x[[col]]))))
+  }, integer(1L))
+  useful <- cardinality > 1L & cardinality <= min(50L, max(2L, floor(n / 2L)))
+  id_like <- grepl("(id|objectid|gnis|ssn|code|census|pop|acre|mile|density|den)$|^(id)$", lower)
+  named <- grepl("region|group|county|district|zone|type|class|category", lower)
+  candidates <- which(useful & !id_like)
+  named_candidates <- candidates[named[candidates]]
+  if (length(named_candidates) > 0L) {
+    return(cols[named_candidates[order(cardinality[named_candidates], decreasing = TRUE)][1]])
+  }
+  if (length(candidates) > 0L) {
+    return(cols[candidates[order(cardinality[candidates], decreasing = TRUE)][1]])
+  }
+  cols[1]
 }
 
 make_studio_labels <- function(x, region_col, label_col, mode, width_px, height_px,
@@ -994,7 +1022,7 @@ ui <- fluidPage(
             {id: inputId, values: values, at: Date.now()},
             {priority: 'event'}
           );
-        }, 0);
+        }, 400);
       });
       Shiny.addCustomMessageHandler('dragmapr-labels', function(message) {
         var iframe = getHelperFrame();
@@ -1120,6 +1148,20 @@ ui <- fluidPage(
           Shiny.setInputValue('script_download_requested', Date.now(), {priority: 'event'});
         }
       }, true);
+      document.addEventListener('keydown', function(event) {
+        if (!event.ctrlKey && !event.metaKey) return;
+        var tag = (event.target || document.activeElement || {}).tagName || '';
+        if (/^(INPUT|TEXTAREA|SELECT)$/i.test(tag)) return;
+        if (event.key === 'z' || event.key === 'Z') {
+          event.preventDefault();
+          var btn = document.getElementById(event.shiftKey ? 'redo_layout' : 'undo_layout');
+          if (btn && !btn.disabled) btn.click();
+        } else if (event.key === 'y' || event.key === 'Y') {
+          event.preventDefault();
+          var btn = document.getElementById('redo_layout');
+          if (btn && !btn.disabled) btn.click();
+        }
+      });
     ")),
     tags$style(HTML(studio_css))
   ),
@@ -1904,8 +1946,18 @@ server <- function(input, output, session) {
 
   label_table <- reactive({
     req(region_col(), label_col())
+    x <- projected_sf()
+    if (nrow(x) == 0L) {
+      return(as_drag_labels(data.frame(
+        label_id = character(),
+        region = character(),
+        label = character(),
+        x = numeric(),
+        y = numeric()
+      )))
+    }
     labels <- make_studio_labels(
-      projected_sf(),
+      x,
       region_col     = region_col(),
       label_col      = label_col(),
       mode           = input$annotation_mode %||% "labels",
@@ -1948,7 +2000,7 @@ server <- function(input, output, session) {
 
   observeEvent(list(region_state(), label_state()), {
     push_history(state_snapshot())
-  }, ignoreInit = FALSE)
+  }, ignoreInit = TRUE)
 
   build_plot <- function(region_offsets, label_offsets) {
     # Keep the renderer's internal legend limit high enough for the full data,
@@ -2141,20 +2193,20 @@ server <- function(input, output, session) {
   output$column_controls <- renderUI({
     cols <- available_columns()
     if (length(cols) == 0L) return(tags$p("No non-geometry columns found.", style = "color:#6b7280; font-size:0.83rem;"))
-    default_col <- state$pending_region_col %||% if ("hhs_region" %in% cols) "hhs_region" else cols[1]
+    default_col <- state$pending_region_col %||% default_studio_region_col(projected_sf(), cols)
     default_label <- state$pending_label_col %||% default_col
     tagList(
       studio_select(
         "region_col", "Group / region column",
         choices = cols,
-        selected = choose_column(input$region_col, cols, default_col),
+        selected = choose_column(isolate(input$region_col), cols, default_col),
         placeholder = "Choose grouping column"
       ),
       tags$div(class = "studio-field-gap"),
       studio_select(
         "label_col",  "Label column",
         choices = cols,
-        selected = choose_column(input$label_col, cols, default_label),
+        selected = choose_column(isolate(input$label_col), cols, default_label),
         placeholder = "Choose label column"
       )
     )
@@ -2163,8 +2215,8 @@ server <- function(input, output, session) {
   output$color_pickers <- renderUI({
     req(region_col())
     groups <- region_groups()
-    pal <- region_palette()
-    selected <- input$region_color_group
+    pal <- isolate(region_palette())
+    selected <- isolate(input$region_color_group)
     if (is.null(selected) || !selected %in% groups) {
       selected <- groups[1]
     }
@@ -2310,7 +2362,7 @@ server <- function(input, output, session) {
       as.character(labels$label_id),
       paste0(as.character(labels$label), " (", as.character(labels$region), ")")
     )
-    selected <- input$edit_label_id
+    selected <- isolate(input$edit_label_id)
     if (is.null(selected) || !selected %in% unname(choices)) {
       selected <- unname(choices)[1]
     }
@@ -2453,10 +2505,10 @@ server <- function(input, output, session) {
   observeEvent(available_columns(), {
     cols <- available_columns()
     if (length(cols) == 0L) return()
-    default_col <- state$pending_region_col %||% if ("hhs_region" %in% cols) "hhs_region" else cols[1]
+    default_col <- state$pending_region_col %||% default_studio_region_col(projected_sf(), cols)
     default_label <- state$pending_label_col %||% default_col
-    selected_region <- choose_column(state$pending_region_col %||% input$region_col, cols, default_col)
-    selected_label <- choose_column(state$pending_label_col %||% input$label_col, cols, default_label)
+    selected_region <- choose_column(state$pending_region_col %||% isolate(input$region_col), cols, default_col)
+    selected_label <- choose_column(state$pending_label_col %||% isolate(input$label_col), cols, default_label)
     signature <- list(cols = cols, region = selected_region, label = selected_label)
     if (!identical(signature, state$column_select_signature)) {
       updateSelectInput(session, "region_col", choices = cols, selected = selected_region)
@@ -2466,6 +2518,31 @@ server <- function(input, output, session) {
     state$pending_region_col <- NULL
     state$pending_label_col <- NULL
   }, ignoreInit = FALSE)
+
+  observeEvent(region_groups(), {
+    selected <- state$legend_filter_selection
+    if (is.null(selected)) return()
+    keep <- intersect(as.character(selected), region_groups())
+    if (length(keep) == 0L && length(selected) > 0L) {
+      state$legend_filter_selection <- NULL
+      set_status("Project legend selection did not match the current groups, so all legend values are visible.", "info")
+    } else if (!identical(keep, selected)) {
+      state$legend_filter_selection <- keep
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(base_label_table(), {
+    selected <- state$label_filter_selection
+    if (is.null(selected)) return()
+    ids <- as.character(base_label_table()$label_id)
+    keep <- intersect(as.character(selected), ids)
+    if (length(keep) == 0L && length(selected) > 0L) {
+      state$label_filter_selection <- NULL
+      set_status("Project label selection did not match the current labels, so all labels are visible.", "info")
+    } else if (!identical(keep, selected)) {
+      state$label_filter_selection <- keep
+    }
+  }, ignoreInit = TRUE)
 
   observeEvent(input$studio_filter_change, {
     change <- input$studio_filter_change
@@ -2914,7 +2991,10 @@ server <- function(input, output, session) {
   )
   output$download_html <- downloadHandler(
     filename    = function() "dragmapr-helper.html",
-    content     = function(file) file.copy(helper_file, file, overwrite = TRUE),
+    content     = function(file) {
+      req(file.exists(helper_file))
+      file.copy(helper_file, file, overwrite = TRUE)
+    },
     contentType = "text/html"
   )
   output$download_bundle <- downloadHandler(

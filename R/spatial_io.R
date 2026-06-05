@@ -120,7 +120,9 @@ read_dragmapr_sf_url <- function(url, timeout = 60) {
 #'
 #' Repairs invalid geometry, filters to polygon types, assigns a fallback CRS
 #' when none is present, and reprojects geographic (longitude/latitude) data to
-#' a projected CRS so metre offsets work correctly.
+#' a projected CRS so metre offsets work correctly. CRS-less inputs trigger a
+#' warning because the fallback is an assumption; pass `target_crs` explicitly
+#' when your data uses a different projected CRS.
 #'
 #' @param x An `sf` object.
 #' @param target_crs EPSG code for the projected CRS to use when the input is
@@ -164,7 +166,7 @@ prepare_dragmapr_sf <- function(x, target_crs = 3857) {
     x <- x[keep, , drop = FALSE]
   }
   if (is.na(sf::st_crs(x))) {
-    message("dragmapr: no CRS found. Assuming EPSG:", target_crs, ".")
+    warning("dragmapr: no CRS found. Assuming EPSG:", target_crs, ".", call. = FALSE)
     sf::st_crs(x) <- target_crs
   }
   if (sf::st_is_longlat(x)) {
@@ -237,6 +239,8 @@ dragmapr_iframe_bridge <- function(region_input = "region_csv",
 var _dragmaprBridgeReceived = false;
 var _dragmaprAllowedOrigin = %s;
 var _dragmaprIframeSelector = %s;
+var _dragmaprBridgeTimer = null;
+var _dragmaprBridgeActive = false;
 function _dragmaprOriginAllowed(event) {
   if (_dragmaprAllowedOrigin === "*") return true;
   if (_dragmaprAllowedOrigin === "same-origin") {
@@ -255,15 +259,27 @@ window.addEventListener("message", function(event) {
   Shiny.setInputValue(%s, event.data.labelCsv, {priority: "event"});
 });
 function _dragmaprBridgePoll() {
+  if (!_dragmaprBridgeActive) return;
   var iframe = document.querySelector(_dragmaprIframeSelector);
   if (iframe && iframe.contentWindow) {
     iframe.contentWindow.postMessage({type: "dragmapr-request-state"}, _dragmaprTargetOrigin());
   }
-  setTimeout(_dragmaprBridgePoll, _dragmaprBridgeReceived ? %d : %d);
+  _dragmaprBridgeTimer = setTimeout(_dragmaprBridgePoll, _dragmaprBridgeReceived ? %d : %d);
+}
+function _dragmaprBridgeStop() {
+  _dragmaprBridgeActive = false;
+  if (_dragmaprBridgeTimer) {
+    clearTimeout(_dragmaprBridgeTimer);
+    _dragmaprBridgeTimer = null;
+  }
 }
 $(document).on("shiny:connected", function() {
-  setTimeout(_dragmaprBridgePoll, 100);
+  if (_dragmaprBridgeActive) return;
+  _dragmaprBridgeActive = true;
+  _dragmaprBridgeTimer = setTimeout(_dragmaprBridgePoll, 100);
 });
+$(document).on("shiny:disconnected", _dragmaprBridgeStop);
+window.addEventListener("beforeunload", _dragmaprBridgeStop);
 ',
     jsonlite::toJSON(allowed_origin,  auto_unbox = TRUE),
     jsonlite::toJSON(iframe_selector, auto_unbox = TRUE),

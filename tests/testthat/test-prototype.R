@@ -37,6 +37,26 @@ test_that("drag_map_prototype writes configurable label options", {
   expect_match(html, "https://d3js.org v7", fixed = TRUE)
 })
 
+test_that("drag_map_prototype default output uses a temporary html file", {
+  x <- sf::st_sf(
+    region = "North",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+  cwd <- tempfile("dragmapr_cwd_")
+  dir.create(cwd)
+  old <- setwd(cwd)
+  on.exit(setwd(old), add = TRUE)
+
+  file <- drag_map_prototype(x, region_col = "region")
+
+  expect_true(file.exists(file))
+  expect_false(file.exists(file.path(cwd, "drag-map.html")))
+  expect_match(basename(file), "^drag-map-.*\\.html$")
+})
+
 test_that("drag_map_prototype escapes script-sensitive label text", {
   x <- sf::st_sf(
     region = "North",
@@ -129,6 +149,10 @@ test_that("drag_map_prototype writes legend, background, and connector style opt
   expect_match(html, "connector-arrow", fixed = TRUE)
   expect_match(html, "body.bg-dark .legend-label", fixed = TRUE)
   expect_match(html, 'type: "dragmapr-ready", generation', fixed = TRUE)
+  expect_error(
+    drag_map_prototype(x, region_col = "region", connector_linetype = "dashdot", file = tempfile(fileext = ".html")),
+    "should be one of"
+  )
 })
 
 test_that("drag_map_prototype can hide the built-in side panel", {

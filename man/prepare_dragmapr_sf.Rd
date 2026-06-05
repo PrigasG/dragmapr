@@ -19,7 +19,9 @@ features with valid geometry.
 \description{
 Repairs invalid geometry, filters to polygon types, assigns a fallback CRS
 when none is present, and reprojects geographic (longitude/latitude) data to
-a projected CRS so metre offsets work correctly.
+a projected CRS so metre offsets work correctly. CRS-less inputs trigger a
+warning because the fallback is an assumption; pass \code{target_crs} explicitly
+when your data uses a different projected CRS.
 }
 \examples{
 poly <- sf::st_sf(

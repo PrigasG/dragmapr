@@ -34,7 +34,7 @@ Suggests:
     pkgdown,
     rmarkdown,
     shiny,
-    shinyWidgets,
+    shinyWidgets (>= 0.8.6),
     testthat (>= 3.0.0)
 VignetteBuilder: 
     knitr

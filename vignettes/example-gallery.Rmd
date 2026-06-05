@@ -116,6 +116,48 @@ render_dragged_map(
 )
 ```
 
+## Selected Labels And Legend Keys
+
+Selection filters are render-time controls. They hide selected labels or legend
+keys without deleting offset rows or changing the source geometry.
+
+```{r}
+render_dragged_map(
+  hhs$states,
+  region_offsets = hhs$region_offsets,
+  region_col = "hhs_region",
+  labels = hhs$labels,
+  label_offsets = hhs$label_offsets,
+  region_palette = hhs$region_colors,
+  region_labels = hhs$region_names,
+  label_values = c("1", "2", "3"),
+  legend_values = c("1", "2", "3"),
+  title = "Selected labels and legend keys"
+)
+```
+
+## Movement Context
+
+Origin outlines and movement connectors can explain how the layout changed from
+the original geography. They are optional and off by default.
+
+```{r}
+render_dragged_map(
+  hhs$states,
+  region_offsets = hhs$region_offsets,
+  region_col = "hhs_region",
+  labels = hhs$labels,
+  label_offsets = hhs$label_offsets,
+  region_palette = hhs$region_colors,
+  region_labels = hhs$region_names,
+  show_origin_outlines = TRUE,
+  show_movement_connectors = TRUE,
+  movement_connector_linetype = "dashed",
+  movement_connector_endpoint = "closed",
+  title = "Movement context"
+)
+```
+
 ## Shiny
 
 Several Shiny examples are bundled but not evaluated in this vignette because
@@ -133,13 +175,14 @@ shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragma
 interactive plot inside Shiny, the helper sends region and label state back to
 the parent app, and the app can export a PNG for a report or document. It also
 shows toggles for labels, legends, marker shapes (circle, rounded box, text
-only), info-box dimensions, connector style, connector line pattern, arrow
-endpoints, and connector thickness.
+only), info-box dimensions, connector style, connector color, connector line
+pattern, arrow endpoints, connector thickness, and movement context.
 
 `shiny_spatial_studio.R` is the general spatial workspace. It accepts local
 polygon uploads, including zipped shapefiles, GeoJSON, and GeoPackage files,
 then lets users choose grouping/label columns, colors, annotation style
 (short labels or info boxes), text size, connector style, connector line
-pattern, smart connectors, legend visibility/title, map background, and export
-formats. Region groups are sorted in natural numeric order throughout the
-sidebar, the legend, and the exported CSVs.
+pattern, smart connectors, legend visibility/title, multiselect legend and
+label filters, movement context, map background, and export formats. Region
+groups are sorted in natural numeric order throughout the sidebar, the legend,
+and the exported CSVs.

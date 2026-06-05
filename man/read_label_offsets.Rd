@@ -13,5 +13,5 @@ read_label_offsets(path)
 A normalized label state data frame.
 }
 \description{
-\code{read_label_offsets()} is retained as an alias for \code{\link[=read_label_state]{read_label_state()}}.
+\code{read_label_offsets()} is deprecated. Use \code{\link[=read_label_state]{read_label_state()}} instead.
 }

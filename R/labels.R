@@ -212,7 +212,7 @@ apply_label_state <- function(labels, label_state = NULL) {
 
 #' Derive one label anchor per draggable region
 #'
-#' `make_labels()` is retained as an alias for [make_region_labels()].
+#' `make_labels()` is deprecated. Use [make_region_labels()] instead.
 #'
 #' @inheritParams make_region_labels
 #' @return A drag label table.
@@ -221,23 +221,25 @@ make_labels <- function(x,
                         region_col,
                         label_col = region_col,
                         point = c("point_on_surface", "centroid")) {
+  .Deprecated("make_region_labels")
   make_region_labels(x, region_col = region_col, label_col = label_col, point = point)
 }
 
 #' Read label offsets from CSV
 #'
-#' `read_label_offsets()` is retained as an alias for [read_label_state()].
+#' `read_label_offsets()` is deprecated. Use [read_label_state()] instead.
 #'
 #' @inheritParams read_label_state
 #' @return A normalized label state data frame.
 #' @export
 read_label_offsets <- function(path) {
+  .Deprecated("read_label_state")
   read_label_state(path)
 }
 
 #' Apply label-specific offsets to a label table
 #'
-#' `apply_label_offsets()` is retained as an alias for [apply_label_state()].
+#' `apply_label_offsets()` is deprecated. Use [apply_label_state()] instead.
 #'
 #' @param labels A data frame from `make_region_labels()` or `as_drag_labels()`.
 #' @param label_offsets A data frame with `label_id`, `region`, `dx_m`, and
@@ -245,6 +247,7 @@ read_label_offsets <- function(path) {
 #' @return A label data frame with adjusted `x` and `y`.
 #' @export
 apply_label_offsets <- function(labels, label_offsets = NULL) {
+  .Deprecated("apply_label_state")
   apply_label_state(labels, label_offsets)
 }
 

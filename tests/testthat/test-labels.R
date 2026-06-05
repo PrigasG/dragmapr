@@ -26,10 +26,31 @@ test_that("apply_label_offsets nudges labels independently", {
   )
   offsets <- data.frame(label_id = "North", region = "North", dx_m = 3, dy_m = -2)
 
-  out <- apply_label_offsets(labels, offsets)
+  expect_warning(
+    out <- apply_label_offsets(labels, offsets),
+    "deprecated"
+  )
 
   expect_equal(out$x, 13)
   expect_equal(out$y, 18)
+})
+
+test_that("legacy label helpers warn before forwarding", {
+  x <- sf::st_sf(
+    region = "North",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+  file <- tempfile(fileext = ".csv")
+  writeLines("label_id,region,dx_m,dy_m\nNorth,North,1,2", file)
+
+  expect_warning(labels <- make_labels(x, "region"), "deprecated")
+  expect_warning(state <- read_label_offsets(file), "deprecated")
+
+  expect_equal(labels$label_id, "North")
+  expect_equal(state$dx_m, 1)
 })
 
 test_that("as_drag_labels preserves extra columns", {
@@ -312,6 +333,10 @@ test_that("render_dragged_map supports legend title, background, and connector s
   expect_equal(plot$layers[[2]]$aes_params$linetype, "dashed")
   expect_equal(plot$layers[[2]]$aes_params$colour, "#AABBCC")
   expect_s3_class(plot$layers[[2]]$geom_params$arrow, "arrow")
+  expect_error(
+    render_dragged_map(x, region_col = "region", connector_linetype = "dashdot"),
+    "should be one of"
+  )
 
   dark_plot <- render_dragged_map(
     x,

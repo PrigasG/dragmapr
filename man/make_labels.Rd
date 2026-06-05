@@ -24,5 +24,5 @@ make_labels(
 A drag label table.
 }
 \description{
-\code{make_labels()} is retained as an alias for \code{\link[=make_region_labels]{make_region_labels()}}.
+\code{make_labels()} is deprecated. Use \code{\link[=make_region_labels]{make_region_labels()}} instead.
 }

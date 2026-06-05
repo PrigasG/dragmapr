@@ -21,3 +21,20 @@ Initial CRAN release.
   dragmapr** that embeds the prototype in the viewer pane and assigns
   `region_offsets` and `label_offsets` to the target environment on completion
   (`.GlobalEnv` when launched from the RStudio Addins menu).
+* Interactive and static outputs support selective legend and label rendering
+  with `legend_values` and `label_values`, preserving stored offsets for hidden
+  labels.
+* Label connector lines can be styled by color, width, line pattern, and arrow
+  endpoint in both the browser helper and static exports.
+* Movement context controls can show origin outlines, movement connector lines,
+  and browser-only drag preview trails. Movement connectors support configurable
+  color, opacity, width, line pattern, and open/closed endpoints.
+* Spatial Studio demonstrates legend and label multiselect filters, connector
+  styling, movement context controls, project persistence, and static bundle
+  export.
+* Release hardening: package-internal `%||%` is defined for the RStudio addin,
+  prototype output defaults to a temporary HTML file unless `file` is supplied,
+  connector linetypes are validated in static exports, the Shiny iframe bridge
+  stops polling on disconnect/unload, CRS-less inputs warn before assuming the
+  target CRS, legacy label helper aliases emit deprecation warnings, and the
+  bundled D3 license is included under `inst/prototype/`.

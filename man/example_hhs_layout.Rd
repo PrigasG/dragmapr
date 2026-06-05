@@ -14,6 +14,8 @@ A list with \code{states}, \code{labels}, \code{region_offsets}, \code{label_off
 This copies the HHS region membership, names, colors, and published display
 offsets used by the explodemap paper workflow into a lightweight fixture that
 does not depend on the explodemap package or its generated paper outputs.
+See the explodemap vignette "Reproducing the paper examples", section 6:
+\url{https://stat.ethz.ch/CRAN/web/packages/explodemap/vignettes/reproducing-paper-examples.html}.
 }
 \examples{
 hhs <- example_hhs_layout()

@@ -123,6 +123,18 @@ render_dragged_map(
 
 Supported connector geometry styles are `"straight"`, `"elbow"`, `"curve"`, and `"squiggle"`. Connector exports can also use `connector_linetype = "dashed"` or `"dotted"` and `connector_endpoint = "arrow"`. Advanced users can set `connector_start_x` / `connector_start_y` or `connector_mid_x` / `connector_mid_y` columns for custom line starts and breakpoints.
 
+Browser and static connector lines can be styled consistently. Use
+`connector_color`, `connector_linewidth`, `connector_linetype`, and
+`connector_endpoint` for label connector lines. Movement context can also be
+shown with `show_origin_outlines`, `show_movement_connectors`, and
+`show_drag_trail` in the browser helper; static exports support origin outlines
+and movement connectors with configurable color, opacity, line width, line type,
+and open/closed arrow endpoints.
+
+`legend_values` and `label_values` let Shiny apps or scripts show only selected
+legend keys or selected label IDs while preserving all underlying offsets. Use
+`NULL` to include everything, or pass a character vector to include a subset.
+
 ## Static Export From Offsets
 
 The draggable helper exports two small tables:
@@ -207,7 +219,7 @@ The exported `example_hhs_layout()` and `example_panel_layout()` helpers return 
 -   `shiny_custom_labels.R`: Shiny app with user-supplied draggable labels.
 -   `shiny_draggable_export.R`: Shiny app that captures drag state, previews a static plot, toggles labels/legends/connectors/info boxes, and exports PNG.
 -   `shiny_draggable_plot.R`: embed a draggable plot helper in a Shiny app.
--   `shiny_spatial_studio.R`: first-pass spatial studio for local zipped shapefile, GeoJSON, or GPKG upload; reopen saved project ZIP bundles; choose grouping/labels/colors; edit label text; undo and redo drag-state changes; show the legend in drag and preview panes; switch text labels between circle/rounded-box/text-only markers; drag the map; and export PNG/PDF/R-script/CSV/GeoJSON/GPKG/HTML bundles.
+-   `shiny_spatial_studio.R`: first-pass spatial studio for local zipped shapefile, GeoJSON, or GPKG upload; reopen saved project ZIP bundles; choose grouping/labels/colors; filter visible legend keys and labels; edit label text; undo and redo drag-state changes; show the legend in drag and preview panes; switch text labels between circle/rounded-box/text-only markers; style connector and movement-context lines; drag the map; and export PNG/PDF/R-script/CSV/GeoJSON/GPKG/HTML bundles.
 -   `shiny_static_export.R`: Shiny static PNG export after offsets are available.
 -   `smoke_examples.R`: runs all bundled examples in a temporary directory.
 
@@ -235,6 +247,14 @@ The package includes four vignettes:
 -   Example gallery
 -   Shiny workflows
 
+## Known Limitations
+
+-   `dragmapr` is currently focused on polygon and multipolygon `sf` geometry. Point and line workflows may work in pieces, but they are not the primary supported path yet.
+-   Offsets are stored in projected coordinate units, so longitude/latitude data should be prepared with `prepare_dragmapr_sf()` or another projected CRS before dragging.
+-   The browser helper is designed for manual layout editing, not geodetic analysis. Dragged geometry is useful for display, reporting, and communication, but it is no longer a literal geographic position.
+-   Movement context features such as origin outlines, movement connectors, and drag preview trails are visual aids. They do not change the saved region or label offset tables.
+-   Spatial Studio exports adjusted geometry as GeoJSON and GeoPackage. Other formats can be produced by opening either export in Mapshaper or another GIS tool.
+-   Very large datasets can be slow in the browser. For presentations and production workflows, start with simplified or grouped geometry when possible.
 
 ## Design Goals
 
