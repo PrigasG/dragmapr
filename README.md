@@ -17,6 +17,12 @@ pinned: false
 
 The package started from an `explodemap` paper workflow, but it is now self-contained. The bundled HHS example copies only the small reusable pieces from that work: region membership, names/colors, and published display offsets.
 
+Watch a short actual-map walkthrough in the
+[dragmap demo vignette](https://prigasg.github.io/dragmapr/articles/dragmap-demo.html),
+or see the
+[HHS placeholder shapes demo](https://prigasg.github.io/dragmapr/articles/hhs-placeholder-shapes-demo.html)
+for the embedded Spatial Studio HHS workflow.
+
 ## Install
 
 ``` r
@@ -240,8 +246,10 @@ source(system.file("examples", "smoke_examples.R", package = "dragmapr"))
 
 ## Vignettes And Site
 
-The package includes four vignettes:
+The package includes six vignettes:
 
+-   Dragmap demo
+-   HHS placeholder shapes demo
 -   Getting started with dragmapr
 -   Labels and static output
 -   Example gallery

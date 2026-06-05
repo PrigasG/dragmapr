@@ -26,6 +26,10 @@ navbar:
       menu:
       - text: Basic draggable map
         href: articles/getting-started.html
+      - text: Dragmap demo video
+        href: articles/dragmap-demo.html
+      - text: HHS placeholder shapes video
+        href: articles/hhs-placeholder-shapes-demo.html
       - text: Labels and static output
         href: articles/labels-and-static-output.html
       - text: Example gallery
@@ -106,6 +110,8 @@ articles:
 - title: Workflows
   navbar: ~
   contents:
+  - dragmap-demo
+  - hhs-placeholder-shapes-demo
   - getting-started
   - labels-and-static-output
   - example-gallery

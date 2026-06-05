@@ -1,0 +1,56 @@
+---
+title: "HHS placeholder shapes demo"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{HHS placeholder shapes demo}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+This short video shows the embedded HHS placeholder shapes workflow in Spatial
+Studio. It uses the bundled HHS-style fixture as an actual map-shaped starting
+point for dragging regions, adjusting labels, and exporting reproducible
+artifacts.
+
+<div class="dragmapr-demo-video">
+  <video controls preload="metadata" poster="../hhs-placeholder-shapes-poster.png" src="../hhs-placeholder-shapes-demo.mp4">
+    <p>
+      Your browser does not support embedded video.
+      <a href="../hhs-placeholder-shapes-demo.mp4">Download the HHS placeholder shapes demo video.</a>
+    </p>
+  </video>
+</div>
+
+The same HHS-style fixture is available from R with `example_hhs_layout()`:
+
+```{r, eval = FALSE}
+library(dragmapr)
+
+hhs <- example_hhs_layout()
+
+drag_map_prototype(
+  hhs$states,
+  region_col = "hhs_region",
+  labels = hhs$labels,
+  region_offsets = hhs$region_offsets,
+  label_offsets = hhs$label_offsets,
+  region_palette = hhs$region_colors,
+  show_legend = TRUE,
+  legend_title = "HHS region",
+  open = TRUE
+)
+```
+
+For a full Spatial Studio session, launch the bundled app:
+
+```{r, eval = FALSE}
+shiny::runApp(system.file(
+  "examples",
+  "shiny_spatial_studio.R",
+  package = "dragmapr"
+))
+```
