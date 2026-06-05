@@ -2,11 +2,11 @@
 #'
 #' Launches a compact Shiny gadget that lets you pick a projected `sf` object
 #' from an environment, choose the region and label columns, adjust label,
-#' connector, legend, colour, and static-output settings, and interact with the
-#' D3 drag-map prototype inside the IDE viewer pane. When you click **Done**,
-#' the current region and label offsets are assigned as `region_offsets` and
-#' `label_offsets` in the same environment, ready to pass to
-#' [render_dragged_map()].
+#' connector, legend, label-filter, movement-context, colour, and static-output
+#' settings, and interact with the D3 drag-map prototype inside the IDE viewer
+#' pane. When you click **Done**, the current region and label offsets are
+#' assigned as `region_offsets` and `label_offsets` in the same environment,
+#' ready to pass to [render_dragged_map()].
 #'
 #' The addin appears under **Addins > Launch dragmapr** in RStudio once the
 #' package is installed.
@@ -68,7 +68,7 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
   }
 
   label_data_for <- function(x, region_col, label_col, show_labels,
-                             visible_labels = "all", label_edits = list(),
+                             label_edits = list(),
                              annotation_mode = "labels", show_connectors = FALSE,
                              connector_type = "straight", label_width = 64,
                              label_height = 30, box_width = 170,
@@ -77,9 +77,6 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
       return(FALSE)
     }
     labels <- make_region_labels(x, region_col = region_col, label_col = label_col)
-    if (!identical(visible_labels, "all")) {
-      labels <- labels[as.character(labels$region) %in% visible_labels, , drop = FALSE]
-    }
     if (length(label_edits) > 0L && nrow(labels) > 0L) {
       ids <- as.character(labels$label_id)
       for (id in intersect(names(label_edits), ids)) {
@@ -107,13 +104,23 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
   }
 
   serve_prototype <- function(x, region_col, label_col, show_labels,
-                              visible_labels, label_edits, annotation_mode,
+                              label_edits, annotation_mode,
                               label_marker_shape, label_text_size,
                               label_radius, label_width, label_height,
                               box_width, box_height, show_connectors,
                               connector_type, connector_linewidth,
+                              connector_color, connector_linetype,
+                              connector_endpoint,
                               region_palette, show_legend,
-                              max_legend_keys, legend_position) {
+                              max_legend_keys, legend_position,
+                              legend_title, legend_values, label_values,
+                              show_origin_outlines, show_movement_connectors,
+                              movement_connector_color,
+                              movement_connector_opacity,
+                              movement_connector_linewidth,
+                              movement_connector_linetype,
+                              movement_connector_endpoint,
+                              show_drag_trail) {
     tmp_dir <- tempfile("dragmapr_addin_")
     dir.create(tmp_dir, recursive = TRUE)
     tmp_file <- file.path(tmp_dir, "index.html")
@@ -122,7 +129,6 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
       region_col = region_col,
       label_col = label_col,
       show_labels = show_labels,
-      visible_labels = visible_labels,
       label_edits = label_edits,
       annotation_mode = annotation_mode,
       show_connectors = show_connectors,
@@ -144,11 +150,25 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
       label_height = label_height,
       label_box_width = box_width,
       label_box_height = box_height,
+      connector_color = connector_color,
       connector_linewidth = connector_linewidth,
+      connector_linetype = connector_linetype,
+      connector_endpoint = connector_endpoint,
       region_palette = region_palette,
       show_legend = show_legend,
       max_legend_keys = max_legend_keys,
       legend_position = legend_position,
+      legend_title = legend_title,
+      legend_values = legend_values,
+      label_values = label_values,
+      show_origin_outlines = show_origin_outlines,
+      show_movement_connectors = show_movement_connectors,
+      movement_connector_color = movement_connector_color,
+      movement_connector_opacity = movement_connector_opacity,
+      movement_connector_linewidth = movement_connector_linewidth,
+      movement_connector_linetype = movement_connector_linetype,
+      movement_connector_endpoint = movement_connector_endpoint,
+      show_drag_trail = show_drag_trail,
       file = tmp_file,
       open = FALSE,
       side_panel = FALSE
@@ -171,6 +191,21 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
       jsonlite::toJSON(x, dataframe = "rows", auto_unbox = TRUE),
       simplifyVector = FALSE
     )
+  }
+
+  selected_values <- function(values, all_values) {
+    all_values <- as.character(all_values)
+    values <- as.character(values %||% character())
+    values <- intersect(values, all_values)
+    if (length(values) == length(all_values) && setequal(values, all_values)) {
+      NULL
+    } else {
+      values
+    }
+  }
+
+  valid_color_or_default <- function(value, default) {
+    if (valid_hex_color(value)) value else default
   }
 
   sf_choices <- function() {
@@ -468,6 +503,8 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
           shiny::div("Legend", class = "dragmapr-section"),
           shiny::checkboxInput("show_legend", "Show legend", value = FALSE),
           shiny::checkboxInput("legend_show_all", "Show all legend keys", value = FALSE),
+          shiny::textInput("legend_title", "Legend title", value = "Region"),
+          shiny::uiOutput("legend_filter_ui"),
           shiny::selectInput(
             "legend_position", "Legend position",
             choices = c("Bottom" = "bottom", "Top" = "top",
@@ -503,6 +540,7 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
           class = "dragmapr-card",
           shiny::div("Connectors", class = "dragmapr-section"),
           shiny::checkboxInput("show_connectors", "Show connector lines", value = FALSE),
+          shiny::textInput("connector_color", "Connector color", value = "#334155"),
           shiny::selectInput(
             "connector_type", "Connector style",
             choices = c("Straight" = "straight", "Elbow" = "elbow",
@@ -510,10 +548,52 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
             selected = "straight",
             width = "100%"
           ),
+          shiny::selectInput(
+            "connector_linetype", "Line style",
+            choices = c("Solid" = "solid", "Dashed" = "dashed", "Dotted" = "dotted"),
+            selected = "solid",
+            width = "100%"
+          ),
+          shiny::selectInput(
+            "connector_endpoint", "Arrow",
+            choices = c("None" = "none", "Arrow" = "arrow"),
+            selected = "none",
+            width = "100%"
+          ),
           shiny::div(
             class = "dragmapr-slider",
             shiny::sliderInput("connector_linewidth", "Connector thickness",
                                min = 0.25, max = 2.5, value = 1.3, step = 0.05)
+          )
+        ),
+        shiny::div(
+          class = "dragmapr-card",
+          shiny::div("Movement context", class = "dragmapr-section"),
+          shiny::checkboxInput("show_origin_outlines", "Show origin outlines", value = FALSE),
+          shiny::checkboxInput("show_movement_connectors", "Show movement connectors", value = FALSE),
+          shiny::checkboxInput("show_drag_trail", "Show drag preview trail", value = FALSE),
+          shiny::textInput("movement_connector_color", "Movement connector color", value = "#64748b"),
+          shiny::div(
+            class = "dragmapr-slider",
+            shiny::sliderInput("movement_connector_opacity", "Movement connector opacity",
+                               min = 0, max = 1, value = 0.72, step = 0.02)
+          ),
+          shiny::div(
+            class = "dragmapr-slider",
+            shiny::sliderInput("movement_connector_linewidth", "Movement connector thickness",
+                               min = 0.25, max = 3, value = 1.4, step = 0.05)
+          ),
+          shiny::selectInput(
+            "movement_connector_linetype", "Movement connector line style",
+            choices = c("Solid" = "solid", "Dashed" = "dashed", "Dotted" = "dotted"),
+            selected = "solid",
+            width = "100%"
+          ),
+          shiny::selectInput(
+            "movement_connector_endpoint", "Movement connector arrow",
+            choices = c("Closed arrow" = "closed", "Open arrow" = "open", "None" = "none"),
+            selected = "closed",
+            width = "100%"
           )
         ),
         shiny::div(
@@ -589,7 +669,6 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
       x <- current_sf()
       region_col <- input$region_col
       label_col <- input$label_col
-      visible_labels <- input$visible_labels %||% "all"
       if (is.null(x) || is.null(region_col) || is.null(label_col) ||
           !nzchar(region_col) || !nzchar(label_col)) {
         return(data.frame())
@@ -600,7 +679,6 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
           region_col = region_col,
           label_col = label_col,
           show_labels = isTRUE(input$show_labels),
-          visible_labels = visible_labels,
           label_edits = rv$label_edits,
           annotation_mode = input$annotation_mode %||% "labels",
           show_connectors = isTRUE(input$show_connectors),
@@ -631,6 +709,10 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
       palette_from_text(region_groups(), input$region_palette_text)
     }
 
+    visible_region_values <- function(input_id) {
+      selected_values(input[[input_id]], region_groups())
+    }
+
     base_label_text <- function(label_id) {
       x <- current_sf()
       region_col <- input$region_col
@@ -650,10 +732,15 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
       }
       session$sendCustomMessage("dragmapr-labels", list(labels = isTRUE(input$show_labels)))
       label_rows <- current_label_rows()
+      label_values <- visible_region_values("visible_labels")
+      legend_values <- visible_region_values("visible_legend_values")
       session$sendCustomMessage(
         "dragmapr-label-data",
         list(labels = if (is.data.frame(label_rows)) rows_for_message(label_rows) else list())
       )
+      session$sendCustomMessage("dragmapr-set-label-values", list(values = label_values))
+      session$sendCustomMessage("dragmapr-set-legend-values", list(values = legend_values))
+      session$sendCustomMessage("dragmapr-set-region-palette", list(palette = as.list(current_palette())))
       session$sendCustomMessage("dragmapr-label-options", list(options = list(
         labelMarker = !identical(input$label_marker_shape %||% "rect", "none"),
         labelMarkerShape = input$label_marker_shape %||% "rect",
@@ -663,11 +750,23 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
         labelHeight = input$label_height %||% 30,
         labelBoxWidth = input$box_width %||% 170,
         labelBoxHeight = input$box_height %||% 76,
+        connectorColor = valid_color_or_default(input$connector_color, "#334155"),
         connectorLinewidth = input$connector_linewidth %||% 1.3,
+        connectorLinetype = input$connector_linetype %||% "solid",
+        connectorEndpoint = input$connector_endpoint %||% "none",
         regionPalette = as.list(current_palette()),
         showLegend = isTRUE(input$show_legend),
         maxLegendKeys = if (isTRUE(input$legend_show_all)) 1000000 else 25,
-        legendPosition = input$legend_position %||% "bottom"
+        legendPosition = input$legend_position %||% "bottom",
+        legendTitle = input$legend_title %||% "Region",
+        showOriginOutlines = isTRUE(input$show_origin_outlines),
+        showMovementConnectors = isTRUE(input$show_movement_connectors),
+        movementConnectorColor = valid_color_or_default(input$movement_connector_color, "#64748b"),
+        movementConnectorOpacity = input$movement_connector_opacity %||% 0.72,
+        movementConnectorLinewidth = input$movement_connector_linewidth %||% 1.4,
+        movementConnectorLinetype = input$movement_connector_linetype %||% "solid",
+        movementConnectorEndpoint = input$movement_connector_endpoint %||% "closed",
+        showDragTrail = isTRUE(input$show_drag_trail)
       )))
       rv$status <- "Updated map controls."
       rv$status_class <- "ok"
@@ -707,8 +806,26 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
 
     output$label_filter_ui <- shiny::renderUI({
       groups <- region_groups()
-      choices <- c("All labels" = "all", stats::setNames(groups, groups))
-      shiny::selectInput("visible_labels", "Visible labels", choices = choices, selected = "all", width = "100%")
+      shiny::selectInput(
+        "visible_labels",
+        "Visible labels",
+        choices = stats::setNames(groups, groups),
+        selected = groups,
+        multiple = TRUE,
+        width = "100%"
+      )
+    })
+
+    output$legend_filter_ui <- shiny::renderUI({
+      groups <- region_groups()
+      shiny::selectInput(
+        "visible_legend_values",
+        "Legend values",
+        choices = stats::setNames(groups, groups),
+        selected = groups,
+        multiple = TRUE,
+        width = "100%"
+      )
     })
 
     output$label_editor_ui <- shiny::renderUI({
@@ -823,7 +940,6 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
           region_col = region_col,
           label_col = label_col,
           show_labels = isTRUE(input$show_labels),
-          visible_labels = input$visible_labels %||% "all",
           label_edits = rv$label_edits,
           annotation_mode = input$annotation_mode %||% "labels",
           label_marker_shape = input$label_marker_shape %||% "rect",
@@ -836,10 +952,24 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
           show_connectors = isTRUE(input$show_connectors),
           connector_type = input$connector_type %||% "straight",
           connector_linewidth = input$connector_linewidth %||% 1.3,
+          connector_color = valid_color_or_default(input$connector_color, "#334155"),
+          connector_linetype = input$connector_linetype %||% "solid",
+          connector_endpoint = input$connector_endpoint %||% "none",
           region_palette = current_palette(),
           show_legend = isTRUE(input$show_legend),
           max_legend_keys = if (isTRUE(input$legend_show_all)) 1000000 else 25,
-          legend_position = input$legend_position %||% "bottom"
+          legend_position = input$legend_position %||% "bottom",
+          legend_title = input$legend_title %||% "Region",
+          legend_values = visible_region_values("visible_legend_values"),
+          label_values = visible_region_values("visible_labels"),
+          show_origin_outlines = isTRUE(input$show_origin_outlines),
+          show_movement_connectors = isTRUE(input$show_movement_connectors),
+          movement_connector_color = valid_color_or_default(input$movement_connector_color, "#64748b"),
+          movement_connector_opacity = input$movement_connector_opacity %||% 0.72,
+          movement_connector_linewidth = input$movement_connector_linewidth %||% 1.4,
+          movement_connector_linetype = input$movement_connector_linetype %||% "solid",
+          movement_connector_endpoint = input$movement_connector_endpoint %||% "closed",
+          show_drag_trail = isTRUE(input$show_drag_trail)
         ),
         error = function(e) {
           rv$status <- conditionMessage(e)
@@ -878,8 +1008,13 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
            input$label_marker_shape, input$label_text_size, input$label_radius,
            input$label_width, input$label_height, input$box_width, input$box_height,
            input$show_connectors, input$connector_type, input$connector_linewidth,
+           input$connector_color, input$connector_linetype, input$connector_endpoint,
            input$region_palette_text, input$show_legend, input$legend_show_all,
-           input$legend_position),
+           input$legend_position, input$legend_title, input$visible_legend_values,
+           input$show_origin_outlines, input$show_movement_connectors,
+           input$movement_connector_color, input$movement_connector_opacity,
+           input$movement_connector_linewidth, input$movement_connector_linetype,
+           input$movement_connector_endpoint, input$show_drag_trail),
       send_style_controls(),
       ignoreInit = TRUE
     )
@@ -911,7 +1046,31 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
         title = input$static_title %||% "dragmapr map",
         width = input$static_width %||% 10,
         height = input$static_height %||% 8,
-        dpi = input$static_dpi %||% 300
+        dpi = input$static_dpi %||% 300,
+        region_col = input$region_col %||% NULL,
+        label_col = input$label_col %||% NULL,
+        region_palette = current_palette(),
+        show_legend = isTRUE(input$show_legend),
+        max_legend_keys = if (isTRUE(input$legend_show_all)) Inf else 25,
+        legend_position = input$legend_position %||% "bottom",
+        legend_title = input$legend_title %||% "Region",
+        legend_values = visible_region_values("visible_legend_values"),
+        label_values = visible_region_values("visible_labels"),
+        show_label_marker = !identical(input$label_marker_shape %||% "rect", "none"),
+        label_marker_shape = input$label_marker_shape %||% "rect",
+        label_size = (input$label_text_size %||% 11) / 3,
+        marker_size = (input$label_radius %||% 14) / 3,
+        connector_linewidth = input$connector_linewidth %||% 1.3,
+        connector_color = valid_color_or_default(input$connector_color, "#334155"),
+        connector_linetype = input$connector_linetype %||% "solid",
+        connector_endpoint = input$connector_endpoint %||% "none",
+        show_origin_outlines = isTRUE(input$show_origin_outlines),
+        show_movement_connectors = isTRUE(input$show_movement_connectors),
+        movement_connector_color = valid_color_or_default(input$movement_connector_color, "#64748b"),
+        movement_connector_opacity = input$movement_connector_opacity %||% 0.72,
+        movement_connector_linewidth = input$movement_connector_linewidth %||% 1.4,
+        movement_connector_linetype = input$movement_connector_linetype %||% "solid",
+        movement_connector_endpoint = input$movement_connector_endpoint %||% "closed"
       )
       assign("region_offsets", region_offsets, envir = env)
       assign("label_offsets", label_offsets, envir = env)

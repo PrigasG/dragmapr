@@ -19,11 +19,11 @@ settings are assigned as \code{dragmapr_static_options}.
 \description{
 Launches a compact Shiny gadget that lets you pick a projected \code{sf} object
 from an environment, choose the region and label columns, adjust label,
-connector, legend, colour, and static-output settings, and interact with the
-D3 drag-map prototype inside the IDE viewer pane. When you click \strong{Done},
-the current region and label offsets are assigned as \code{region_offsets} and
-\code{label_offsets} in the same environment, ready to pass to
-\code{\link[=render_dragged_map]{render_dragged_map()}}.
+connector, legend, label-filter, movement-context, colour, and static-output
+settings, and interact with the D3 drag-map prototype inside the IDE viewer
+pane. When you click \strong{Done}, the current region and label offsets are
+assigned as \code{region_offsets} and \code{label_offsets} in the same environment,
+ready to pass to \code{\link[=render_dragged_map]{render_dragged_map()}}.
 }
 \details{
 The addin appears under \strong{Addins > Launch dragmapr} in RStudio once the
