@@ -9,6 +9,7 @@ __D3__
 </script>
 <style>
 body { margin: 0; font-family: system-ui, sans-serif; color: #172033; }
+[hidden] { display: none !important; }
 main { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: 100vh; }
 body.bg-transparent, body.bg-transparent svg { background: transparent; }
 body.bg-white svg { background: #fbfcfe; }
@@ -108,7 +109,7 @@ body.bg-dark .legend-label { color: #f8fafc; }
 </head>
 <body>
 <main>
-  <div id="identity-badge" class="identity-badge" aria-live="polite"></div>
+  <div id="identity-badge" class="identity-badge" aria-live="polite" hidden></div>
   <div id="drag-legend" class="drag-legend" hidden></div>
   <svg id="map"></svg>
   <aside>
@@ -485,6 +486,7 @@ function setActiveRegion(region, mode = "Region") {
   svg.selectAll("g.region").classed("is-active", d => String(d) === value);
   const badge = document.querySelector("#identity-badge");
   badge.innerHTML = `<span>${mode}</span>${escapeHtml(value)}`;
+  badge.hidden = false;
   badge.classList.add("is-visible");
 }
 
@@ -493,7 +495,10 @@ function clearActiveRegion(delay = 0) {
   const clear = () => {
     if (activeDragRegion !== null) return;
     svg.selectAll("g.region").classed("is-active", false);
-    document.querySelector("#identity-badge").classList.remove("is-visible");
+    const badge = document.querySelector("#identity-badge");
+    badge.classList.remove("is-visible");
+    badge.hidden = true;
+    badge.replaceChildren();
   };
   if (delay > 0) {
     badgeTimer = window.setTimeout(clear, delay);

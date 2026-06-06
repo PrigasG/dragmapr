@@ -398,6 +398,53 @@ test_that("spatial studio sends legend and label value filters live", {
   expect_match(studio_code, "label_values        = visible_label_ids()", fixed = TRUE)
 })
 
+test_that("spatial studio round-trips saved project display metadata", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
+
+  exported <- c(
+    "show_connectors     = isTRUE(input$show_connectors)",
+    "map_background      = input$map_background",
+    "annotation_mode     = input$annotation_mode",
+    "label_text_size     = input$label_text_size",
+    "label_radius        = input$label_radius",
+    "label_width         = input$label_width",
+    "label_height        = input$label_height",
+    "box_width           = input$box_width",
+    "box_height          = input$box_height",
+    "connector_type      = input$connector_type",
+    "connector_linetype  = input$connector_linetype",
+    "connector_endpoint  = input$connector_endpoint",
+    "connector_smart     = isTRUE(input$connector_smart)"
+  )
+  for (pattern in exported) {
+    expect_match(studio_code, pattern, fixed = TRUE)
+  }
+
+  restored <- c(
+    'updateCheckboxInput(session, "show_labels"',
+    'updateCheckboxInput(session, "show_connectors"',
+    'updateSelectInput(session, "map_background", selected = metadata$map_background',
+    'updateSelectInput(session, "annotation_mode", selected = metadata$annotation_mode',
+    'updateSelectInput(session, "label_marker_shape", selected = metadata$label_marker_shape',
+    'updateSliderInput(session, "label_text_size", value = metadata$label_text_size',
+    'updateSliderInput(session, "label_radius", value = metadata$label_radius',
+    'updateSliderInput(session, "label_width", value = metadata$label_width',
+    'updateSliderInput(session, "label_height", value = metadata$label_height',
+    'updateSliderInput(session, "box_width", value = metadata$box_width',
+    'updateSliderInput(session, "box_height", value = metadata$box_height',
+    'updateSliderInput(session, "connector_linewidth", value = metadata$connector_linewidth',
+    'updateSelectInput(session, "connector_type", selected = metadata$connector_type',
+    'updateSelectInput(session, "connector_linetype", selected = metadata$connector_linetype',
+    'updateSelectInput(session, "connector_endpoint", selected = metadata$connector_endpoint',
+    'updateCheckboxInput(session, "connector_smart", value = isTRUE(metadata$connector_smart'
+  )
+  for (pattern in restored) {
+    expect_match(studio_code, pattern, fixed = TRUE)
+  }
+  expect_match(studio_code, "metadata$marker_size", fixed = TRUE)
+})
+
 test_that("spatial studio initializes legend and label multiselects with all choices", {
   studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
   studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")

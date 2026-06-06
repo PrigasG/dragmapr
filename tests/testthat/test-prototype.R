@@ -37,6 +37,44 @@ test_that("drag_map_prototype writes configurable label options", {
   expect_match(html, "https://d3js.org v7", fixed = TRUE)
 })
 
+test_that("drag_map_prototype hides empty overlay shells", {
+  x <- sf::st_sf(
+    region = "North",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+  file <- tempfile(fileext = ".html")
+
+  drag_map_prototype(x, region_col = "region", show_legend = FALSE, file = file)
+
+  html <- paste(readLines(file, warn = FALSE), collapse = "\n")
+  expect_match(html, "[hidden] { display: none !important; }", fixed = TRUE)
+  expect_match(html, 'id="identity-badge" class="identity-badge" aria-live="polite" hidden', fixed = TRUE)
+  expect_match(html, "badge.hidden = false", fixed = TRUE)
+  expect_match(html, "badge.hidden = true", fixed = TRUE)
+  expect_match(html, "badge.replaceChildren()", fixed = TRUE)
+})
+
+test_that("drag_map_prototype does not show an empty legend shell", {
+  x <- sf::st_sf(
+    region = "North",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+  file <- tempfile(fileext = ".html")
+
+  drag_map_prototype(x, region_col = "region", show_legend = TRUE, legend_values = character(), file = file)
+
+  html <- paste(readLines(file, warn = FALSE), collapse = "\n")
+  expect_match(html, "legend.hidden = !shouldShow", fixed = TRUE)
+  expect_match(html, "legendRegions.length > 0", fixed = TRUE)
+  expect_match(html, 'id="drag-legend" class="drag-legend" hidden', fixed = TRUE)
+})
+
 test_that("drag_map_prototype default output uses a temporary html file", {
   x <- sf::st_sf(
     region = "North",

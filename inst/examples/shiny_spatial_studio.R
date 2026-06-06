@@ -627,13 +627,23 @@ body.dragmapr-loading .studio-load-veil {
 }
 
 /* ---- Download grid ---- */
+.download-group { margin-top: 10px; }
+.download-group:first-child { margin-top: 0; }
+.download-group-label {
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 5px;
+}
 .download-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  margin-top: 8px;
 }
 .download-grid .btn { width: 100%; font-size: 0.78rem; padding: 5px 8px; }
+.download-grid .btn-span { grid-column: 1 / -1; }
 .studio-card .btn {
   border-radius: 6px;
   font-weight: 600;
@@ -1356,21 +1366,42 @@ ui <- fluidPage(
         ),
 
         tags$div("Downloads", class = "studio-subgroup-title"),
+
         tags$div(
-          class = "download-grid",
-          downloadButton("download_png",        "PNG"),
-          downloadButton(
-            "download_script", "R script",
-            onclick = "Shiny.setInputValue('script_download_requested', Date.now(), {priority: 'event'});"
-          ),
-          downloadButton("download_region_csv", "Region CSV"),
-          downloadButton("download_label_csv",  "Label CSV"),
-          downloadButton("download_labels",     "Labels table"),
-          downloadButton("download_geojson",    "GeoJSON"),
-          downloadButton("download_gpkg",       "GPKG"),
-          downloadButton("download_html",       "HTML helper"),
-          downloadButton("download_bundle",     "Project ZIP"),
-          downloadButton("download_static_bundle", "Static bundle")
+          class = "download-group",
+          tags$div("Map output", class = "download-group-label"),
+          tags$div(
+            class = "download-grid",
+            downloadButton("download_png", "PNG", class = "btn-default btn-span")
+          )
+        ),
+
+        tags$div(
+          class = "download-group",
+          tags$div("Data files", class = "download-group-label"),
+          tags$div(
+            class = "download-grid",
+            downloadButton("download_region_csv", "Region CSV"),
+            downloadButton("download_label_csv",  "Label CSV"),
+            downloadButton("download_labels",     "Labels table"),
+            downloadButton("download_geojson",    "GeoJSON"),
+            downloadButton("download_gpkg",       "GPKG")
+          )
+        ),
+
+        tags$div(
+          class = "download-group",
+          tags$div("Code & bundles", class = "download-group-label"),
+          tags$div(
+            class = "download-grid",
+            downloadButton(
+              "download_script", "R script",
+              onclick = "Shiny.setInputValue('script_download_requested', Date.now(), {priority: 'event'});"
+            ),
+            downloadButton("download_html",          "HTML helper"),
+            downloadButton("download_bundle",        "Project ZIP"),
+            downloadButton("download_static_bundle", "Static bundle")
+          )
         ),
 
         tags$div("Open saved project", class = "studio-subgroup-title"),
@@ -1693,9 +1724,23 @@ server <- function(input, output, session) {
       set_source(project$source)
       state$static_title <- metadata$title %||% "dragmapr spatial studio"
       updateTextInput(session, "static_title", value = state$static_title)
+      updateNumericInput(session, "static_width", value = metadata$width %||% 10)
+      updateNumericInput(session, "static_height", value = metadata$height %||% 8)
+      updateNumericInput(session, "static_dpi", value = metadata$dpi %||% 300)
+      updateCheckboxInput(session, "show_labels", value = isTRUE(metadata$show_labels %||% TRUE))
       updateCheckboxInput(session, "show_legend", value = isTRUE(metadata$show_legend %||% TRUE))
+      updateCheckboxInput(session, "show_connectors", value = isTRUE(metadata$show_connectors %||% FALSE))
       updateTextInput(session, "legend_title", value = metadata$legend_title %||% "Region")
       updateSelectInput(session, "legend_position", selected = metadata$legend_position %||% "bottom")
+      updateSelectInput(session, "map_background", selected = metadata$map_background %||% "white")
+      updateSelectInput(session, "annotation_mode", selected = metadata$annotation_mode %||% "labels")
+      updateSelectInput(session, "label_marker_shape", selected = metadata$label_marker_shape %||% "circle")
+      updateSliderInput(session, "label_text_size", value = metadata$label_text_size %||% 11)
+      updateSliderInput(session, "label_radius", value = metadata$label_radius %||% ((metadata$marker_size %||% (14 / 3)) * 3))
+      updateSliderInput(session, "label_width", value = metadata$label_width %||% 64)
+      updateSliderInput(session, "label_height", value = metadata$label_height %||% 30)
+      updateSliderInput(session, "box_width", value = metadata$box_width %||% 170)
+      updateSliderInput(session, "box_height", value = metadata$box_height %||% 76)
       updateCheckboxInput(
         session,
         "show_origin_outlines",
@@ -1712,6 +1757,11 @@ server <- function(input, output, session) {
         value = isTRUE(metadata$legend_show_all %||% FALSE)
       )
       update_studio_color_input(session, "connector_color", value = metadata$connector_color %||% "#334155")
+      updateSliderInput(session, "connector_linewidth", value = metadata$connector_linewidth %||% 0.45)
+      updateSelectInput(session, "connector_type", selected = metadata$connector_type %||% "straight")
+      updateSelectInput(session, "connector_linetype", selected = metadata$connector_linetype %||% "solid")
+      updateSelectInput(session, "connector_endpoint", selected = metadata$connector_endpoint %||% "none")
+      updateCheckboxInput(session, "connector_smart", value = isTRUE(metadata$connector_smart %||% FALSE))
       update_studio_color_input(session, "movement_connector_color", value = metadata$movement_connector_color %||% "#64748b")
       updateSliderInput(session, "movement_connector_opacity", value = metadata$movement_connector_opacity %||% 0.72)
       updateSliderInput(session, "movement_connector_linewidth", value = metadata$movement_connector_linewidth %||% 0.45)
@@ -2743,6 +2793,19 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   observeEvent(input$reset_layout, {
+    showModal(modalDialog(
+      title = "Reset drag layout?",
+      tags$p("This will zero all region and label offsets. The current layout will be saved to the undo stack so you can recover it with Undo."),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("confirm_reset_layout", "Reset", class = "btn btn-warning")
+      ),
+      easyClose = TRUE
+    ))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$confirm_reset_layout, {
+    removeModal()
     zero_regions <- data.frame(
       region = region_groups(), dx_m = 0, dy_m = 0,
       stringsAsFactors = FALSE
@@ -2821,16 +2884,25 @@ server <- function(input, output, session) {
       crs_epsg            = sf::st_crs(projected_sf())$epsg,
       show_labels         = isTRUE(input$show_labels),
       show_legend         = isTRUE(input$show_legend),
+      show_connectors     = isTRUE(input$show_connectors),
       legend_show_all     = isTRUE(input$legend_show_all),
       legend_values       = legend_values(),
       label_values        = visible_label_ids(),
       legend_position     = input$legend_position %||% "bottom",
       legend_title        = input$legend_title %||% "Region",
       map_background      = input$map_background %||% "white",
+      annotation_mode     = input$annotation_mode %||% "labels",
       label_marker_shape  = input$label_marker_shape %||% "circle",
+      label_text_size     = input$label_text_size %||% 11,
+      label_radius        = input$label_radius %||% 14,
+      label_width         = input$label_width %||% 64,
+      label_height        = input$label_height %||% 30,
+      box_width           = input$box_width %||% 170,
+      box_height          = input$box_height %||% 76,
       marker_size         = (input$label_radius %||% 14) / 3,
       connector_color     = studio_color_value(input$connector_color, "#334155"),
       connector_linewidth = input$connector_linewidth %||% 0.45,
+      connector_type      = input$connector_type %||% "straight",
       connector_linetype  = input$connector_linetype %||% "solid",
       connector_endpoint  = input$connector_endpoint %||% "none",
       connector_smart     = isTRUE(input$connector_smart),
