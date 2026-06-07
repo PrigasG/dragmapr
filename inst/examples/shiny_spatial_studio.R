@@ -866,7 +866,10 @@ body.dragmapr-helper-busy .studio-helper-frame {
 
 # ---- UI -----------------------------------------------------------------------
 
-ui <- fluidPage(
+ui <- function(request) {
+  debug_mode <- grepl("(^|&)debug=1(&|$)", request$QUERY_STRING %||% "")
+
+  fluidPage(
   tags$head(
     # Iframe bridge: relays drag state from helper to Shiny inputs
     tags$script(HTML(dragmapr_iframe_bridge(iframe_selector = "iframe.studio-helper-frame"))),
@@ -1210,6 +1213,16 @@ ui <- fluidPage(
         tags$div(
           class = "studio-action-row",
           actionButton("load_demo", "Use bundled HHS demo", class = "btn-sm btn-default")
+        ),
+        tags$div("Open saved project", class = "studio-subgroup-title"),
+        tags$p(
+          "Reopen a Project ZIP previously downloaded from Spatial Studio.",
+          class = "studio-help"
+        ),
+        fileInput(
+          "project_upload", "Open project ZIP",
+          multiple = FALSE,
+          accept = ".zip"
         )
       ),
 
@@ -1278,7 +1291,18 @@ ui <- fluidPage(
         "Lines between labels and regions",
         tags$div("Visibility", class = "studio-subgroup-title"),
         checkboxInput("show_connectors", "Show connector lines", value = FALSE),
-        checkboxInput("connector_smart", "Smart connector style", value = FALSE),
+        checkboxInput(
+          "connector_smart",
+          tags$span(
+            "Smart connector style",
+            title = "Choose straight, elbow, or curved connector paths from the current label displacement."
+          ),
+          value = FALSE
+        ),
+        tags$p(
+          "Smart style chooses connector geometry from the current label displacement.",
+          class = "studio-help"
+        ),
 
         tags$div("Line style", class = "studio-subgroup-title"),
         studio_color_input("connector_color", "Line color", value = "#334155"),
@@ -1342,11 +1366,6 @@ ui <- fluidPage(
         "Download images, data, helper files, and bundles",
         tags$div("Static output", class = "studio-subgroup-title"),
         textInput("static_title", "Static map title", value = "dragmapr spatial studio"),
-        tags$div(
-          class = "studio-action-row",
-          actionButton("apply_static_title", "Apply title", class = "btn-sm btn-primary")
-        ),
-        tags$div(class = "studio-field-gap"),
         studio_select(
           "map_background", "Map background",
           choices = c("White" = "white", "Transparent" = "transparent",
@@ -1402,17 +1421,6 @@ ui <- fluidPage(
             downloadButton("download_bundle",        "Project ZIP"),
             downloadButton("download_static_bundle", "Static bundle")
           )
-        ),
-
-        tags$div("Open saved project", class = "studio-subgroup-title"),
-        tags$p(
-          "Reopen a Project ZIP previously downloaded from Spatial Studio.",
-          class = "studio-help"
-        ),
-        fileInput(
-          "project_upload", "Open project ZIP",
-          multiple = FALSE,
-          accept = ".zip"
         )
       )
     ),
@@ -1451,7 +1459,7 @@ ui <- fluidPage(
             ),
             plotOutput("preview", height = 620)
           ),
-          tabPanel(
+          if (isTRUE(debug_mode)) tabPanel(
             "State",
             tags$h4("Key reactives"),
             tags$pre(paste(
@@ -1482,6 +1490,7 @@ ui <- fluidPage(
     )
   )
 )
+}
 
 # ---- Server -------------------------------------------------------------------
 
@@ -2220,12 +2229,12 @@ server <- function(input, output, session) {
       history_button(
         "undo_layout", "Undo", "btn-sm btn-default",
         can_undo,
-        if (can_undo) "Undo the last drag-state change" else "No drag-state changes to undo"
+        if (can_undo) "Undo the last drag-state change (Ctrl+Z)" else "No drag-state changes to undo (Ctrl+Z)"
       ),
       history_button(
         "redo_layout", "Redo", "btn-sm btn-default",
         can_redo,
-        if (can_redo) "Redo the last undone drag-state change" else "No undone drag-state changes to redo"
+        if (can_redo) "Redo the last undone drag-state change (Ctrl+Y)" else "No undone drag-state changes to redo (Ctrl+Y)"
       ),
       history_button(
         "reset_label_positions", "Reset label positions", "btn-sm btn-default",
@@ -2526,12 +2535,10 @@ server <- function(input, output, session) {
     set_status("Applied selected label text.", "ok")
   }, ignoreInit = TRUE)
 
-  observeEvent(input$apply_static_title, {
+  observeEvent(input$static_title, {
     title <- input$static_title %||% "dragmapr spatial studio"
     state$static_title <- if (is_blank(title)) "dragmapr spatial studio" else title
-    updateTextInput(session, "static_title", value = state$static_title)
-    set_status("Applied static map title.", "ok")
-  }, ignoreInit = TRUE)
+  }, ignoreInit = FALSE)
 
   observeEvent(input$reset_label_text, {
     id <- input$edit_label_id
