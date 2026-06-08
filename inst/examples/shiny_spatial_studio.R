@@ -1,6 +1,6 @@
-if (!requireNamespace("shiny", quietly = TRUE)) {
-  stop("Install shiny to run this example.", call. = FALSE)
-}
+# if (!requireNamespace("shiny", quietly = TRUE)) {
+#   stop("Install shiny to run this example.", call. = FALSE)
+# }
 
 options(shiny.maxRequestSize = max(getOption("shiny.maxRequestSize", 5 * 1024^2), 100 * 1024^2))
 
@@ -72,6 +72,7 @@ read_csv_text <- function(text) {
 csv_text <- function(x) {
   paste(capture.output(utils::write.csv(x, row.names = FALSE)), collapse = "\n")
 }
+
 
 is_blank <- function(x) is.null(x) || length(x) == 0L || !nzchar(trimws(x[1]))
 
@@ -862,6 +863,81 @@ body.dragmapr-helper-busy .studio-helper-frame {
 
 /* ---- Preview recalculating veil ---- */
 .shiny-output-container.recalculating { opacity: 0.45; transition: opacity 0.2s; }
+
+
+/* ---- Fixed sidebar blocker while drag helper rebuilds ---- */
+#studio-sidebar-freeze {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9997;
+  background: rgba(248, 250, 252, 0.74);
+  backdrop-filter: blur(2px);
+  border-radius: 8px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.16s ease, visibility 0s linear 0.16s;
+}
+
+body.dragmapr-helper-busy #studio-sidebar-freeze {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.studio-sidebar-freeze-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 260px;
+  padding: 12px 14px;
+  border: 1px solid #dbe3ee;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #475569;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+}
+
+.studio-sidebar-freeze-card strong {
+  display: block;
+  color: #172033;
+  font-size: 0.86rem;
+}
+
+.studio-sidebar-freeze-card span {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.25;
+}
+
+/* Hide only studio glasstabs dropdowns while the helper rebuilds */
+body.dragmapr-helper-busy .gt-ms-dropdown,
+body.dragmapr-helper-busy .gt-select-dropdown,
+body.dragmapr-helper-busy .gt-dropdown,
+body.dragmapr-helper-busy #legend_filter-dropdown,
+body.dragmapr-helper-busy #label_filter-dropdown,
+body.dragmapr-helper-busy #region_col-dropdown,
+body.dragmapr-helper-busy #label_col-dropdown,
+
+body.dragmapr-helper-busy #annotation_mode-dropdown,
+body.dragmapr-helper-busy #label_marker_shape-dropdown,
+body.dragmapr-helper-busy #legend_position-dropdown,
+body.dragmapr-helper-busy #connector_type-dropdown,
+body.dragmapr-helper-busy #connector_linetype-dropdown,
+body.dragmapr-helper-busy #connector_endpoint-dropdown,
+body.dragmapr-helper-busy #movement_connector_linetype-dropdown,
+body.dragmapr-helper-busy #movement_connector_endpoint-dropdown,
+body.dragmapr-helper-busy #map_background-dropdown {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 "
 
 # ---- UI -----------------------------------------------------------------------
@@ -894,7 +970,8 @@ ui <- function(request) {
         activeGeneration: null,
         readyGeneration: null,
         fallbackTimer: null,
-        fullLoadingTimer: null
+        fullLoadingTimer: null,
+        preBusyTimer: null
       };
       function helperGeneration(value) {
         return value == null ? null : String(value);
@@ -956,16 +1033,128 @@ ui <- function(request) {
         window.setTimeout(cleanupHelperCornerControls, 250);
         window.setTimeout(cleanupHelperCornerControls, 900);
       }
-      function applyHelperBusy(active) {
-        var wrap = document.querySelector('.helper-wrap');
-        if (active) {
-          document.body.classList.add('dragmapr-helper-busy');
-          if (wrap) wrap.classList.add('is-updating');
-          return;
-        }
-        document.body.classList.remove('dragmapr-helper-busy');
-        if (wrap) wrap.classList.remove('is-updating');
+      function closeStudioDropdowns() {
+  var dropdownSelector = [
+    '.gt-ms-dropdown',
+    '.gt-select-dropdown',
+    '.gt-dropdown',
+    '#legend_filter-dropdown',
+    '#label_filter-dropdown',
+    '#region_col-dropdown',
+    '#label_col-dropdown',
+
+    '#annotation_mode-dropdown',
+    '#label_marker_shape-dropdown',
+    '#legend_position-dropdown',
+    '#connector_type-dropdown',
+    '#connector_linetype-dropdown',
+    '#connector_endpoint-dropdown',
+    '#movement_connector_linetype-dropdown',
+    '#movement_connector_endpoint-dropdown',
+    '#map_background-dropdown'
+  ].join(', ');
+
+  document.querySelectorAll(dropdownSelector).forEach(function(dropdown) {
+    dropdown.classList.remove('open', 'show', 'active');
+    dropdown.setAttribute('aria-hidden', 'true');
+  });
+
+  document.querySelectorAll(
+    '.gt-ms-wrap, .gt-select-wrap, .gt-open, .gt-ms-open, .gt-select-open'
+  ).forEach(function(node) {
+    if (node.classList) {
+      node.classList.remove('gt-open', 'gt-ms-open', 'gt-select-open', 'open', 'show');
+    }
+  });
+}
+
+function getStudioSidebar() {
+  return document.querySelector('.container-fluid > .row > .col-sm-3 > .well') ||
+    document.querySelector('.col-sm-3 > .well');
+}
+
+function positionSidebarFreeze() {
+  var sidebar = getStudioSidebar();
+  var freeze = document.getElementById('studio-sidebar-freeze');
+  if (!sidebar || !freeze) return;
+
+  var rect = sidebar.getBoundingClientRect();
+
+  freeze.style.left = rect.left + 'px';
+  freeze.style.top = rect.top + 'px';
+  freeze.style.width = rect.width + 'px';
+  freeze.style.height = rect.height + 'px';
+}
+
+function applyHelperBusy(active) {
+  var wrap = document.querySelector('.helper-wrap');
+  var sidebar = getStudioSidebar();
+
+  if (active) {
+    closeStudioDropdowns();
+    positionSidebarFreeze();
+
+    document.body.classList.add('dragmapr-helper-busy');
+
+    if (wrap) {
+      wrap.classList.add('is-updating');
+    }
+
+    if (sidebar) {
+      if (sidebar.contains(document.activeElement)) {
+        document.activeElement.blur();
       }
+      sidebar.setAttribute('inert', '');
+      sidebar.setAttribute('aria-busy', 'true');
+      sidebar.setAttribute('aria-disabled', 'true');
+    }
+
+    return;
+  }
+
+  document.body.classList.remove('dragmapr-helper-busy');
+
+  if (wrap) {
+    wrap.classList.remove('is-updating');
+  }
+
+  if (sidebar) {
+    sidebar.removeAttribute('inert');
+    sidebar.removeAttribute('aria-busy');
+    sidebar.removeAttribute('aria-disabled');
+  }
+}
+
+function preShowHelperBusy() {
+  if (helperState.fullLoading) return;
+
+  window.clearTimeout(helperState.preBusyTimer);
+
+  closeStudioDropdowns();
+  applyHelperBusy(true);
+
+  // Safety clear only if no real helper generation ever starts.
+  helperState.preBusyTimer = window.setTimeout(function() {
+    var shinyBusy = document.body.classList.contains('shiny-busy');
+    if (helperState.activeGeneration === null &&
+        !helperState.fullLoading &&
+        !shinyBusy) {
+      applyHelperBusy(false);
+    }
+  }, 12000);
+}
+
+window.addEventListener('resize', function() {
+  if (document.body.classList.contains('dragmapr-helper-busy')) {
+    positionSidebarFreeze();
+  }
+});
+
+window.addEventListener('scroll', function() {
+  if (document.body.classList.contains('dragmapr-helper-busy')) {
+    positionSidebarFreeze();
+  }
+}, true);
       function syncLoadingVisuals() {
         document.body.classList.toggle('dragmapr-loading', helperState.fullLoading);
         var helperBusy = helperState.activeGeneration !== null &&
@@ -1070,6 +1259,11 @@ ui <- function(request) {
           scheduleHelperCornerCleanup();
         }
       });
+      Shiny.addCustomMessageHandler('dragmapr-reset-view', function(message) {
+        var iframe = getHelperFrame();
+        if (iframe && iframe.contentWindow)
+          iframe.contentWindow.postMessage({type: 'dragmapr-reset-view'}, helperTargetOrigin());
+      });
       Shiny.addCustomMessageHandler('dragmapr-reset-state', function(message) {
         var iframe = getHelperFrame();
         if (iframe && iframe.contentWindow) {
@@ -1165,6 +1359,11 @@ ui <- function(request) {
         if (!event.ctrlKey && !event.metaKey) return;
         var tag = (event.target || document.activeElement || {}).tagName || '';
         if (/^(INPUT|TEXTAREA|SELECT)$/i.test(tag)) return;
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          Shiny.setInputValue('reset_view_requested', Date.now(), {priority: 'event'});
+          return;
+        }
         if (event.key === 'z' || event.key === 'Z') {
           event.preventDefault();
           var btn = document.getElementById(event.shiftKey ? 'redo_layout' : 'undo_layout');
@@ -1175,6 +1374,14 @@ ui <- function(request) {
           if (btn && !btn.disabled) btn.click();
         }
       });
+      if (window.jQuery) {
+        jQuery(document).on('shiny:inputchanged', function(event) {
+          if (!event || !event.name) return;
+          if (event.name === 'region_col' || event.name === 'label_col') {
+            preShowHelperBusy();
+          }
+        });
+      }
     ")),
     tags$style(HTML(studio_css))
   ),
@@ -1192,6 +1399,8 @@ ui <- function(request) {
       )
     )
   ),
+
+  tags$div(id = "studio-sidebar-freeze"),
 
   tags$h2("dragmapr spatial studio", class = "studio-title"),
   tags$p("Upload polygon data, drag the layout, then export.",
@@ -1231,6 +1440,7 @@ ui <- function(request) {
         "Choose the grouping field and palette",
         open = TRUE,
         uiOutput("column_controls"),
+        tags$div(class = "studio-field-gap"),
         uiOutput("color_pickers")
       ),
 
@@ -1337,7 +1547,8 @@ ui <- function(request) {
         "Original outlines, motion lines, and trails",
         tags$div("Context layers", class = "studio-subgroup-title"),
         checkboxInput("show_origin_outlines", "Show origin outlines", value = FALSE),
-        checkboxInput("show_movement_connectors", "Show movement connectors", value = FALSE),
+        checkboxInput("show_movement_connectors", "Show movement connector", value = FALSE),
+        checkboxInput("show_movement_band", "Show movement band (top + bottom edges)", value = FALSE),
         checkboxInput("show_drag_trail", "Show drag preview trail", value = FALSE),
 
         tags$div("Movement connector style", class = "studio-subgroup-title"),
@@ -1507,8 +1718,11 @@ server <- function(input, output, session) {
     helper_building = FALSE,     # TRUE while drag_map_prototype() is running
     helper_loading  = FALSE,     # TRUE until the new iframe reports ready
     ingesting       = FALSE,
-    region_csv_cache = NULL,
-    label_csv_cache  = NULL,
+    region_csv_cache      = NULL,  # child/user drag delta for current column
+    region_base_csv_cache = NULL,  # inherited parent placement for current column
+    label_csv_cache       = NULL,
+    column_offset_store = list(),  # per-column {region, label} cache keyed by region_context_key()
+    active_region_path = NULL,     # character vector: e.g. c("COUNTY", "MUN") when hierarchy active
     label_edits      = list(),
     region_palette_override = NULL,
     label_palette_override  = NULL,
@@ -1561,16 +1775,25 @@ server <- function(input, output, session) {
   finish_ingest <- function() {
     state$ingesting <- FALSE
     session$onFlushed(function() {
-      helper_busy <- isolate(isTRUE(state$helper_loading) || isTRUE(state$helper_building))
-      if (!helper_busy) {
+      helper_busy    <- isolate(isTRUE(state$helper_loading) || isTRUE(state$helper_building))
+      current_ver    <- isolate(state$source_version)
+      current_sig    <- isolate(state$helper_signature)
+      # A rebuild is imminent when the signature source_version is behind the
+      # current source version — the prototype observer will fire next flush.
+      rebuild_pending <- is.null(current_sig) ||
+        !identical(current_sig$source_version, current_ver)
+      if (!helper_busy && !rebuild_pending) {
         set_loading(FALSE)
       }
+      # Otherwise the veil stays until helper_ready_token fires.
     }, once = TRUE)
   }
 
   clear_project_state <- function() {
     state$region_csv_cache <- NULL
+    state$region_base_csv_cache <- NULL
     state$label_csv_cache <- NULL
+    state$active_region_path <- NULL
     state$label_edits <- list()
     state$region_palette_override <- NULL
     state$label_palette_override <- NULL
@@ -1584,6 +1807,93 @@ server <- function(input, output, session) {
     state$history_armed <- FALSE
     state$history_ignore_until <- NULL
     state$helper_signature <- NULL
+    state$column_offset_store <- list()
+  }
+
+  empty_region_offsets <- function(groups) {
+    data.frame(region = as.character(groups), dx_m = 0, dy_m = 0,
+               stringsAsFactors = FALSE)
+  }
+
+  align_region_offsets <- function(offsets, groups) {
+    groups <- as.character(groups)
+    out <- empty_region_offsets(groups)
+    if (is.null(offsets) || !is.data.frame(offsets) || nrow(offsets) == 0L) return(out)
+    names(offsets) <- tolower(names(offsets))
+    if (!all(c("region", "dx_m", "dy_m") %in% names(offsets))) return(out)
+    idx <- match(out$region, as.character(offsets$region))
+    hit <- !is.na(idx)
+    out$dx_m[hit] <- suppressWarnings(as.numeric(offsets$dx_m[idx[hit]]))
+    out$dy_m[hit] <- suppressWarnings(as.numeric(offsets$dy_m[idx[hit]]))
+    out$dx_m[!is.finite(out$dx_m)] <- 0
+    out$dy_m[!is.finite(out$dy_m)] <- 0
+    out
+  }
+
+  combine_region_offsets <- function(base, delta, groups) {
+    base  <- align_region_offsets(base,  groups)
+    delta <- align_region_offsets(delta, groups)
+    data.frame(region = as.character(groups),
+               dx_m = base$dx_m + delta$dx_m,
+               dy_m = base$dy_m + delta$dy_m,
+               stringsAsFactors = FALSE)
+  }
+
+  shift_label_table_by_offsets <- function(labels, offsets) {
+    if (is.null(labels) || !is.data.frame(labels) || nrow(labels) == 0L) return(labels)
+    if (is.null(offsets) || !is.data.frame(offsets) || nrow(offsets) == 0L) return(labels)
+    if (!all(c("region", "dx_m", "dy_m") %in% names(offsets))) return(labels)
+    out <- labels
+    idx <- match(as.character(out$region), as.character(offsets$region))
+    hit <- !is.na(idx)
+    if ("x" %in% names(out)) out$x[hit] <- out$x[hit] + offsets$dx_m[idx[hit]]
+    if ("y" %in% names(out)) out$y[hit] <- out$y[hit] + offsets$dy_m[idx[hit]]
+    out
+  }
+
+  INTERNAL_REGION_COL <- "..dragmapr_region_key.."
+
+  clean_group_value <- function(x) {
+    x <- trimws(as.character(x))
+    x[is.na(x) | !nzchar(x)] <- "(missing)"
+    x
+  }
+
+  region_context_key <- function(path) {
+    paste(as.character(path), collapse = "")
+  }
+
+  make_region_path <- function(x, path) {
+    path <- as.character(path)
+    path <- path[path %in% names(x)]
+    if (length(path) == 0L) return(character(nrow(x)))
+    if (length(path) == 1L) return(clean_group_value(x[[path[1L]]]))
+    parts <- lapply(path, function(col) paste0(col, "=", clean_group_value(x[[col]])))
+    do.call(paste, c(parts, sep = " | "))
+  }
+
+  inherit_offsets_across_paths <- function(x, old_path, new_path, old_offsets) {
+    if (is.null(old_offsets) || !is.data.frame(old_offsets) || nrow(old_offsets) == 0L) return(NULL)
+    old_path <- as.character(old_path)
+    new_path <- as.character(new_path)
+    if (!all(old_path %in% names(x)) || !all(new_path %in% names(x))) return(NULL)
+    old_groups <- make_region_path(x, old_path)
+    new_groups <- make_region_path(x, new_path)
+    match_idx <- match(old_groups, as.character(old_offsets$region))
+    row_dx <- ifelse(is.na(match_idx), 0,
+                     suppressWarnings(as.numeric(old_offsets$dx_m[match_idx])))
+    row_dy <- ifelse(is.na(match_idx), 0,
+                     suppressWarnings(as.numeric(old_offsets$dy_m[match_idx])))
+    row_dx[!is.finite(row_dx)] <- 0
+    row_dy[!is.finite(row_dy)] <- 0
+    out <- stats::aggregate(
+      cbind(dx_m, dy_m) ~ region,
+      data = data.frame(region = new_groups, dx_m = row_dx, dy_m = row_dy,
+                        stringsAsFactors = FALSE),
+      FUN = mean
+    )
+    out$region <- as.character(out$region)
+    out
   }
 
   rows_for_message <- function(x) {
@@ -1762,6 +2072,11 @@ server <- function(input, output, session) {
       )
       updateCheckboxInput(
         session,
+        "show_movement_band",
+        value = isTRUE(metadata$show_movement_band %||% FALSE)
+      )
+      updateCheckboxInput(
+        session,
         "legend_show_all",
         value = isTRUE(metadata$legend_show_all %||% FALSE)
       )
@@ -1843,6 +2158,31 @@ server <- function(input, output, session) {
     )
   })
 
+  active_region_path <- reactive({
+    req(region_col())
+    path <- state$active_region_path
+    x    <- projected_sf()
+    if (is.null(path) || length(path) == 0L ||
+        !all(path %in% names(x)) ||
+        !identical(tail(path, 1L), region_col())) {
+      return(region_col())
+    }
+    path
+  })
+
+  map_sf <- reactive({
+    x    <- projected_sf()
+    path <- active_region_path()
+    if (length(path) > 1L) {
+      x[[INTERNAL_REGION_COL]] <- make_region_path(x, path)
+    }
+    x
+  })
+
+  effective_region_col <- reactive({
+    if (length(active_region_path()) > 1L) INTERNAL_REGION_COL else region_col()
+  })
+
   available_columns <- reactive(safe_names(projected_sf()))
 
   region_col <- reactive({
@@ -1859,8 +2199,8 @@ server <- function(input, output, session) {
 
   # Returns sorted unique groups for the current region column
   region_groups <- reactive({
-    req(region_col())
-    stable_unique(projected_sf()[[region_col()]])
+    req(effective_region_col())
+    stable_unique(map_sf()[[effective_region_col()]])
   })
 
   region_palette <- reactive({
@@ -1936,8 +2276,8 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   base_label_table <- reactive({
-    req(region_col(), label_col())
-    labels <- make_region_labels(projected_sf(), region_col = region_col(), label_col = label_col())
+    req(effective_region_col(), label_col())
+    labels <- make_region_labels(map_sf(), region_col = effective_region_col(), label_col = label_col())
     label_levels <- stable_unique(labels$label)
     region_levels <- region_groups()
     labels$label <- factor(as.character(labels$label), levels = label_levels, ordered = TRUE)
@@ -2004,8 +2344,8 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   label_table <- reactive({
-    req(region_col(), label_col())
-    x <- projected_sf()
+    req(effective_region_col(), label_col())
+    x <- map_sf()
     if (nrow(x) == 0L) {
       return(as_drag_labels(data.frame(
         label_id = character(),
@@ -2017,7 +2357,7 @@ server <- function(input, output, session) {
     }
     labels <- make_studio_labels(
       x,
-      region_col     = region_col(),
+      region_col     = effective_region_col(),
       label_col      = label_col(),
       mode           = input$annotation_mode %||% "labels",
       width_px       = input$box_width       %||% 170,
@@ -2035,21 +2375,54 @@ server <- function(input, output, session) {
   label_csv_raw  <- debounce(reactive(input$label_csv),  250)
 
   observeEvent(region_csv_raw(), {
-    if (!is.null(region_csv_raw()) && nzchar(region_csv_raw())) {
-      state$region_csv_cache <- region_csv_raw()
+    incoming <- region_csv_raw()
+    if (!is.null(incoming) && nzchar(incoming)) {
+      incoming_df <- tryCatch(read_csv_text(incoming), error = function(e) NULL)
+      if (!is.null(incoming_df) && "region" %in% names(incoming_df)) {
+        current_groups <- tryCatch(region_groups(), error = function(e) NULL)
+        # Reject broadcasts from the old column's iframe: only accept if the
+        # incoming region names exactly match the current column's groups.
+        if (is.null(current_groups) ||
+            setequal(as.character(incoming_df$region), as.character(current_groups))) {
+          state$region_csv_cache <- incoming
+        }
+      }
     }
   }, ignoreInit = TRUE)
 
   observeEvent(label_csv_raw(), {
-    if (!is.null(label_csv_raw()) && nzchar(label_csv_raw())) {
-      state$label_csv_cache <- label_csv_raw()
+    incoming <- label_csv_raw()
+    if (!is.null(incoming) && nzchar(incoming)) {
+      incoming_df <- tryCatch(read_csv_text(incoming), error = function(e) NULL)
+      if (!is.null(incoming_df) && "label_id" %in% names(incoming_df)) {
+        current_labels <- tryCatch(label_table(), error = function(e) NULL)
+        if (is.null(current_labels) ||
+            setequal(as.character(incoming_df$label_id),
+                     as.character(current_labels$label_id))) {
+          state$label_csv_cache <- incoming
+        }
+      } else {
+        state$label_csv_cache <- incoming
+      }
     }
   }, ignoreInit = TRUE)
 
+  region_delta_state <- reactive({
+    read_csv_text(state$region_csv_cache) %||%
+      read_csv_text(region_csv_raw()) %||%
+      empty_region_offsets(region_groups())
+  })
+
+  region_base_state <- reactive({
+    read_csv_text(state$region_base_csv_cache) %||%
+      empty_region_offsets(region_groups())
+  })
+
   region_state <- reactive({
-    read_csv_text(state$region_csv_cache) %||% read_csv_text(region_csv_raw()) %||% data.frame(
-      region = region_groups(), dx_m = 0, dy_m = 0,
-      stringsAsFactors = FALSE
+    combine_region_offsets(
+      base   = region_base_state(),
+      delta  = region_delta_state(),
+      groups = region_groups()
     )
   })
 
@@ -2081,9 +2454,9 @@ server <- function(input, output, session) {
       FALSE
     }
     plot <- render_dragged_map(
-      projected_sf(),
+      map_sf(),
       region_offsets      = region_offsets,
-      region_col          = region_col(),
+      region_col          = effective_region_col(),
       labels              = plot_labels,
       label_values        = visible_label_ids(),
       label_offsets       = label_offsets,
@@ -2102,6 +2475,7 @@ server <- function(input, output, session) {
       connector_endpoint  = input$connector_endpoint %||% "none",
       show_origin_outlines = isTRUE(input$show_origin_outlines),
       show_movement_connectors = isTRUE(input$show_movement_connectors),
+      show_movement_band   = isTRUE(input$show_movement_band),
       movement_connector_color = studio_color_value(input$movement_connector_color, "#64748b"),
       movement_connector_opacity = input$movement_connector_opacity %||% 0.72,
       movement_connector_linewidth = input$movement_connector_linewidth %||% 0.45,
@@ -2167,7 +2541,7 @@ server <- function(input, output, session) {
          input$show_labels, input$show_legend, input$label_marker_shape,
          input$connector_color, input$connector_linewidth, input$legend_show_all, input$legend_filter,
          input$legend_position, input$legend_title, input$connector_linetype, input$connector_endpoint,
-         input$connector_smart, input$show_origin_outlines, input$show_movement_connectors,
+         input$connector_smart, input$show_origin_outlines, input$show_movement_connectors, input$show_movement_band,
          input$movement_connector_color, input$movement_connector_opacity,
          input$movement_connector_linewidth, input$movement_connector_linetype,
          input$movement_connector_endpoint,
@@ -2177,7 +2551,11 @@ server <- function(input, output, session) {
     ignoreInit = FALSE
   )
 
-  observeEvent(list(region_csv_raw(), label_csv_raw()), {
+  auto_refresh_signal <- debounce(
+    reactive(list(r = region_csv_raw(), l = label_csv_raw())),
+    500
+  )
+  observeEvent(auto_refresh_signal(), {
     if (isTRUE(input$auto_preview)) do_refresh()
   }, ignoreInit = TRUE)
 
@@ -2191,7 +2569,7 @@ server <- function(input, output, session) {
   })
 
   adjusted_sf <- reactive({
-    apply_offsets(projected_sf(), region_state(), region_col = region_col())
+    apply_offsets(map_sf(), region_state(), region_col = effective_region_col())
   })
 
   # ---- UI outputs ----
@@ -2245,7 +2623,8 @@ server <- function(input, output, session) {
           "No dragged label positions to reset"
         }
       ),
-      actionButton("reset_layout", "Reset drag layout", class = "btn-sm btn-warning")
+      actionButton("reset_layout", "Reset drag layout", class = "btn-sm btn-warning"),
+      actionButton("reset_view", "Reset view", class = "btn-sm btn-default", title = "Re-centre the map (Esc)")
     )
   })
 
@@ -2625,6 +3004,128 @@ server <- function(input, output, session) {
       if (identical(signature, state$helper_signature)) {
         return()
       }
+      # When only the column changed (same source data), save and restore
+      # per-column offset caches so switching columns never loses layout work.
+      #   Region offsets → keyed by region_col (geometries move together)
+      #   Label  offsets → keyed by region_col:label_col (label IDs change)
+      old_sig <- state$helper_signature
+      if (!is.null(old_sig) &&
+          identical(old_sig$source_version, signature$source_version) &&
+          (!identical(old_sig$region_col, signature$region_col) ||
+           !identical(old_sig$label_col,  signature$label_col))) {
+
+        region_changed <- !identical(old_sig$region_col, signature$region_col)
+        label_changed  <- !identical(old_sig$label_col,  signature$label_col)
+        old_rkey <- old_sig$region_col
+        new_rkey <- signature$region_col
+        old_lkey <- paste0(old_sig$region_col,  ":", old_sig$label_col)
+        new_lkey <- paste0(signature$region_col, ":", signature$label_col)
+
+        if (region_changed) {
+          old_path <- state$active_region_path %||% old_rkey
+          if (is.null(old_path) || length(old_path) == 0L ||
+              !identical(tail(as.character(old_path), 1L), old_rkey)) {
+            old_path <- old_rkey
+          }
+          old_context_key <- region_context_key(old_path)
+
+          # Save the current visible layout for the current grouping path.
+          state$column_offset_store[[old_context_key]] <- list(
+            region = state$region_csv_cache,
+            label  = state$label_csv_cache,
+            path   = old_path
+          )
+
+          old_n <- tryCatch(
+            length(unique(clean_group_value(projected_sf()[[old_rkey]]))),
+            error = function(e) 1L
+          )
+          new_n <- tryCatch(
+            length(unique(clean_group_value(projected_sf()[[new_rkey]]))),
+            error = function(e) 1L
+          )
+          going_finer <- new_n >= old_n
+
+          if (going_finer) {
+            # Parent to child: inherit from the current visible parent layout.
+            # Never restore an older child snapshot here.
+            new_path <- unique(c(old_path, new_rkey))
+
+            old_off_df <- tryCatch(
+              read_csv_text(state$region_csv_cache),
+              error = function(e) NULL
+            )
+
+            inherited <- tryCatch(
+              inherit_offsets_across_paths(
+                projected_sf(),
+                old_path    = old_path,
+                new_path    = new_path,
+                old_offsets = old_off_df
+              ),
+              error = function(e) NULL
+            )
+
+            state$active_region_path    <- new_path
+            state$region_base_csv_cache <- NULL
+
+            if (!is.null(inherited) && any(inherited$dx_m != 0 | inherited$dy_m != 0)) {
+              state$region_csv_cache <- csv_text(inherited)
+              set_status(
+                paste0("Switched to '", new_rkey,
+                       "'. Child groups inherited the current '", old_rkey, "' layout."),
+                "info"
+              )
+            } else {
+              state$region_csv_cache <- NULL
+              set_status(
+                paste0("Switched to '", new_rkey, "'. Drag to build this grouping's layout."),
+                "info"
+              )
+            }
+            state$label_csv_cache <- NULL
+
+          } else {
+            # Child to parent: save child layout, restore parent snapshot exactly.
+            if (new_rkey %in% old_path) {
+              new_path <- old_path[seq_len(match(new_rkey, old_path))]
+            } else {
+              new_path <- new_rkey
+            }
+            state$active_region_path    <- new_path
+            state$region_base_csv_cache <- NULL
+
+            new_context_key <- region_context_key(new_path)
+            stored <- state$column_offset_store[[new_context_key]]
+
+            if (!is.null(stored)) {
+              state$region_csv_cache <- stored$region
+              state$label_csv_cache  <- stored$label
+              set_status(paste0("Switched to '", new_rkey, "'. Saved layout restored."), "info")
+            } else {
+              state$region_csv_cache <- NULL
+              state$label_csv_cache  <- NULL
+              set_status(paste0("Switched to '", new_rkey, "'. Drag to position this grouping."), "info")
+            }
+          }
+          state$undo_stack <- list()
+          state$redo_stack <- list()
+          state$history_armed <- FALSE
+          state$history_ignore_until <- NULL
+
+        } else if (label_changed) {
+          # Region column unchanged — preserve region offsets entirely.
+          # Only save/restore the label offsets per label-column key.
+          state$column_offset_store[[old_lkey]] <- list(label = state$label_csv_cache)
+          stored_l <- state$column_offset_store[[new_lkey]]
+          state$label_csv_cache <- if (!is.null(stored_l)) stored_l$label else NULL
+          # region_csv_cache stays untouched — regions have not moved
+          set_status(paste0("Label column changed to '", signature$label_col, "'."), "info")
+        }
+      }
+      if (is.null(state$active_region_path)) {
+        state$active_region_path <- signature$region_col
+      }
       next_generation <- state$helper_token + 1L
       state$helper_building <- TRUE
       set_helper_loading(TRUE, generation = next_generation)
@@ -2632,11 +3133,25 @@ server <- function(input, output, session) {
         state$helper_building <- FALSE
       }, add = TRUE)
       tryCatch({
+        helper_base <- isolate(region_base_state())
+        helper_x    <- map_sf()
+        if (nrow(helper_base) > 0L && any(helper_base$dx_m != 0 | helper_base$dy_m != 0)) {
+          helper_x <- tryCatch(
+            apply_offsets(helper_x, helper_base, region_col = effective_region_col()),
+            error = function(e) map_sf()
+          )
+        }
+        helper_labels <- if (isTRUE(input$show_labels)) {
+          shift_label_table_by_offsets(label_table(), helper_base)
+        } else {
+          FALSE
+        }
+
         drag_map_prototype(
-          projected_sf(),
-          region_col          = region_col(),
+          helper_x,
+          region_col          = effective_region_col(),
           label_col           = label_col(),
-          labels              = label_table(),
+          labels              = helper_labels,
           label_values        = visible_label_ids(),
           label_marker        = !identical(input$label_marker_shape %||% "circle", "none"),
           label_marker_shape  = input$label_marker_shape %||% "circle",
@@ -2648,8 +3163,11 @@ server <- function(input, output, session) {
           label_box_height    = input$box_height %||% 76,
           connector_color     = studio_color_value(input$connector_color, "#334155"),
           connector_linewidth = (input$connector_linewidth %||% 0.45) * 3,
-          region_offsets      = isolate(region_state()),
-          label_offsets       = isolate(label_state()),
+          region_offsets      = isolate(region_delta_state()),
+          label_offsets       = isolate(
+            read_csv_text(state$label_csv_cache) %||%
+              empty_label_offsets(label_table())
+          ),
           region_palette      = helper_region_palette(),
           show_legend         = isTRUE(input$show_legend) && length(visible_legend_values()) > 0L,
           max_legend_keys     = legend_max_keys(),
@@ -2662,6 +3180,7 @@ server <- function(input, output, session) {
           connector_smart     = isTRUE(input$connector_smart),
           show_origin_outlines = isTRUE(input$show_origin_outlines),
           show_movement_connectors = isTRUE(input$show_movement_connectors),
+          show_movement_band   = isTRUE(input$show_movement_band),
           movement_connector_color = studio_color_value(input$movement_connector_color, "#64748b"),
           movement_connector_opacity = input$movement_connector_opacity %||% 0.72,
           movement_connector_linewidth = (input$movement_connector_linewidth %||% 0.45) * 3,
@@ -2681,6 +3200,10 @@ server <- function(input, output, session) {
     },
     ignoreInit = FALSE
   )
+
+  observeEvent(list(input$reset_view, input$reset_view_requested), {
+    session$sendCustomMessage("dragmapr-reset-view", list())
+  }, ignoreInit = TRUE)
 
   observeEvent(input$show_labels, {
     session$sendCustomMessage("dragmapr-labels", list(labels = isTRUE(input$show_labels)))
@@ -2732,7 +3255,7 @@ server <- function(input, output, session) {
          input$box_width, input$box_height, input$connector_color, input$connector_linewidth,
          input$connector_linetype, input$connector_endpoint, input$connector_smart,
          input$show_legend, input$legend_show_all, input$legend_filter,
-         input$legend_position, input$legend_title, input$show_origin_outlines, input$show_movement_connectors,
+         input$legend_position, input$legend_title, input$show_origin_outlines, input$show_movement_connectors, input$show_movement_band,
          input$movement_connector_color, input$movement_connector_opacity,
          input$movement_connector_linewidth, input$movement_connector_linetype,
          input$movement_connector_endpoint,
@@ -2754,6 +3277,7 @@ server <- function(input, output, session) {
         connectorSmart = isTRUE(input$connector_smart),
         showOriginOutlines = isTRUE(input$show_origin_outlines),
         showMovementConnectors = isTRUE(input$show_movement_connectors),
+        showMovementBand = isTRUE(input$show_movement_band),
         movementConnectorColor = studio_color_value(input$movement_connector_color, "#64748b"),
         movementConnectorOpacity = input$movement_connector_opacity %||% 0.72,
         movementConnectorLinewidth = (input$movement_connector_linewidth %||% 0.45) * 3,
@@ -2915,6 +3439,7 @@ server <- function(input, output, session) {
       connector_smart     = isTRUE(input$connector_smart),
       show_origin_outlines = isTRUE(input$show_origin_outlines),
       show_movement_connectors = isTRUE(input$show_movement_connectors),
+      show_movement_band   = isTRUE(input$show_movement_band),
       movement_connector_color = studio_color_value(input$movement_connector_color, "#64748b"),
       movement_connector_opacity = input$movement_connector_opacity %||% 0.72,
       movement_connector_linewidth = input$movement_connector_linewidth %||% 0.45,

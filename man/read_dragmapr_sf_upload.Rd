@@ -23,7 +23,7 @@ demo data.
 }
 \examples{
 # Typical Shiny server usage:
-\dontrun{
+if(interactive()){
 observeEvent(input$spatial_upload, {
   x <- read_dragmapr_sf_upload(input$spatial_upload)
   if (!is.null(x)) {

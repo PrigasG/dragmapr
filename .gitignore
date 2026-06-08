@@ -14,3 +14,5 @@ docs
 drag-map.html
 # Development folder — not shipped to CRAN or pushed to git
 dev/
+# Temporary test files — not shipped
+test_parent_child.geojson

@@ -170,6 +170,72 @@ Use `read_offsets()` for downloaded region CSVs and `read_label_state()` for dow
 
 For Shiny upload workflows, `read_dragmapr_sf_upload()`, `read_dragmapr_sf_url()`, and `prepare_dragmapr_sf()` read and normalize user geometry before calling `drag_map_prototype()`. `dragmapr_iframe_bridge()` provides the JavaScript bridge used by Shiny apps to receive region and label state from the helper iframe.
 
+## Switching Grouping Columns Without Losing Your Layout
+
+Spatial Studio lets you change the **Group / region column** at any time while
+keeping the drag layout intact. The offset tables are stored per column, and
+when you switch to a column you have not visited before the positions are
+**inherited** from the column you are leaving.
+
+### Parent → child (coarser → finer grouping)
+
+If your `sf` object has both a coarse column (e.g. `hhs_region`, ten groups)
+and a fine column (e.g. `NAME`, fifty individual states), switching to the finer
+column restores that column's last saved layout:
+
+1. Drag HHS regions into an exploded layout.
+2. Switch the grouping column to `NAME`.
+
+Each state starts at its **own previously saved position** (if you have visited
+`NAME` before) or at its **natural geographic position** (if this is the first
+visit). Individual states are never displaced by a parent region's drag offset —
+the two columns maintain independent layouts.
+
+### Child → parent (finer → coarser grouping)
+
+The reverse also works. After making individual fine-grained moves:
+
+1. Drag individual states — some more than others.
+2. Switch back to `hhs_region`.
+
+Each HHS region is placed at the **average** of its member states' current
+positions. This means a region whose states were all moved identically will land
+exactly where you left it, while a region with mixed individual moves will land
+at the centroid of those moves.
+
+### Practical implications for your map
+
+| Scenario | What you get |
+|---|---|
+| Group by county, switch to municipality | Municipalities start at their own last saved positions (or zero if never visited) |
+| Group by municipality, switch back to county | Each county lands at the **average** of its municipalities' current positions |
+| Switch county → municipality → county | Counties land at the mean of whatever individual municipality moves were made |
+| Switch to a parent and choose "Restore" | Parent lands at the position it had when you last left it |
+| Change only the label column (same region column) | Region positions are **completely unchanged** |
+| Load a new spatial file | All per-column caches are cleared |
+
+The key rule: **each column keeps its own independent layout cache.** Child
+columns are never displaced by parent drags — they start fresh on first visit
+and resume their own saved positions on subsequent visits.
+
+### What resets on column switch
+
+-   **Label offsets always reset** when the region column changes, because
+    label IDs are derived from the region names of the new column.
+-   **The undo/redo stack resets** so the new column starts with a clean
+    history.
+-   **Palette overrides and filter selections are preserved** — only the
+    offset cache is transferred.
+
+### Round-trip precision
+
+Going child → parent involves one averaging step. If all child regions had the
+same offset (e.g. you haven't individually moved any of them), the round-trip is
+lossless. If you individually moved some children before switching back, those
+moves are summarised into an average offset for the parent group — or you can
+choose **"Restore parent's last position"** in the Column switching setting to
+skip the averaging and go straight back to where the parent was.
+
 ## RStudio Addin
 
 After installing `dragmapr`, RStudio users can open **Addins \> Launch dragmapr** to start a compact prototype gadget from an `sf` object in the global environment. Pick the region and label columns, adjust labels, connectors, legend, colours, and static output settings, render the prototype, drag the layout, then click **Done**. The addin assigns `region_offsets`, `label_offsets`, and `dragmapr_static_options` in `.GlobalEnv` so they can be passed directly to `render_dragged_map()`. Load or create the `sf` object before launching the addin; programmatic calls can pass `env =` when the object lives in another environment.

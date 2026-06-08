@@ -16,6 +16,12 @@ Studio. It uses the bundled HHS-style fixture as an actual map-shaped starting
 point for dragging regions, adjusting labels, and exporting reproducible
 artifacts.
 
+```{r hhs-video, echo = FALSE, results = "asis"}
+in_pkgdown <- identical(Sys.getenv("IN_PKGDOWN"), "true") ||
+  isTRUE(getOption("pkgdown.in_pkgdown"))
+
+if (in_pkgdown) {
+  cat('
 <div class="dragmapr-demo-video">
   <video controls preload="metadata" poster="../hhs-placeholder-shapes-poster.png" src="../hhs-placeholder-shapes-demo.mp4">
     <p>
@@ -24,6 +30,11 @@ artifacts.
     </p>
   </video>
 </div>
+')
+} else {
+  cat("[Watch the HHS placeholder shapes demo on the pkgdown site](https://prigasg.github.io/dragmapr/articles/hhs-placeholder-shapes-demo.html).")
+}
+```
 
 The same HHS-style fixture is available from R with `example_hhs_layout()`:
 

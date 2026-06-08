@@ -22,7 +22,7 @@ and \code{.gpkg}.  A \code{.zip} URL is extracted first and the first supported 
 inside is read.  For ambiguous extensions the function assumes a zip archive.
 }
 \examples{
-\dontrun{
+if(interactive()){
 x <- read_dragmapr_sf_url("https://example.com/regions.geojson")
 }
 }

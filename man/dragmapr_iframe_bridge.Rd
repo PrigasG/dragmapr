@@ -48,7 +48,7 @@ in \code{tags$head(tags$script(HTML(...)))}.
 }
 \examples{
 # In a Shiny UI:
-\dontrun{
+if(interactive()){
 library(shiny)
 ui <- fluidPage(
   tags$head(tags$script(HTML(

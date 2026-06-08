@@ -41,6 +41,7 @@ render_dragged_map(
   connector_end_gap = NULL,
   show_origin_outlines = FALSE,
   show_movement_connectors = FALSE,
+  show_movement_band = FALSE,
   movement_connector_color = "#64748b",
   movement_connector_opacity = 0.72,
   movement_connector_linewidth = 0.45,
@@ -178,7 +179,7 @@ Render an adjusted draggable plot with labels
 # interactive HTML, drag regions and labels to your liking, then
 # copy or download the offset CSVs.  Only call render_dragged_map()
 # if you also need a reproducible ggplot2 image from those offsets.
-\dontrun{
+if(interactive()){
 # Step 1 (always): open the interactive draggable plot.
 drag_map_prototype(poly, region_col = "region", open = TRUE)
 

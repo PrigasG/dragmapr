@@ -86,7 +86,7 @@
 #' # interactive HTML, drag regions and labels to your liking, then
 #' # copy or download the offset CSVs.  Only call render_dragged_map()
 #' # if you also need a reproducible ggplot2 image from those offsets.
-#' \dontrun{
+#' if(interactive()){
 #' # Step 1 (always): open the interactive draggable plot.
 #' drag_map_prototype(poly, region_col = "region", open = TRUE)
 #'
@@ -142,6 +142,7 @@ render_dragged_map <- function(x,
                                connector_end_gap = NULL,
                                show_origin_outlines = FALSE,
                                show_movement_connectors = FALSE,
+                               show_movement_band = FALSE,
                                movement_connector_color = "#64748b",
                                movement_connector_opacity = 0.72,
                                movement_connector_linewidth = 0.45,
@@ -171,6 +172,9 @@ render_dragged_map <- function(x,
   }
   if (!is.logical(show_movement_connectors) || length(show_movement_connectors) != 1L || is.na(show_movement_connectors)) {
     stop("`show_movement_connectors` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.logical(show_movement_band) || length(show_movement_band) != 1L || is.na(show_movement_band)) {
+    stop("`show_movement_band` must be TRUE or FALSE.", call. = FALSE)
   }
   if (!is.character(movement_connector_color) || length(movement_connector_color) != 1L ||
       is.na(movement_connector_color) || !nzchar(movement_connector_color)) {
@@ -220,6 +224,11 @@ render_dragged_map <- function(x,
   } else {
     data.frame(x = numeric(), y = numeric(), xend = numeric(), yend = numeric())
   }
+  movement_band <- if (isTRUE(show_movement_band)) {
+    make_movement_band_data(x, region_offsets, region_col)
+  } else {
+    data.frame(x = numeric(), y = numeric(), xend = numeric(), yend = numeric())
+  }
   show_labels <- !identical(labels, FALSE)
   base_labels <- if (is.null(labels)) {
     make_region_labels(x, region_col = region_col, label_col = label_col)
@@ -239,7 +248,7 @@ render_dragged_map <- function(x,
     end_gap = connector_end_gap
   ) else empty_connector_data()
   limit_geometry <- if (nrow(origin_outlines) > 0L) rbind(adjusted, origin_outlines) else adjusted
-  limit_connectors <- c(connectors, list(movement = movement_connectors))
+  limit_connectors <- c(connectors, list(movement = movement_connectors, band = movement_band))
   limits <- plot_limits(limit_geometry, if (show_labels) labels else NULL, limit_connectors, padding = label_padding)
 
   regions <- natural_sort(unique(as.character(adjusted[[region_col]])))
@@ -301,6 +310,29 @@ render_dragged_map <- function(x,
     plot <- plot +
       ggplot2::geom_segment(
         data = movement_connectors,
+        ggplot2::aes(x = .data$x, y = .data$y, xend = .data$xend, yend = .data$yend),
+        inherit.aes = FALSE,
+        color = movement_connector_color,
+        linewidth = movement_connector_linewidth,
+        linetype = movement_connector_linetype,
+        alpha = movement_connector_opacity,
+        arrow = movement_connector_arrow
+      )
+  }
+  if (nrow(movement_band) > 0L) {
+    plot <- plot +
+      ggplot2::geom_segment(
+        data = movement_band[movement_band$role == "top", , drop = FALSE],
+        ggplot2::aes(x = .data$x, y = .data$y, xend = .data$xend, yend = .data$yend),
+        inherit.aes = FALSE,
+        color = movement_connector_color,
+        linewidth = movement_connector_linewidth,
+        linetype = movement_connector_linetype,
+        alpha = movement_connector_opacity,
+        arrow = movement_connector_arrow
+      ) +
+      ggplot2::geom_segment(
+        data = movement_band[movement_band$role == "bottom", , drop = FALSE],
         ggplot2::aes(x = .data$x, y = .data$y, xend = .data$xend, yend = .data$yend),
         inherit.aes = FALSE,
         color = movement_connector_color,
@@ -425,12 +457,17 @@ render_dragged_map <- function(x,
           )
       }
       if (!identical(label_marker_shape, "rect")) {
+        # Use geom_label with no visible border so the fill masks the connector
+        # line behind text characters that overflow the marker boundary.
         plot <- plot +
-          ggplot2::geom_text(
+          ggplot2::geom_label(
             data = point_labels,
             ggplot2::aes(x = .data$x, y = .data$y, label = .data$label, color = .data$label_color),
             fontface = "bold",
-            size = label_size
+            size = label_size,
+            fill = marker_fill,
+            label.size = 0,
+            label.padding = grid::unit(0.08, "lines")
           )
       }
       uses_label_color <- TRUE
@@ -526,6 +563,49 @@ make_movement_connector_data <- function(x, region_offsets, region_col) {
   out <- do.call(rbind, rows)
   if (is.null(out)) {
     data.frame(x = numeric(), y = numeric(), xend = numeric(), yend = numeric())
+  } else {
+    rownames(out) <- NULL
+    out
+  }
+}
+
+make_movement_band_data <- function(x, region_offsets, region_col) {
+  moved <- region_offsets[
+    is.finite(region_offsets$dx_m) & is.finite(region_offsets$dy_m) &
+      (region_offsets$dx_m != 0 | region_offsets$dy_m != 0),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(moved) == 0L) {
+    return(data.frame(
+      role = character(), region = character(),
+      x = numeric(), y = numeric(), xend = numeric(), yend = numeric()
+    ))
+  }
+  grouped <- split(seq_len(nrow(x)), as.character(x[[region_col]]))
+  rows <- lapply(moved$region, function(region) {
+    idx <- grouped[[as.character(region)]]
+    if (is.null(idx) || length(idx) == 0L) return(NULL)
+    geom   <- sf::st_union(sf::st_geometry(x[idx, , drop = FALSE]))
+    bb     <- sf::st_bbox(geom)
+    cx     <- (bb[["xmin"]] + bb[["xmax"]]) / 2
+    offset <- moved[moved$region == region, , drop = FALSE][1L, ]
+    data.frame(
+      role   = c("top", "bottom"),
+      region = as.character(region),
+      x      = cx,
+      y      = c(bb[["ymax"]], bb[["ymin"]]),
+      xend   = cx + offset$dx_m,
+      yend   = c(bb[["ymax"]] + offset$dy_m, bb[["ymin"]] + offset$dy_m),
+      stringsAsFactors = FALSE
+    )
+  })
+  out <- do.call(rbind, rows)
+  if (is.null(out)) {
+    data.frame(
+      role = character(), region = character(),
+      x = numeric(), y = numeric(), xend = numeric(), yend = numeric()
+    )
   } else {
     rownames(out) <- NULL
     out

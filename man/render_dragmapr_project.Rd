@@ -44,7 +44,7 @@ label offsets, label table, palette, and metadata, then validates that the
 pieces still match before rendering.
 }
 \examples{
-\dontrun{
+if(interactive()){
 render_dragmapr_project("dragmapr-project.zip", file = "map.png")
 }
 }

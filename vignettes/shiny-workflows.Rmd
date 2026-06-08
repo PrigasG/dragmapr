@@ -156,8 +156,8 @@ columns, and labels that refer to regions that are not present in `source.gpkg`.
 When an offset row is absent, it reports the missing rows and uses zero movement
 for that region or label so users can still inspect the output.
 
-The app names its central reactive values in the State tab so they are easy to
-find when adapting the code:
+When launched with `?debug=1`, the app includes a State tab that names its
+central reactive values so they are easy to find when adapting the code:
 
 - `source_sf()` - raw sf from upload / demo / project bundle
 - `projected_sf()` — after `prepare_dragmapr_sf()`
@@ -222,8 +222,61 @@ server <- function(input, output, session) {
   output$helper <- renderUI(
     tags$iframe(src = "myapp_static/helper.html",
                 style = "width:100%;height:700px;border:none;")
-  )
-}
 
-shinyApp(ui, server)
-```
+## Switching Grouping Columns in Spatial Studio
+
+Spatial Studio stores drag positions per region column and propagates them
+when you change the **Group / region column** dropdown. This means you can
+work at multiple levels of geographic hierarchy without losing your layout.
+
+### How inheritance works
+
+Each column maintains its **own independent layout cache**. Switching columns
+never displaces regions that you have not personally dragged in that column:
+
+- **Coarser → finer** (e.g. HHS region → state name): the finer column resumes
+  its own last saved layout. If you have not visited it before, all fine units
+  start at their natural geographic positions — they are **not** displaced by
+  the parent column's drag offsets.
+
+- **Finer → coarser** (e.g. state name → HHS region): each parent group is
+  placed at the **mean** of its member units' current positions, or (if you
+  choose "Restore parent's last position") at the position the parent had when
+  you last worked at that column.
+
+### Example: HHS regions and state names
+
+The bundled HHS demo has both an `hhs_region` column (ten groups) and a `NAME`
+column (individual states). A typical workflow:
+
+1. Set **Group column** to `hhs_region`. Drag the ten regions into an exploded
+   layout.
+2. Switch to `NAME`. The states appear at their **natural positions** (first
+   visit) — ready for individual fine-tuning without any carry-over from the
+   HHS drag.
+3. Fine-tune individual states as needed.
+4. Switch back to `hhs_region`. Each region lands at the mean of its states'
+   current positions, reflecting any individual fine-tuning.
+
+### What resets and what is preserved
+
+| On column switch | Behaviour |
+|---|---|
+| Region offsets (coarser→finer) | Restored to that column's last saved positions, or zero if never visited |
+| Region offsets (finer→coarser) | Average of children's positions, or restored to parent's last position |
+| Label offsets | Reset — label IDs are derived from the new column's region names |
+| Undo / redo stack | Reset — new column starts with a clean history |
+| Region palette | Preserved |
+| Legend and label filter selections | Preserved |
+
+### Round-trip precision
+
+The only step that involves averaging is **finer → coarser**. If all child
+regions had identical offsets, the round-trip is lossless. Mixed individual child
+moves are summarised into an average for the parent — or you can choose
+**"Restore parent's last position"** to skip averaging and return the parent to
+exactly where it was.
+
+Changing only the **Label column** while keeping the region column the same
+leaves region offsets completely untouched. Only the label IDs change.
+

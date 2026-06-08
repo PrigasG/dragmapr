@@ -15,6 +15,12 @@ This short video shows the core `dragmapr` loop on an actual map: open the
 draggable helper, move regions and labels, and use the exported state to create
 a reproducible static map.
 
+```{r demo-video, echo = FALSE, results = "asis"}
+in_pkgdown <- identical(Sys.getenv("IN_PKGDOWN"), "true") ||
+  isTRUE(getOption("pkgdown.in_pkgdown"))
+
+if (in_pkgdown) {
+  cat('
 <div class="dragmapr-demo-video">
   <video controls preload="metadata" poster="../dragmap-demo-poster.png" src="../dragmap-demo.mp4">
     <p>
@@ -23,6 +29,11 @@ a reproducible static map.
     </p>
   </video>
 </div>
+')
+} else {
+  cat("[Watch the dragmap demo video on the pkgdown site](https://prigasg.github.io/dragmapr/articles/dragmap-demo.html).")
+}
+```
 
 The same workflow can be run locally with the bundled examples:
 

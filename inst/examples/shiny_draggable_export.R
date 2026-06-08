@@ -16,64 +16,39 @@ read_csv_text <- function(text) {
 }
 
 ui <- fluidPage(
-  tags$head(tags$script(HTML("
-    var dragmaprStateReceived = false;
-
-    window.addEventListener('message', function(event) {
-      if (!event.data || event.data.type !== 'dragmapr-offsets') return;
-      dragmaprStateReceived = true;
-      Shiny.setInputValue('region_csv', event.data.regionCsv, {priority: 'event'});
-      Shiny.setInputValue('label_csv', event.data.labelCsv, {priority: 'event'});
-    });
-
-    // Use a specific id so Shiny's hidden download iframes cannot intercept
-    // messages intended for the drag-map helper.
-    function getHelperFrame() {
-      return document.getElementById('dragmapr-export-helper');
-    }
-
-    // After Shiny connects, poll the iframe every 500 ms until state arrives.
-    // This handles the race where the iframe fires its first postMessage before
-    // the Shiny WebSocket is established.
-    function requestIframeState() {
-      if (dragmaprStateReceived) return;
-      var iframe = getHelperFrame();
-      if (iframe && iframe.contentWindow) {
-        iframe.contentWindow.postMessage({type: 'dragmapr-request-state'}, '*');
+  tags$head(
+    # Iframe bridge: relays drag state from the helper iframe to Shiny inputs.
+    tags$script(HTML(dragmapr_iframe_bridge(
+      iframe_selector = "#dragmapr-export-helper"
+    ))),
+    # Custom message handlers: push presentation changes from Shiny into the iframe.
+    tags$script(HTML("
+      function getHelperFrame() {
+        return document.getElementById('dragmapr-export-helper');
       }
-      setTimeout(requestIframeState, 500);
-    }
-    $(document).on('shiny:connected', function() {
-      setTimeout(requestIframeState, 100);
-    });
-    Shiny.addCustomMessageHandler('dragmapr-labels', function(message) {
-      var iframe = getHelperFrame();
-      if (iframe && iframe.contentWindow) {
-        iframe.contentWindow.postMessage({
-          type: 'dragmapr-set-labels',
-          labels: !!message.labels
-        }, '*');
+      function helperOrigin() {
+        var iframe = getHelperFrame();
+        if (!iframe || !iframe.src) return window.location.origin;
+        try { return new URL(iframe.src, window.location.href).origin; }
+        catch (e) { return window.location.origin; }
       }
-    });
-    Shiny.addCustomMessageHandler('dragmapr-label-data', function(message) {
-      var iframe = getHelperFrame();
-      if (iframe && iframe.contentWindow) {
-        iframe.contentWindow.postMessage({
-          type: 'dragmapr-set-label-data',
-          labels: JSON.parse(message.labels || '[]')
-        }, '*');
-      }
-    });
-    Shiny.addCustomMessageHandler('dragmapr-label-options', function(message) {
-      var iframe = getHelperFrame();
-      if (iframe && iframe.contentWindow) {
-        iframe.contentWindow.postMessage({
-          type: 'dragmapr-set-label-options',
-          options: message.options || {}
-        }, '*');
-      }
-    });
-  "))),
+      Shiny.addCustomMessageHandler('dragmapr-labels', function(message) {
+        var iframe = getHelperFrame();
+        if (iframe && iframe.contentWindow)
+          iframe.contentWindow.postMessage({type: 'dragmapr-set-labels', labels: !!message.labels}, helperOrigin());
+      });
+      Shiny.addCustomMessageHandler('dragmapr-label-data', function(message) {
+        var iframe = getHelperFrame();
+        if (iframe && iframe.contentWindow)
+          iframe.contentWindow.postMessage({type: 'dragmapr-set-label-data', labels: message.labels || []}, helperOrigin());
+      });
+      Shiny.addCustomMessageHandler('dragmapr-label-options', function(message) {
+        var iframe = getHelperFrame();
+        if (iframe && iframe.contentWindow)
+          iframe.contentWindow.postMessage({type: 'dragmapr-set-label-options', options: message.options || {}}, helperOrigin());
+      });
+    "))
+  ),
   tags$h2("Draggable plot with report export"),
   tags$p("Drag regions or labels. Shiny captures the offset state and can export a report-ready PNG."),
   fluidRow(
@@ -162,7 +137,6 @@ server <- function(input, output, session) {
     }
     labels$connector <- isTRUE(input$show_connectors)
     labels$connector_type <- input$connector_type %||% "straight"
-    labels$connector_linewidth <- (input$connector_linewidth %||% 0.45) * 3
     as_drag_labels(labels)
   })
   current_plot <- reactive({
@@ -198,11 +172,10 @@ server <- function(input, output, session) {
   observeEvent(annotation_labels(), {
     session$sendCustomMessage(
       "dragmapr-label-data",
-      list(labels = as.character(jsonlite::toJSON(
-        annotation_labels(),
-        dataframe = "rows",
-        auto_unbox = TRUE
-      )))
+      list(labels = jsonlite::fromJSON(
+        jsonlite::toJSON(annotation_labels(), dataframe = "rows", auto_unbox = TRUE),
+        simplifyVector = FALSE
+      ))
     )
   }, ignoreInit = FALSE)
   observe({

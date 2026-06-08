@@ -92,7 +92,7 @@
 #'
 #' # Primary usage: open the interactive draggable plot in the browser.
 #' # Drag regions and labels, then copy or download the offset CSVs.
-#' \dontrun{
+#' if(interactive()){
 #' drag_map_prototype(poly, region_col = "region", open = TRUE)
 #' }
 #'
@@ -129,6 +129,7 @@ drag_map_prototype <- function(x,
                                connector_smart = FALSE,
                                show_origin_outlines = FALSE,
                                show_movement_connectors = FALSE,
+                               show_movement_band = FALSE,
                                movement_connector_color = "#64748b",
                                movement_connector_opacity = 0.72,
                                movement_connector_linewidth = 1.4,
@@ -234,6 +235,9 @@ drag_map_prototype <- function(x,
   if (!is.logical(show_movement_connectors) || length(show_movement_connectors) != 1L || is.na(show_movement_connectors)) {
     stop("`show_movement_connectors` must be TRUE or FALSE.", call. = FALSE)
   }
+  if (!is.logical(show_movement_band) || length(show_movement_band) != 1L || is.na(show_movement_band)) {
+    stop("`show_movement_band` must be TRUE or FALSE.", call. = FALSE)
+  }
   if (!is.character(movement_connector_color) || length(movement_connector_color) != 1L ||
       is.na(movement_connector_color) || !nzchar(movement_connector_color)) {
     stop("`movement_connector_color` must be a single color string.", call. = FALSE)
@@ -311,6 +315,7 @@ drag_map_prototype <- function(x,
     connectorSmart = isTRUE(connector_smart),
     showOriginOutlines = isTRUE(show_origin_outlines),
     showMovementConnectors = isTRUE(show_movement_connectors),
+    showMovementBand = isTRUE(show_movement_band),
     movementConnectorColor = unname(movement_connector_color),
     movementConnectorOpacity = unname(movement_connector_opacity),
     movementConnectorLinewidth = unname(movement_connector_linewidth),

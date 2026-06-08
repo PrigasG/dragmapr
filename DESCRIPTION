@@ -14,7 +14,10 @@ Description: Creates interactive draggable plots from grouped projected
     image is also needed, render_dragged_map() reconstructs the layout as
     a 'ggplot2' plot from the source geometry plus the exported offset
     tables, and render_dragmapr_project() renders complete Spatial Studio
-    project bundles.
+    project bundles. The interactive layer is built on the 'D3' library:
+    Bostock, Ogievetsky and Heer (2011) <doi:10.1109/TVCG.2011.185>.
+    Spatial data handling uses the 'sf' package: Pebesma (2018)
+    <doi:10.32614/RJ-2018-009>.
 License: MIT + file LICENSE
 URL: https://prigasg.github.io/dragmapr/
 BugReports: https://github.com/PrigasG/dragmapr/issues
@@ -36,8 +39,7 @@ Suggests:
     shiny,
     shinyWidgets (>= 0.8.6),
     testthat (>= 3.0.0)
-VignetteBuilder: 
-    knitr
+VignetteBuilder: knitr
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

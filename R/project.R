@@ -21,7 +21,7 @@
 #' @return A `ggplot` object.
 #' @export
 #' @examples
-#' \dontrun{
+#' if(interactive()){
 #' render_dragmapr_project("dragmapr-project.zip", file = "map.png")
 #' }
 render_dragmapr_project <- function(project,

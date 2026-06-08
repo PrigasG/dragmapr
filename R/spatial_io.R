@@ -14,7 +14,7 @@
 #' @export
 #' @examples
 #' # Typical Shiny server usage:
-#' \dontrun{
+#' if(interactive()){
 #' observeEvent(input$spatial_upload, {
 #'   x <- read_dragmapr_sf_upload(input$spatial_upload)
 #'   if (!is.null(x)) {
@@ -78,7 +78,7 @@ read_dragmapr_sf_upload <- function(upload) {
 #' @return An `sf` object.
 #' @export
 #' @examples
-#' \dontrun{
+#' if(interactive()){
 #' x <- read_dragmapr_sf_url("https://example.com/regions.geojson")
 #' }
 read_dragmapr_sf_url <- function(url, timeout = 60) {
@@ -206,7 +206,7 @@ prepare_dragmapr_sf <- function(x, target_crs = 3857) {
 #' @export
 #' @examples
 #' # In a Shiny UI:
-#' \dontrun{
+#' if(interactive()){
 #' library(shiny)
 #' ui <- fluidPage(
 #'   tags$head(tags$script(HTML(

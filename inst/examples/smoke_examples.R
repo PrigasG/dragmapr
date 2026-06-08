@@ -4,7 +4,8 @@ scripts <- c(
   "explodemap_hhs_labels.R",
   "label_nudging.R",
   "non_map_panels.R",
-  "roundtrip_csv.R"
+  "roundtrip_csv.R",
+  "full_package_walkthrough.R"
 )
 
 old <- setwd(tempdir())

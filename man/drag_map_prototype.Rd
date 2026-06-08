@@ -35,6 +35,7 @@ drag_map_prototype(
   connector_smart = FALSE,
   show_origin_outlines = FALSE,
   show_movement_connectors = FALSE,
+  show_movement_band = FALSE,
   movement_connector_color = "#64748b",
   movement_connector_opacity = 0.72,
   movement_connector_linewidth = 1.4,
@@ -173,7 +174,7 @@ poly <- sf::st_sf(
 
 # Primary usage: open the interactive draggable plot in the browser.
 # Drag regions and labels, then copy or download the offset CSVs.
-\dontrun{
+if(interactive()){
 drag_map_prototype(poly, region_col = "region", open = TRUE)
 }
 
