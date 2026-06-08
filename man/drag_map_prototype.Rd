@@ -133,7 +133,12 @@ with non-zero offsets beneath the moved regions.}
 original representative point to its current location. Hidden for zero-
 offset regions. Defaults to \code{FALSE}.}
 
-\item{movement_connector_color, movement_connector_opacity, movement_connector_linewidth}{Browser styling for movement connectors.}
+\item{show_movement_band}{Draw a swept shadow in the browser between each
+region's original polygon footprint and its translated position. The shadow
+traces the actual boundary of the shape rather than a flat bounding-box
+band. Defaults to \code{FALSE}.}
+
+\item{movement_connector_color, movement_connector_opacity, movement_connector_linewidth}{Browser styling for movement connectors and the swept movement shadow.}
 
 \item{movement_connector_linetype}{Movement connector line style. One of
 \code{"solid"}, \code{"dashed"}, or \code{"dotted"}.}

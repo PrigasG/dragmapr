@@ -57,8 +57,12 @@
 #' @param show_movement_connectors Draw a connector from each moved region's
 #'   original representative point to its current location. Hidden for zero-
 #'   offset regions. Defaults to `FALSE`.
+#' @param show_movement_band Draw a swept shadow in the browser between each
+#'   region's original polygon footprint and its translated position. The shadow
+#'   traces the actual boundary of the shape rather than a flat bounding-box
+#'   band. Defaults to `FALSE`.
 #' @param movement_connector_color,movement_connector_opacity,movement_connector_linewidth
-#'   Browser styling for movement connectors.
+#'   Browser styling for movement connectors and the swept movement shadow.
 #' @param movement_connector_linetype Movement connector line style. One of
 #'   `"solid"`, `"dashed"`, or `"dotted"`.
 #' @param movement_connector_endpoint Movement connector endpoint. One of

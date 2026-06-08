@@ -1548,7 +1548,7 @@ window.addEventListener('scroll', function() {
         tags$div("Context layers", class = "studio-subgroup-title"),
         checkboxInput("show_origin_outlines", "Show origin outlines", value = FALSE),
         checkboxInput("show_movement_connectors", "Show movement connector", value = FALSE),
-        checkboxInput("show_movement_band", "Show movement band (top + bottom edges)", value = FALSE),
+        checkboxInput("show_movement_band", "Show swept movement shadow", value = FALSE),
         checkboxInput("show_drag_trail", "Show drag preview trail", value = FALSE),
 
         tags$div("Movement connector style", class = "studio-subgroup-title"),

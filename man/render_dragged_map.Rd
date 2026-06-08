@@ -148,7 +148,12 @@ with non-zero offsets beneath the moved regions.}
 \item{show_movement_connectors}{Draw a connector from each moved region's
 original representative point to its translated location.}
 
-\item{movement_connector_color, movement_connector_opacity, movement_connector_linewidth}{Static export styling for movement connectors.}
+\item{show_movement_band}{Draw a swept shadow between each region's original
+footprint and its translated position. The shadow is built from the actual
+polygon boundary, so it follows the shape of the region rather than a flat
+bounding-box band.}
+
+\item{movement_connector_color, movement_connector_opacity, movement_connector_linewidth}{Static export styling for movement connectors and the swept movement shadow.}
 
 \item{movement_connector_linetype}{Movement connector line style. One of
 \code{"solid"}, \code{"dashed"}, or \code{"dotted"}.}

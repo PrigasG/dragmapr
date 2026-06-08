@@ -60,8 +60,12 @@
 #'   with non-zero offsets beneath the moved regions.
 #' @param show_movement_connectors Draw a connector from each moved region's
 #'   original representative point to its translated location.
+#' @param show_movement_band Draw a swept shadow between each region's original
+#'   footprint and its translated position. The shadow is built from the actual
+#'   polygon boundary, so it follows the shape of the region rather than a flat
+#'   bounding-box band.
 #' @param movement_connector_color,movement_connector_opacity,movement_connector_linewidth
-#'   Static export styling for movement connectors.
+#'   Static export styling for movement connectors and the swept movement shadow.
 #' @param movement_connector_linetype Movement connector line style. One of
 #'   `"solid"`, `"dashed"`, or `"dotted"`.
 #' @param movement_connector_endpoint Movement connector endpoint. One of
@@ -225,9 +229,13 @@ render_dragged_map <- function(x,
     data.frame(x = numeric(), y = numeric(), xend = numeric(), yend = numeric())
   }
   movement_band <- if (isTRUE(show_movement_band)) {
-    make_movement_band_data(x, region_offsets, region_col)
+    make_boundary_swept_band(x, region_offsets, region_col)
   } else {
-    data.frame(x = numeric(), y = numeric(), xend = numeric(), yend = numeric())
+    sf::st_sf(
+      data.frame(region = character(), dx_m = numeric(), dy_m = numeric(),
+                 distance = numeric(), stringsAsFactors = FALSE),
+      geometry = sf::st_sfc(crs = sf::st_crs(x))
+    )
   }
   show_labels <- !identical(labels, FALSE)
   base_labels <- if (is.null(labels)) {
@@ -248,7 +256,7 @@ render_dragged_map <- function(x,
     end_gap = connector_end_gap
   ) else empty_connector_data()
   limit_geometry <- if (nrow(origin_outlines) > 0L) rbind(adjusted, origin_outlines) else adjusted
-  limit_connectors <- c(connectors, list(movement = movement_connectors, band = movement_band))
+  limit_connectors <- c(connectors, list(movement = movement_connectors, band_sf = movement_band))
   limits <- plot_limits(limit_geometry, if (show_labels) labels else NULL, limit_connectors, padding = label_padding)
 
   regions <- natural_sort(unique(as.character(adjusted[[region_col]])))
@@ -321,25 +329,13 @@ render_dragged_map <- function(x,
   }
   if (nrow(movement_band) > 0L) {
     plot <- plot +
-      ggplot2::geom_segment(
-        data = movement_band[movement_band$role == "top", , drop = FALSE],
-        ggplot2::aes(x = .data$x, y = .data$y, xend = .data$xend, yend = .data$yend),
+      ggplot2::geom_sf(
+        data = movement_band,
         inherit.aes = FALSE,
+        fill = movement_connector_color,
         color = movement_connector_color,
-        linewidth = movement_connector_linewidth,
-        linetype = movement_connector_linetype,
-        alpha = movement_connector_opacity,
-        arrow = movement_connector_arrow
-      ) +
-      ggplot2::geom_segment(
-        data = movement_band[movement_band$role == "bottom", , drop = FALSE],
-        ggplot2::aes(x = .data$x, y = .data$y, xend = .data$xend, yend = .data$yend),
-        inherit.aes = FALSE,
-        color = movement_connector_color,
-        linewidth = movement_connector_linewidth,
-        linetype = movement_connector_linetype,
-        alpha = movement_connector_opacity,
-        arrow = movement_connector_arrow
+        alpha = movement_connector_opacity * 0.18,
+        linewidth = movement_connector_linewidth * 0.25
       )
   }
   plot <- plot +
@@ -569,47 +565,63 @@ make_movement_connector_data <- function(x, region_offsets, region_col) {
   }
 }
 
-make_movement_band_data <- function(x, region_offsets, region_col) {
-  moved <- region_offsets[
-    is.finite(region_offsets$dx_m) & is.finite(region_offsets$dy_m) &
-      (region_offsets$dx_m != 0 | region_offsets$dy_m != 0),
-    ,
-    drop = FALSE
-  ]
-  if (nrow(moved) == 0L) {
-    return(data.frame(
-      role = character(), region = character(),
-      x = numeric(), y = numeric(), xend = numeric(), yend = numeric()
-    ))
+make_boundary_swept_band <- function(x, offsets, region_col, min_distance = 1e-6) {
+  if (!inherits(x, "sf")) stop("`x` must be an sf object.", call. = FALSE)
+  offsets <- normalize_offsets(offsets, source = "`offsets`")
+  groups  <- unique(as.character(x[[region_col]]))
+  crs     <- sf::st_crs(x)
+
+  make_ring_faces <- function(coords, dx, dy) {
+    if (nrow(coords) < 2L) return(NULL)
+    faces <- vector("list", nrow(coords) - 1L)
+    for (i in seq_len(nrow(coords) - 1L)) {
+      x1 <- coords[i,      "X"]; y1 <- coords[i,      "Y"]
+      x2 <- coords[i + 1L, "X"]; y2 <- coords[i + 1L, "Y"]
+      ring <- rbind(
+        c(x1, y1), c(x2, y2),
+        c(x2 + dx, y2 + dy), c(x1 + dx, y1 + dy),
+        c(x1, y1)
+      )
+      faces[[i]] <- sf::st_polygon(list(ring))
+    }
+    faces
   }
-  grouped <- split(seq_len(nrow(x)), as.character(x[[region_col]]))
-  rows <- lapply(moved$region, function(region) {
-    idx <- grouped[[as.character(region)]]
-    if (is.null(idx) || length(idx) == 0L) return(NULL)
-    geom   <- sf::st_union(sf::st_geometry(x[idx, , drop = FALSE]))
-    bb     <- sf::st_bbox(geom)
-    cx     <- (bb[["xmin"]] + bb[["xmax"]]) / 2
-    offset <- moved[moved$region == region, , drop = FALSE][1L, ]
-    data.frame(
-      role   = c("top", "bottom"),
-      region = as.character(region),
-      x      = cx,
-      y      = c(bb[["ymax"]], bb[["ymin"]]),
-      xend   = cx + offset$dx_m,
-      yend   = c(bb[["ymax"]] + offset$dy_m, bb[["ymin"]] + offset$dy_m),
-      stringsAsFactors = FALSE
+
+  pieces <- lapply(groups, function(g) {
+    off_idx  <- match(g, offsets$region)
+    if (is.na(off_idx)) return(NULL)
+    dx       <- offsets$dx_m[off_idx]
+    dy       <- offsets$dy_m[off_idx]
+    distance <- sqrt(dx^2 + dy^2)
+    if (!is.finite(distance) || distance <= min_distance) return(NULL)
+    idx <- which(as.character(x[[region_col]]) == g)
+    if (length(idx) == 0L) return(NULL)
+    geom     <- suppressWarnings(sf::st_union(sf::st_geometry(x[idx, , drop = FALSE])))
+    boundary <- suppressWarnings(sf::st_cast(sf::st_boundary(geom), "LINESTRING"))
+    coords   <- sf::st_coordinates(boundary)
+    if (!all(c("X", "Y", "L1") %in% colnames(coords))) return(NULL)
+    faces_list <- split(as.data.frame(coords), coords[, "L1"])
+    polys <- unlist(lapply(faces_list, make_ring_faces, dx = dx, dy = dy), recursive = FALSE)
+    if (length(polys) == 0L) return(NULL)
+    swept <- suppressWarnings(sf::st_union(sf::st_sfc(polys, crs = crs)))
+    sf::st_sf(
+      data.frame(region = g, dx_m = dx, dy_m = dy, distance = distance,
+                 stringsAsFactors = FALSE),
+      geometry = swept
     )
   })
-  out <- do.call(rbind, rows)
-  if (is.null(out)) {
-    data.frame(
-      role = character(), region = character(),
-      x = numeric(), y = numeric(), xend = numeric(), yend = numeric()
-    )
-  } else {
-    rownames(out) <- NULL
-    out
+
+  pieces <- Filter(Negate(is.null), pieces)
+
+  if (length(pieces) == 0L) {
+    return(sf::st_sf(
+      data.frame(region = character(), dx_m = numeric(), dy_m = numeric(),
+                 distance = numeric(), stringsAsFactors = FALSE),
+      geometry = sf::st_sfc(crs = crs)
+    ))
   }
+
+  do.call(rbind, pieces)
 }
 
 make_connector_data <- function(anchor_labels, labels, end_gap = NULL) {
@@ -724,7 +736,11 @@ plot_limits <- function(adjusted, labels = NULL, connectors = empty_connector_da
     ys <- c(ys, labels$y)
   }
   for (connector in connectors) {
-    if (nrow(connector) > 0L) {
+    if (inherits(connector, "sf") && nrow(connector) > 0L) {
+      bb <- sf::st_bbox(connector)
+      xs <- c(xs, bb[["xmin"]], bb[["xmax"]])
+      ys <- c(ys, bb[["ymin"]], bb[["ymax"]])
+    } else if (is.data.frame(connector) && nrow(connector) > 0L) {
       x_cols <- intersect(c("x", "xend", "xmid"), names(connector))
       y_cols <- intersect(c("y", "yend", "ymid"), names(connector))
       xs <- c(xs, unlist(connector[x_cols], use.names = FALSE))
