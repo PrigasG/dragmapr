@@ -4,7 +4,7 @@
 #' offsets used by the explodemap paper workflow into a lightweight fixture that
 #' does not depend on the explodemap package or its generated paper outputs.
 #' See the explodemap vignette "Reproducing the paper examples", section 6:
-#' <https://stat.ethz.ch/CRAN/web/packages/explodemap/vignettes/reproducing-paper-examples.html>.
+#' <https://CRAN.R-project.org/package=explodemap>.
 #'
 #' @return A list with `states`, `labels`, `region_offsets`, `label_offsets`,
 #'   `region_names`, and `region_colors`.

@@ -43,6 +43,7 @@ drag_map_prototype(
   movement_connector_endpoint = c("closed", "open", "none"),
   show_drag_trail = FALSE,
   side_panel = TRUE,
+  transition = NULL,
   file = NULL,
   open = FALSE
 )
@@ -154,6 +155,31 @@ Defaults to \code{FALSE}.}
 \item{side_panel}{Show the built-in copy/download side panel in the helper
 HTML. Defaults to \code{TRUE}; Shiny apps that provide their own controls can
 set this to \code{FALSE}.}
+
+\item{transition}{Optional local elastic transition played on first render,
+typically built from \code{\link[=build_elastic_transition]{build_elastic_transition()}} output when switching
+from a parent grouping to a child grouping. A named list with elements:
+\code{anchors} (data frame with \code{region}, \code{ax_m}, \code{ay_m} columns,
+where \code{ax_m}/\code{ay_m} is each region's bloom start point relative to its
+final position, in map units; optional when \code{groups} is supplied, in
+which case only the boundaries are drawn), \code{groups} (named list mapping each
+parent label to the character vector of child region values it contains;
+used to draw a dotted group-drag boundary per expanded group),
+\code{child_region_col} (column in \code{x} holding each feature's child-level
+region key, enabling client-side expand/collapse), \code{shell_col} (column
+flagging dissolved parent-shell features with \code{1}; while a parent is
+collapsed only its shell is drawn and the child features stay hidden),
+\code{expanded} (parent values to start expanded), \code{duration_ms}, \code{overshoot},
+and \code{boundary} (set \code{FALSE} to skip the dotted frame). The frame is now
+treated as a two-gesture group handle by default: dragging it moves all
+bloomed children in the branch together, while a plain click compresses
+the branch back to the parent.
+Optional transition fields include \code{boundary_behavior} (\code{"drag"},
+\code{"reset"}, or \code{"none"}), \code{boundary_drag_threshold} in screen pixels
+before a pointer gesture is treated as a drag, and \code{boundary_label} for
+helper text. Use \code{"Drag to"} so the helper can label each frame as
+\code{"Drag to <parent/location>"}.
+\code{NULL} (default) disables the animation.}
 
 \item{file}{Output HTML path. When \code{NULL}, a temporary \code{.html} file is
 created. Pass an explicit path to save the helper somewhere durable.}

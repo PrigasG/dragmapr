@@ -450,3 +450,162 @@ test_that("drag_map_prototype writes label colors", {
   expect_match(html, '"label_color":"#1D4ED8"', fixed = TRUE)
   expect_match(html, "function labelColor", fixed = TRUE)
 })
+
+test_that("drag_map_prototype embeds a validated elastic transition", {
+  x <- sf::st_sf(
+    region = c("A_1", "A_2"),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      sf::st_polygon(list(rbind(c(5, 0), c(9, 0), c(9, 4), c(5, 4), c(5, 0)))),
+      crs = 3857
+    )
+  )
+  file <- tempfile(fileext = ".html")
+
+  drag_map_prototype(
+    x,
+    region_col = "region",
+    transition = list(
+      anchors = data.frame(
+        region = c("A_1", "A_2"),
+        ax_m   = c(100, -100),
+        ay_m   = c(0, 0)
+      ),
+      groups      = list(A = c("A_1", "A_2")),
+      duration_ms = 700,
+      overshoot   = 1.2
+    ),
+    file = file
+  )
+
+  html <- paste(readLines(file, warn = FALSE), collapse = "\n")
+  expect_match(html, '"elasticTransition":', fixed = TRUE)
+  expect_match(html, '"durationMs":700', fixed = TRUE)
+  expect_match(html, '"overshoot":1.2', fixed = TRUE)
+  expect_match(html, '"boundary":true', fixed = TRUE)
+  expect_match(html, '"region":"A_1","ax_m":100', fixed = TRUE)
+  expect_match(html, "dragmapr-collapse-branch", fixed = TRUE)
+})
+
+test_that("drag_map_prototype omits the transition when NULL or empty", {
+  x <- sf::st_sf(
+    region = "A",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+  file <- tempfile(fileext = ".html")
+  drag_map_prototype(x, region_col = "region", file = file)
+  html <- paste(readLines(file, warn = FALSE), collapse = "\n")
+  expect_match(html, '"elasticTransition":{}', fixed = TRUE)
+
+  empty <- list(anchors = data.frame(region = character(),
+                                     ax_m = numeric(), ay_m = numeric()))
+  file2 <- tempfile(fileext = ".html")
+  drag_map_prototype(x, region_col = "region", transition = empty, file = file2)
+  html2 <- paste(readLines(file2, warn = FALSE), collapse = "\n")
+  expect_match(html2, '"elasticTransition":{}', fixed = TRUE)
+})
+
+test_that("drag_map_prototype accepts a boundary-only (groups) transition", {
+  x <- sf::st_sf(
+    region = c("A_1", "A_2"),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      sf::st_polygon(list(rbind(c(5, 0), c(9, 0), c(9, 4), c(5, 4), c(5, 0)))),
+      crs = 3857
+    )
+  )
+  file <- tempfile(fileext = ".html")
+  drag_map_prototype(
+    x,
+    region_col = "region",
+    transition = list(groups = list(A = c("A_1", "A_2"))),
+    file = file
+  )
+  html <- paste(readLines(file, warn = FALSE), collapse = "\n")
+  expect_match(html, '"groups":{"A":["A_1","A_2"]}', fixed = TRUE)
+  expect_match(html, '"boundary":true', fixed = TRUE)
+  expect_false(grepl('"anchors":[{', html, fixed = TRUE))
+})
+
+test_that("drag_map_prototype embeds child keys and shell flags", {
+  x <- sf::st_sf(
+    county = c("A", "A", "A"),
+    mun    = c("A1", "A2", "A"),
+    shell  = c(0L, 0L, 1L),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(2, 0), c(2, 4), c(0, 4), c(0, 0)))),
+      sf::st_polygon(list(rbind(c(2, 0), c(4, 0), c(4, 4), c(2, 4), c(2, 0)))),
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+  file <- tempfile(fileext = ".html")
+  drag_map_prototype(
+    x,
+    region_col = "county",
+    transition = list(
+      child_region_col = "mun",
+      shell_col        = "shell",
+      expanded         = "A"
+    ),
+    file = file
+  )
+  html <- paste(readLines(file, warn = FALSE), collapse = "\n")
+  expect_match(html, '"childRegionCol":"mun"', fixed = TRUE)
+  expect_match(html, '"shellCol":"shell"', fixed = TRUE)
+  expect_match(html, '"expanded":["A"]', fixed = TRUE)
+  expect_match(html, '"drag_child_region"', fixed = TRUE)
+  expect_match(html, '"drag_shell"', fixed = TRUE)
+
+  expect_error(
+    drag_map_prototype(
+      x,
+      region_col = "county",
+      transition = list(child_region_col = "nope"),
+      file = tempfile(fileext = ".html")
+    ),
+    "child_region_col"
+  )
+})
+
+test_that("drag_map_prototype rejects malformed transitions", {
+  x <- sf::st_sf(
+    region = "A",
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
+      crs = 3857
+    )
+  )
+  expect_error(
+    drag_map_prototype(x, region_col = "region", transition = "yes"),
+    "`transition` must be NULL or a named list"
+  )
+  expect_error(
+    drag_map_prototype(x, region_col = "region",
+                       transition = list(anchors = data.frame(region = "A"))),
+    "ax_m"
+  )
+  expect_error(
+    drag_map_prototype(
+      x, region_col = "region",
+      transition = list(
+        anchors = data.frame(region = "A", ax_m = 1, ay_m = 1),
+        duration_ms = -5
+      )
+    ),
+    "duration_ms"
+  )
+  expect_error(
+    drag_map_prototype(
+      x, region_col = "region",
+      transition = list(
+        anchors = data.frame(region = "A", ax_m = 1, ay_m = 1),
+        groups = list(c("A"))
+      )
+    ),
+    "named list"
+  )
+})

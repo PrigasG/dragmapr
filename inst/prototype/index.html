@@ -69,6 +69,27 @@ h2 { font-size: 13px; margin: 16px 0 0; }
 .label rect.drag-hit { fill: transparent; stroke: transparent; filter: none; }
 .label text { font-size: 11px; font-weight: 800; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .label.box text { font-weight: 650; text-anchor: start; dominant-baseline: hanging; }
+.elastic-return { cursor: pointer; }
+.elastic-return rect.frame {
+  fill: rgba(124, 58, 237, 0.05);
+  stroke: #7c3aed;
+  stroke-width: 2;
+  stroke-dasharray: 7 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  transition: fill 160ms ease;
+}
+.elastic-return:hover rect.frame { fill: rgba(124, 58, 237, 0.1); }
+.elastic-return text {
+  fill: #6d28d9;
+  font-size: 12px;
+  font-weight: 800;
+  dominant-baseline: middle;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 4px;
+}
 .identity-badge {
   position: absolute;
   left: 14px;
@@ -186,8 +207,219 @@ function naturalCompare(a, b) {
   }
   return 0;
 }
-const regions = Array.from(new Set(geojson.features.map(d => String(d.properties.drag_region)))).sort(naturalCompare);
-const regionOffsets = new Map(regions.map(d => [d, {dx_m: 0, dy_m: 0}]));
+// Local elastic transition / selective bloom. `{}` (serialized NULL) = off.
+// When the host arms bloom, features also carry `drag_child_region` and
+// expand/collapse happens fully client-side (no iframe rebuild).
+const elastic = (options.elasticTransition &&
+                 (options.elasticTransition.anchors ||
+                  options.elasticTransition.groups ||
+                  options.elasticTransition.childRegionCol))
+  ? options.elasticTransition
+  : null;
+// jsonlite serializes NULL as `{}`, so any payload field that should be an
+// array must be coerced defensively before use.
+function asArray(v) {
+  return Array.isArray(v) ? v : [];
+}
+let bloomBoundaryOn = !elastic || elastic.boundary !== false;
+let expandedParents = new Set(
+  asArray(elastic && elastic.expanded).map(String)
+);
+
+function featureParentKey(f) {
+  return String(f.properties.drag_region);
+}
+function featureChildKey(f) {
+  return f.properties.drag_child_region != null
+    ? String(f.properties.drag_child_region)
+    : featureParentKey(f);
+}
+function featureIsShell(f) {
+  return !!f.properties.drag_shell;
+}
+function featureActiveKey(f) {
+  if (featureIsShell(f)) return featureParentKey(f);
+  return expandedParents.has(featureParentKey(f))
+    ? featureChildKey(f)
+    : featureParentKey(f);
+}
+
+// Parents that have a dissolved shell feature. When a shell exists, the
+// collapsed view shows only the shell (clean parent outline) and the child
+// features stay hidden until that parent is expanded.
+const shellParents = new Set();
+for (const f of geojson.features) {
+  if (featureIsShell(f)) shellParents.add(featureParentKey(f));
+}
+
+function featureVisible(f) {
+  const pk = featureParentKey(f);
+  if (featureIsShell(f)) return !expandedParents.has(pk);
+  if (!shellParents.has(pk)) return true;
+  return expandedParents.has(pk);
+}
+
+// ---- Branch state machine (dual-level DOM) ----------------------------------
+// When bloom is armed with dissolved shells, both levels stay mounted in the
+// SVG and bloom/unbloom only animates visibility and transforms. Every user
+// action claims a version; stale callbacks may finish but cannot commit.
+// Logical truth lives in branchState; SVG attributes are outputs of it.
+const dualDom = !!(elastic && shellParents.size > 0);
+const branchState = new Map();    // parent key -> collapsed|blooming|expanded|unblooming
+const branchVersion = new Map();  // parent key -> claim counter
+
+// child key -> parent key (and the reverse) for the armed hierarchy.
+const childParentIndex = new Map();
+const parentChildIndex = new Map();
+for (const f of geojson.features) {
+  if (featureIsShell(f)) continue;
+  const pk = featureParentKey(f);
+  const ck = featureChildKey(f);
+  if (ck !== pk) {
+    childParentIndex.set(ck, pk);
+    if (!parentChildIndex.has(pk)) parentChildIndex.set(pk, new Set());
+    parentChildIndex.get(pk).add(ck);
+  }
+}
+
+function branchExpandedLike(p) {
+  const st = branchState.get(String(p));
+  return st === "expanded" || st === "blooming";
+}
+
+function syncExpandedFromBranches() {
+  const next = new Set();
+  for (const [p, st] of branchState) {
+    if (st === "expanded" || st === "blooming") next.add(p);
+  }
+  expandedParents = next;
+}
+
+function nextBranchVersion(p) {
+  const v = (branchVersion.get(String(p)) || 0) + 1;
+  branchVersion.set(String(p), v);
+  return v;
+}
+
+function isCurrentBranchVersion(p, v) {
+  return branchVersion.get(String(p)) === v;
+}
+
+function branchNodes(p) {
+  const kids = parentChildIndex.get(String(p)) || new Set();
+  return {
+    shell: root ? root.selectAll("g.region")
+      .filter(d => String(d) === String(p)) : null,
+    children: root ? root.selectAll("g.region")
+      .filter(d => kids.has(String(d))) : null,
+    boundary: elasticLayer ? elasticLayer.selectAll("g.elastic-return")
+      .filter(g => String(g.id) === String(p)) : null
+  };
+}
+
+function interruptBranch(p) {
+  const n = branchNodes(p);
+  if (n.shell) n.shell.interrupt();
+  if (n.children) n.children.interrupt();
+  if (n.boundary) n.boundary.interrupt();
+  if (typeof labelLayer !== "undefined" && labelLayer) {
+    labelLayer.selectAll("g.label")
+      .filter(d => d && d.label_level != null &&
+        String(d.label_parent != null ? d.label_parent : d.region) === String(p))
+      .interrupt();
+  }
+  svg.selectAll("path.connector")
+    .filter(d => d && d.label_level != null &&
+      String(d.label_parent != null ? d.label_parent : d.region) === String(p))
+    .interrupt();
+}
+
+// Branch labels of one level (dual labels only).
+function branchLabelSel(p, level) {
+  if (typeof labelLayer === "undefined" || !labelLayer || !hasDualLabels()) {
+    return null;
+  }
+  return labelLayer.selectAll("g.label").filter(d =>
+    labelParentOf(d) === String(p) && labelLevelOf(d) === level);
+}
+
+function branchConnectorSel(p, level) {
+  if (!hasDualLabels()) return null;
+  return svg.selectAll("path.connector").filter(d =>
+    labelParentOf(d) === String(p) && labelLevelOf(d) === level);
+}
+
+function nodeLayoutLocked(node) {
+  return !!d3.active(node);
+}
+
+// Claim ownership of a branch: bump the version, stop every running
+// animation on it, set the new logical state. Returns the claim token.
+function claimBranch(p, st) {
+  const v = nextBranchVersion(p);
+  interruptBranch(p);
+  branchState.set(String(p), st);
+  syncExpandedFromBranches();
+  return v;
+}
+
+let regions = [];
+let grouped = null;
+let mountedRegions = [];
+let groupedMounted = null;
+let regionOffsets = new Map();
+
+// Mounted key: in dual-DOM mode every child mounts at its child key and
+// every shell at its parent key, regardless of expansion state.
+function featureMountKey(f) {
+  if (!dualDom) return featureActiveKey(f);
+  return featureIsShell(f) ? featureParentKey(f) : featureChildKey(f);
+}
+
+function mountGroupFeatures(key) {
+  const g = (dualDom ? groupedMounted : grouped) || grouped;
+  return (g && g.get(String(key))) || [];
+}
+
+// Whether a mounted group should be visible right now (dual-DOM only).
+function regionVisibleNow(key) {
+  if (!dualDom) return true;
+  const k = String(key);
+  if (shellParents.has(k)) return !branchExpandedLike(k);
+  const p = childParentIndex.get(k);
+  return p ? branchExpandedLike(p) : true;
+}
+
+function rebuildGrouping(preserveOffsets) {
+  const old = regionOffsets;
+  // `regions`/`grouped` keep their historical meaning: the ACTIVE view
+  // (what csv export, broadcasts, legend, and labels should see).
+  grouped = d3.group(geojson.features.filter(featureVisible), featureActiveKey);
+  regions = Array.from(grouped.keys()).sort(naturalCompare);
+  if (dualDom) {
+    groupedMounted = d3.group(geojson.features, featureMountKey);
+    mountedRegions = Array.from(groupedMounted.keys()).sort(naturalCompare);
+  } else {
+    groupedMounted = grouped;
+    mountedRegions = regions;
+  }
+  const offsetKeys = dualDom ? mountedRegions : regions;
+  regionOffsets = new Map(offsetKeys.map(d => [
+    d,
+    (preserveOffsets && old && old.get(d))
+      ? old.get(d)
+      : {dx_m: 0, dy_m: 0}
+  ]));
+}
+// Initialise branch states (before the first grouping build so the active
+// view matches any pre-expanded branches from the host).
+if (dualDom) {
+  for (const p of shellParents) {
+    branchState.set(String(p), expandedParents.has(String(p)) ? "expanded" : "collapsed");
+  }
+  syncExpandedFromBranches();
+}
+rebuildGrouping(false);
 for (const row of initialRegionOffsets || []) {
   const region = String(row.region);
   if (regionOffsets.has(region)) {
@@ -201,7 +433,6 @@ for (const row of initialLabelOffsets || []) {
     labelOffsets.set(labelId, cleanOffset(row));
   }
 }
-const grouped = d3.group(geojson.features, d => String(d.properties.drag_region));
 const bounds = coordBounds(geojson);
 let projection, path, metricScale, originLayer, movementConnectorLayer, movementBandLayer, trailLayer, root, labelLayer;
 let mapGroup = null;
@@ -213,7 +444,33 @@ let badgeTimer = null;
 let trailSnapshots = [];
 let trailLastScreenX = 0;
 let trailLastScreenY = 0;
+let elasticLayer = null;
+let elasticBoundaryData = null;
+let elasticPlayed = false;
+let dragMovedPx = 0;
+let bloomAnimUntil = 0;
+let deferredRenderTimer = null;
+let preserveViewOnce = false;
+let bloomApplyToken = 0;
+
+// Below this distance a frame/region gesture counts as a click, not a drag.
+function clickThresholdPx() {
+  const t = elastic ? Number(elastic.boundaryDragThreshold) : NaN;
+  return Number.isFinite(t) && t > 0 ? t : 6;
+}
 const allowedParentOrigin = parentOrigin();
+
+// Re-render, but never in the middle of a bloom animation (a full render
+// resets region transforms and would cut the animation short).
+function renderSoon() {
+  const wait = Math.max(0, bloomAnimUntil - Date.now()) + 80;
+  if (deferredRenderTimer) window.clearTimeout(deferredRenderTimer);
+  deferredRenderTimer = window.setTimeout(function() {
+    deferredRenderTimer = null;
+    preserveViewOnce = true;
+    render();
+  }, wait);
+}
 
 function parentOrigin() {
   if (!document.referrer) return "*";
@@ -385,10 +642,77 @@ function visibleLegendRegions() {
   return selectedValues(options.legendValues, regions);
 }
 
-function visibleLabelRows() {
+// ---- Branch-aware labels (dual-DOM Phase 2) ---------------------------------
+// When the host ships labels for BOTH levels (rows tagged with label_level
+// and label_parent), all of them stay mounted and visibility/animation is an
+// output of branch state - same model as the polygons.
+function labelLevelOf(d) {
+  return String(d.label_level || "");
+}
+function labelParentOf(d) {
+  return String(d.label_parent != null ? d.label_parent : d.region);
+}
+function hasDualLabels() {
+  return dualDom && labelRows.length > 0 &&
+    labelRows.some(d => d.label_level != null);
+}
+function labelStateVisible(d) {
+  if (!hasDualLabels()) return true;
+  const lvl = labelLevelOf(d);
+  if (lvl === "parent") return !branchExpandedLike(labelParentOf(d));
+  if (lvl === "child") return branchExpandedLike(labelParentOf(d));
+  return true;
+}
+function labelSelectionSet() {
   const ids = labelRows.map(label => String(label.label_id));
-  const selected = new Set(selectedValues(options.labelValues, ids));
-  return labelRows.filter(label => selected.has(String(label.label_id)));
+  return new Set(selectedValues(options.labelValues, ids));
+}
+
+function visibleLabelRows() {
+  const selected = labelSelectionSet();
+  let rows = labelRows.filter(label => selected.has(String(label.label_id)));
+  if (hasDualLabels()) {
+    rows = rows.filter(labelStateVisible);
+  } else if (elastic && grouped) {
+    // Legacy armed path: hide labels whose region is not currently
+    // rendered (child labels right after a collapse, before the host
+    // pushes the refreshed label table).
+    rows = rows.filter(label => grouped.has(String(label.region)));
+  }
+  return rows;
+}
+
+// Rows mounted in the DOM: with dual labels everything mounts and
+// visibility is animated; otherwise only the visible rows are joined.
+function mountedLabelRows() {
+  if (!options.labels) return [];
+  return hasDualLabels() ? labelRows : visibleLabelRows();
+}
+
+function labelVisibleNow(d, selected) {
+  const sel = selected || labelSelectionSet();
+  return options.labels && labelStateVisible(d) &&
+    sel.has(String(d.label_id));
+}
+
+// Hard-set label and connector visibility from state (skips nodes that a
+// branch animation currently owns).
+function syncLabelVisibility() {
+  if (!hasDualLabels()) return;
+  const selected = labelSelectionSet();
+  if (labelLayer) {
+    labelLayer.selectAll("g.label").each(function(d) {
+      if (nodeLayoutLocked(this)) return;
+      const vis = labelVisibleNow(d, selected);
+      d3.select(this)
+        .attr("opacity", vis ? 1 : 0)
+        .attr("pointer-events", vis ? "all" : "none");
+    });
+  }
+  svg.selectAll("path.connector").each(function(d) {
+    if (nodeLayoutLocked(this)) return;
+    d3.select(this).attr("opacity", labelVisibleNow(d, selected) && truthy(d.connector) ? 1 : 0);
+  });
 }
 
 function syncLegend() {
@@ -625,9 +949,670 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+// ---- Local elastic hierarchy transition -------------------------------------
+// Children bloom from their parent's centre; each expanded group gets a
+// dotted local-return boundary that moves with the group and compresses the
+// branch when clicked. All keys are the generic drag_region values, so this
+// is independent of source-file column names.
+
+function elasticShortLabel(value) {
+  let text = String(value);
+  const eq = text.lastIndexOf("=");
+  if (eq >= 0) text = text.slice(eq + 1);
+  return text.length > 28 ? text.slice(0, 27) + "…" : text;
+}
+
+function regionBoundsM(region) {
+  const feats = grouped.get(String(region)) || [];
+  let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
+  for (const f of feats) {
+    walkCoords(f.geometry.coordinates, ([x, y]) => {
+      if (x < xmin) xmin = x;
+      if (x > xmax) xmax = x;
+      if (y < ymin) ymin = y;
+      if (y > ymax) ymax = y;
+    });
+  }
+  if (!Number.isFinite(xmin)) return null;
+  return {xmin, ymin, xmax, ymax};
+}
+
+// Boundary groups: derived live from the expanded parents when bloom data is
+// embedded, otherwise taken from a static `groups` payload (standalone API).
+function elasticGroupMap() {
+  if (!elastic) return {};
+  if (dualDom) {
+    // Dual-DOM: boundary geometry exists for every parent; visibility is
+    // an output of branch state.
+    const flat = {};
+    for (const [pk, kids] of parentChildIndex) flat[pk] = Array.from(kids);
+    return flat;
+  }
+  if (expandedParents.size > 0) {
+    const out = {};
+    for (const f of geojson.features) {
+      if (featureIsShell(f)) continue;
+      const pk = featureParentKey(f);
+      if (!expandedParents.has(pk)) continue;
+      const ck = featureActiveKey(f);
+      if (!out[pk]) out[pk] = new Set();
+      out[pk].add(ck);
+    }
+    const flat = {};
+    Object.keys(out).forEach(function(id) { flat[id] = Array.from(out[id]); });
+    return flat;
+  }
+  return elastic.groups || {};
+}
+
+function buildElasticBoundaryData() {
+  if (!elastic) return [];
+  if (!dualDom && !bloomBoundaryOn) return [];
+  const groupsMap = elasticGroupMap();
+  const padM = 0.025 * Math.hypot(bounds.xmax - bounds.xmin, bounds.ymax - bounds.ymin);
+  return Object.keys(groupsMap).map(function(id) {
+    let rs = groupsMap[id];
+    if (!Array.isArray(rs)) rs = [rs];
+    const cache = {};
+    const members = [];
+    rs.map(String).forEach(function(r) {
+      const b = regionBoundsM(r);
+      if (b) {
+        cache[r] = b;
+        members.push(r);
+      }
+    });
+    return {id: id, regions: members, cache: cache, padM: padM};
+  }).filter(g => g.regions.length > 0);
+}
+
+function syncElasticBoundaries() {
+  if (!elasticLayer || !elasticBoundaryData) return;
+  elasticLayer.selectAll("g.elastic-return").each(function(g) {
+    let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
+    for (const r of g.regions) {
+      const b = g.cache[r];
+      const o = regionOffsets.get(r) || {dx_m: 0, dy_m: 0};
+      xmin = Math.min(xmin, b.xmin + o.dx_m);
+      xmax = Math.max(xmax, b.xmax + o.dx_m);
+      ymin = Math.min(ymin, b.ymin + o.dy_m);
+      ymax = Math.max(ymax, b.ymax + o.dy_m);
+    }
+    const p0 = projection([xmin - g.padM, ymax + g.padM]);
+    const p1 = projection([xmax + g.padM, ymin - g.padM]);
+    const sel = d3.select(this);
+    sel.select("rect.frame")
+      .attr("x", p0[0])
+      .attr("y", p0[1])
+      .attr("width", Math.max(1, p1[0] - p0[0]))
+      .attr("height", Math.max(1, p1[1] - p0[1]));
+    sel.select("text")
+      .attr("x", p0[0] + 12)
+      .attr("y", p0[1] - 2);
+  });
+}
+
+function collapseBranch(groupId) {
+  if (window.parent !== window) {
+    // Embedded (Spatial Studio): snapshot the child rows BEFORE the
+    // optimistic fold flips the active view (the server needs them to
+    // place the collapsed parent at the children's mean position), start
+    // the animation immediately, then notify the host. Its echo reconciles
+    // under the version guard.
+    const rows = regionOffsetRows();
+    if (dualDom && branchExpandedLike(groupId)) {
+      unbloomBranch(String(groupId));
+    }
+    window.parent.postMessage(
+      {type: "dragmapr-collapse-branch", parent: String(groupId),
+       regionOffsets: rows},
+      messageTargetOrigin()
+    );
+    return;
+  }
+  // Standalone helper: compress the branch back to its starting offsets.
+  const group = (elasticBoundaryData || []).find(g => g.id === groupId);
+  if (!group) return;
+  const init = new Map((initialRegionOffsets || []).map(r => [String(r.region), cleanOffset(r)]));
+  for (const r of group.regions) {
+    regionOffsets.set(r, init.get(r) || {dx_m: 0, dy_m: 0});
+  }
+  updateLayout();
+  schedulePostState();
+}
+
+function animateBloom(anchorMap, fadeBoundaries) {
+  if (!root || anchorMap.size === 0) return;
+  const dur = (elastic && Number(elastic.durationMs) > 0) ? Number(elastic.durationMs) : 550;
+  const ovs = (elastic && Number.isFinite(Number(elastic.overshoot)))
+    ? Number(elastic.overshoot)
+    : 1.70158;
+  const ease = d3.easeBackOut.overshoot(ovs);
+  bloomAnimUntil = Date.now() + dur + 480 + 200;
+  let idx = 0;
+  root.selectAll("g.region").each(function(region) {
+    const a = anchorMap.get(String(region));
+    if (!a) return;
+    const o = regionOffsets.get(String(region)) || {dx_m: 0, dy_m: 0};
+    const ax = Number(a.ax_m) || 0;
+    const ay = Number(a.ay_m) || 0;
+    d3.select(this)
+      .interrupt()
+      .attr("transform",
+            `translate(${(o.dx_m + ax) * metricScale},${-(o.dy_m + ay) * metricScale})`)
+      .attr("opacity", 0.25)
+      .transition()
+      .delay(Math.min(idx++ * 24, 480))
+      .duration(dur)
+      .ease(ease)
+      .attr("transform", offsetTransform(String(region)))
+      .attr("opacity", 1);
+  });
+  if (fadeBoundaries && elasticLayer) {
+    elasticLayer.selectAll("g.elastic-return")
+      .attr("opacity", 0)
+      .transition()
+      .delay(dur * 0.6)
+      .duration(dur * 0.4)
+      .attr("opacity", 1);
+  }
+}
+
+function playElasticTransition() {
+  if (!elastic || elasticPlayed || !root) return;
+  elasticPlayed = true;
+  const anchors = new Map(
+    asArray(elastic.anchors).map(r => [String(r.region), r])
+  );
+  animateBloom(anchors, true);
+}
+
+// Mean of feature bounding-box centres, in map units.
+function meterCentroid(features) {
+  let sx = 0, sy = 0, n = 0;
+  for (const f of features) {
+    let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
+    walkCoords(f.geometry.coordinates, ([x, y]) => {
+      if (x < xmin) xmin = x;
+      if (x > xmax) xmax = x;
+      if (y < ymin) ymin = y;
+      if (y > ymax) ymax = y;
+    });
+    if (Number.isFinite(xmin)) {
+      sx += (xmin + xmax) / 2;
+      sy += (ymin + ymax) / 2;
+      n += 1;
+    }
+  }
+  return n > 0 ? [sx / n, sy / n] : null;
+}
+
+// Bloom the children of the given (already expanded) parents out of each
+// parent's centroid. Anchors are computed client-side from geometry.
+function playBloomFor(parents) {
+  if (!root || !parents || parents.length === 0) return;
+  const anchorMap = new Map();
+  for (const p of parents.map(String)) {
+    if (!expandedParents.has(p)) continue;
+    const feats = geojson.features.filter(
+      f => featureParentKey(f) === p && !featureIsShell(f)
+    );
+    const pc = meterCentroid(feats);
+    if (!pc) continue;
+    const byChild = d3.group(feats, featureActiveKey);
+    for (const [k, fs] of byChild) {
+      const cc = meterCentroid(fs);
+      if (cc) {
+        anchorMap.set(String(k), {ax_m: pc[0] - cc[0], ay_m: pc[1] - cc[1]});
+      }
+    }
+  }
+  animateBloom(anchorMap, false);
+}
+
+// Fold the children of the given (still expanded) parents back into each
+// parent's centroid: the reverse of the bloom. Returns the wait in ms
+// before the regroup may run (0 when nothing animates).
+function playFoldFor(parents) {
+  if (!root || !parents || parents.length === 0) return 0;
+  const dur = (elastic && Number(elastic.durationMs) > 0) ? Number(elastic.durationMs) : 550;
+  const ovs = (elastic && Number.isFinite(Number(elastic.overshoot)))
+    ? Number(elastic.overshoot)
+    : 1.70158;
+  const foldDur = Math.round(dur * 0.8);
+  const ease = d3.easeBackIn.overshoot(Math.min(ovs, 1.2));
+  const anchorMap = new Map();
+  const childKeys = new Set();
+  for (const p of parents.map(String)) {
+    if (!expandedParents.has(p)) continue;
+    const feats = geojson.features.filter(
+      f => featureParentKey(f) === p && !featureIsShell(f)
+    );
+    const pc = meterCentroid(feats);
+    if (!pc) continue;
+    const byChild = d3.group(feats, featureActiveKey);
+    for (const [k, fs] of byChild) {
+      const cc = meterCentroid(fs);
+      if (cc) {
+        anchorMap.set(String(k), {ax_m: pc[0] - cc[0], ay_m: pc[1] - cc[1]});
+        childKeys.add(String(k));
+      }
+    }
+  }
+  if (anchorMap.size === 0) return 0;
+  bloomAnimUntil = Date.now() + foldDur + 240;
+  root.selectAll("g.region").each(function(region) {
+    const a = anchorMap.get(String(region));
+    if (!a) return;
+    const o = regionOffsets.get(String(region)) || {dx_m: 0, dy_m: 0};
+    const ax = Number(a.ax_m) || 0;
+    const ay = Number(a.ay_m) || 0;
+    d3.select(this)
+      .interrupt()
+      .transition()
+      .duration(foldDur)
+      .ease(ease)
+      .attr("transform",
+            `translate(${(o.dx_m + ax) * metricScale},${-(o.dy_m + ay) * metricScale})`)
+      .attr("opacity", 0.2);
+  });
+  if (elasticLayer) {
+    const removedSet = new Set(parents.map(String));
+    elasticLayer.selectAll("g.elastic-return")
+      .filter(g => removedSet.has(String(g.id)))
+      .interrupt()
+      .transition()
+      .duration(Math.round(foldDur * 0.5))
+      .attr("opacity", 0);
+  }
+  if (labelLayer) {
+    labelLayer.selectAll("g.label")
+      .filter(d => childKeys.has(String(d.region)))
+      .interrupt()
+      .transition()
+      .duration(Math.round(foldDur * 0.45))
+      .attr("opacity", 0);
+  }
+  return foldDur;
+}
+
+// ---- Dual-DOM branch animations ----------------------------------------
+// Visuals are outputs of branch state. Animations claim a version first;
+// superseded callbacks die quietly without committing state.
+
+// Geometry-only anchor deltas (parent centroid minus child centroid) for
+// one branch, in map units.
+// Optimistic expand: hand the parent's current offset to its children
+// locally, exactly as the server will. The later echo carries identical
+// authoritative values, so the running animation's targets stay valid.
+function optimisticInheritOffsets(p) {
+  const po = regionOffsets.get(String(p)) || {dx_m: 0, dy_m: 0};
+  const kids = parentChildIndex.get(String(p)) || new Set();
+  for (const k of kids) {
+    regionOffsets.set(String(k), {dx_m: po.dx_m, dy_m: po.dy_m});
+  }
+}
+
+function branchAnchorMap(p) {
+  const feats = geojson.features.filter(
+    f => featureParentKey(f) === String(p) && !featureIsShell(f)
+  );
+  const pc = meterCentroid(feats);
+  if (!pc) return new Map();
+  const map = new Map();
+  const byChild = d3.group(feats, featureChildKey);
+  for (const [k, fs] of byChild) {
+    const cc = meterCentroid(fs);
+    if (cc) map.set(String(k), {ax: pc[0] - cc[0], ay: pc[1] - cc[1]});
+  }
+  return map;
+}
+
+// Instantly set every attribute of a branch from its logical state.
+function applyBranchVisual(p) {
+  const n = branchNodes(p);
+  const exp = branchExpandedLike(p);
+  if (n.shell) n.shell
+    .attr("opacity", exp ? 0 : 1)
+    .attr("pointer-events", exp ? "none" : "all")
+    .attr("transform", offsetTransform(String(p)));
+  if (n.children) n.children.each(function(d) {
+    d3.select(this)
+      .attr("opacity", exp ? 1 : 0)
+      .attr("pointer-events", exp ? "all" : "none")
+      .attr("transform", offsetTransform(String(d)));
+  });
+  if (n.boundary) n.boundary
+    .attr("opacity", exp && bloomBoundaryOn ? 1 : 0)
+    .attr("pointer-events", exp && bloomBoundaryOn ? "all" : "none");
+  syncElasticBoundaries();
+  syncLabelVisibility();
+}
+
+function elasticDuration() {
+  return (elastic && Number(elastic.durationMs) > 0) ? Number(elastic.durationMs) : 550;
+}
+
+function elasticOvershoot() {
+  return (elastic && Number.isFinite(Number(elastic.overshoot)))
+    ? Number(elastic.overshoot)
+    : 1.70158;
+}
+
+function bloomBranch(p) {
+  const v = claimBranch(p, "blooming");
+  rebuildGrouping(true);
+  const anchors = branchAnchorMap(p);
+  const n = branchNodes(p);
+  const dur = elasticDuration();
+  bloomAnimUntil = Date.now() + dur + 240;
+  if (n.shell) n.shell
+    .attr("pointer-events", "none")
+    .transition()
+    .duration(dur)
+    .ease(d3.easeCubicInOut)
+    .attr("opacity", 0);
+  if (n.children) n.children.each(function(d) {
+    const a = anchors.get(String(d)) || {ax: 0, ay: 0};
+    const o = regionOffsets.get(String(d)) || {dx_m: 0, dy_m: 0};
+    d3.select(this)
+      .attr("transform",
+            `translate(${(o.dx_m + a.ax) * metricScale},${-(o.dy_m + a.ay) * metricScale})`)
+      .attr("opacity", 0.25)
+      .attr("pointer-events", "all")
+      .transition()
+      .duration(dur)
+      .ease(d3.easeBackOut.overshoot(elasticOvershoot()))
+      .attr("transform", offsetTransform(String(d)))
+      .attr("opacity", 1)
+      .on("end", function() {
+        if (!isCurrentBranchVersion(p, v)) return;
+        if (branchState.get(String(p)) === "blooming") {
+          branchState.set(String(p), "expanded");
+          syncExpandedFromBranches();
+          applyBranchVisual(p);
+        }
+      });
+  });
+  if (n.boundary) n.boundary
+    .attr("pointer-events", bloomBoundaryOn ? "all" : "none")
+    .attr("opacity", 0)
+    .transition()
+    .duration(dur)
+    .ease(d3.easeCubicInOut)
+    .attr("opacity", bloomBoundaryOn ? 1 : 0);
+  // Labels travel with the leaves: parent label gives way, child labels
+  // unfold from the parent centre alongside their polygons.
+  if (hasDualLabels()) {
+    const sel = labelSelectionSet();
+    const pl = branchLabelSel(p, "parent");
+    if (pl) pl
+      .attr("pointer-events", "none")
+      .transition()
+      .duration(dur)
+      .ease(d3.easeCubicInOut)
+      .attr("opacity", 0);
+    const pc = branchConnectorSel(p, "parent");
+    if (pc) pc
+      .transition()
+      .duration(dur)
+      .ease(d3.easeCubicInOut)
+      .attr("opacity", 0);
+    const cl = branchLabelSel(p, "child");
+    if (cl) cl.each(function(d) {
+      const a = anchors.get(String(d.region)) || {ax: 0, ay: 0};
+      const pos = labelPosition(d);
+      const show = labelVisibleNow(d, sel);
+      d3.select(this)
+        .attr("transform",
+              `translate(${pos[0] + a.ax * metricScale},${pos[1] - a.ay * metricScale})`)
+        .attr("opacity", 0)
+        .attr("pointer-events", "none")
+        .transition()
+        .duration(dur)
+        .ease(d3.easeBackOut.overshoot(Math.min(elasticOvershoot(), 1.2)))
+        .attr("transform", labelTransform(d))
+        .attr("opacity", show ? 1 : 0)
+        .on("end", function() {
+          if (!isCurrentBranchVersion(p, v)) return;
+          d3.select(this).attr("pointer-events", show ? "all" : "none");
+        });
+    });
+    const cc = branchConnectorSel(p, "child");
+    if (cc) cc.each(function(d) {
+      const show = labelVisibleNow(d, sel) && truthy(d.connector);
+      d3.select(this)
+        .attr("d", connectorPath)
+        .attr("opacity", 0)
+        .transition()
+        .duration(dur)
+        .ease(d3.easeCubicInOut)
+        .attr("opacity", show ? 1 : 0);
+    });
+  }
+  updateCsv();
+}
+
+function unbloomBranch(p) {
+  const v = claimBranch(p, "unblooming");
+  rebuildGrouping(true);  // active view flips to the parent immediately
+  const anchors = branchAnchorMap(p);
+  const n = branchNodes(p);
+  const foldDur = elasticDuration();
+  bloomAnimUntil = Date.now() + foldDur + 240;
+  const foldEase = d3.easeCubicInOut;
+  if (n.children) n.children.each(function(d) {
+    const a = anchors.get(String(d)) || {ax: 0, ay: 0};
+    const o = regionOffsets.get(String(d)) || {dx_m: 0, dy_m: 0};
+    d3.select(this)
+      .attr("pointer-events", "none")
+      .transition()
+      .duration(foldDur)
+      .ease(foldEase)
+      .attr("transform",
+            `translate(${(o.dx_m + a.ax) * metricScale},${-(o.dy_m + a.ay) * metricScale})`)
+      .attr("opacity", 0.04)
+      .on("end", function() {
+        if (!isCurrentBranchVersion(p, v)) return;
+        if (branchState.get(String(p)) === "unblooming") {
+          branchState.set(String(p), "collapsed");
+          syncExpandedFromBranches();
+          applyBranchVisual(p);
+        }
+      });
+  });
+  if (n.shell) n.shell
+    .attr("opacity", 0)
+    .attr("pointer-events", "none")
+    .transition()
+    .duration(foldDur)
+    .ease(foldEase)
+    .attr("opacity", 1)
+    .on("end", function() {
+      if (!isCurrentBranchVersion(p, v)) return;
+      d3.select(this).attr("pointer-events", "all");
+    });
+  if (n.boundary) n.boundary
+    .attr("pointer-events", "none")
+    .transition()
+    .duration(foldDur)
+    .ease(foldEase)
+    .attr("opacity", 0);
+  // Child labels fold home with their leaves (held bright until late),
+  // then the parent label returns.
+  if (hasDualLabels()) {
+    const sel = labelSelectionSet();
+    const cl = branchLabelSel(p, "child");
+    if (cl) cl.each(function(d) {
+      const a = anchors.get(String(d.region)) || {ax: 0, ay: 0};
+      const pos = labelPosition(d);
+      d3.select(this)
+        .attr("pointer-events", "none")
+        .transition()
+        .duration(foldDur)
+        .ease(foldEase)
+        .attr("transform",
+              `translate(${pos[0] + a.ax * metricScale},${pos[1] - a.ay * metricScale})`)
+        .attr("opacity", 0);
+    });
+    const cc = branchConnectorSel(p, "child");
+    if (cc) cc
+      .transition()
+      .duration(foldDur)
+      .ease(foldEase)
+      .attr("opacity", 0);
+    const pl = branchLabelSel(p, "parent");
+    if (pl) pl.each(function(d) {
+      const show = labelVisibleNow(d, sel);
+      d3.select(this)
+        .attr("opacity", 0)
+        .attr("pointer-events", "none")
+        .transition()
+        .duration(foldDur)
+        .ease(foldEase)
+        .attr("opacity", show ? 1 : 0)
+        .on("end", function() {
+          if (!isCurrentBranchVersion(p, v)) return;
+          d3.select(this).attr("pointer-events", show ? "all" : "none");
+        });
+    });
+    const pc = branchConnectorSel(p, "parent");
+    if (pc) pc.each(function(d) {
+      const show = labelVisibleNow(d, sel) && truthy(d.connector);
+      d3.select(this)
+        .attr("d", connectorPath)
+        .attr("opacity", 0)
+        .transition()
+        .duration(foldDur)
+        .ease(foldEase)
+        .attr("opacity", show ? 1 : 0);
+    });
+  }
+  updateCsv();
+}
+
+// Apply a bloom state pushed by the host page: regroup features in place
+// (no iframe rebuild), take the host's authoritative offsets, re-render,
+// then animate the newly expanded parents. Collapsing parents play the same
+// leaf motion in reverse, returning children to the parent centroid.
+function applyBloom(message) {
+  if (dualDom) {
+    // Dual-DOM path: no re-render at all. Offsets first (animations read
+    // them when computing targets), then per-branch state transitions.
+    if (message && message.boundary != null) {
+      bloomBoundaryOn = message.boundary !== false;
+    }
+    if (message && message.regionOffsets != null) {
+      for (const row of asArray(message.regionOffsets)) {
+        const region = String(row.region);
+        if (regionOffsets.has(region)) {
+          regionOffsets.set(region, cleanOffset(row));
+        }
+      }
+    }
+    const target = new Set(asArray(message && message.expanded).map(String));
+    for (const p of shellParents) {
+      const want = target.has(String(p));
+      const st = branchState.get(String(p));
+      if (st === "blooming" || st === "unblooming") {
+        // In flight (usually an optimistic start we triggered ourselves).
+        // If the server agrees with the direction, let the animation finish
+        // and commit through its own version-guarded end callback. Only a
+        // disagreement claims a new version and reverses.
+        const headingExpanded = (st === "blooming");
+        if (want !== headingExpanded) {
+          if (want) {
+            optimisticInheritOffsets(p);
+            bloomBranch(p);
+          } else {
+            unbloomBranch(p);
+          }
+        }
+      } else if (want && st !== "expanded") {
+        bloomBranch(p);
+      } else if (!want && st !== "collapsed") {
+        unbloomBranch(p);
+      } else {
+        applyBranchVisual(p);
+      }
+    }
+    syncElasticBoundaries();
+    syncLabelVisibility();
+    schedulePostState();
+    return;
+  }
+  legacyApplyBloom(message);
+}
+
+function legacyApplyBloom(message) {
+  const token = ++bloomApplyToken;
+  const target = new Set(asArray(message && message.expanded).map(String));
+  const removed = [...expandedParents].filter(p => !target.has(p));
+
+  const finish = function() {
+    if (token !== bloomApplyToken) return;  // superseded by a newer state
+    expandedParents = target;
+    if (message && message.boundary != null) {
+      bloomBoundaryOn = message.boundary !== false;
+    }
+    rebuildGrouping(true);
+    if (message && message.regionOffsets != null) {
+      for (const r of regions) regionOffsets.set(r, {dx_m: 0, dy_m: 0});
+      for (const row of asArray(message.regionOffsets)) {
+        const region = String(row.region);
+        if (regionOffsets.has(region)) {
+          regionOffsets.set(region, cleanOffset(row));
+        }
+      }
+    }
+    elasticPlayed = true;  // boundaries render at full opacity
+    trailSnapshots = [];
+    preserveViewOnce = true;
+    render();
+    playBloomFor(asArray(message && message.animate));
+    schedulePostState();
+  };
+
+  const wait = removed.length > 0 ? playFoldFor(removed) : 0;
+  if (wait > 0) {
+    window.setTimeout(finish, wait + 40);
+  } else {
+    finish();
+  }
+}
+
+// Snapshot of non-zero offsets for the ACTIVE view, sent with click/collapse
+// messages so the host never acts on stale (polling-lagged) state. Mounted
+// but inactive groups (children of collapsed branches) are excluded.
+function regionOffsetRows() {
+  const rows = [];
+  for (const r of regions) {
+    const o = regionOffsets.get(String(r));
+    if (o && (o.dx_m !== 0 || o.dy_m !== 0)) {
+      rows.push({region: String(r), dx_m: o.dx_m, dy_m: o.dy_m});
+    }
+  }
+  return rows;
+}
+
 function render() {
+  // Bloom-driven re-renders keep the user's scroll position; a full render
+  // recentring the canvas mid-interaction reads as regions "disappearing".
+  const scrollWrapper = document.getElementById("map-scroll-area");
+  const savedScroll = (preserveViewOnce && scrollWrapper)
+    ? {left: scrollWrapper.scrollLeft, top: scrollWrapper.scrollTop}
+    : null;
+  preserveViewOnce = false;
   panTranslate = {x: 0, y: 0};
   fit();
+  if (savedScroll) {
+    window.requestAnimationFrame(function() {
+      window.requestAnimationFrame(function() {
+        scrollWrapper.scrollLeft = savedScroll.left;
+        scrollWrapper.scrollTop = savedScroll.top;
+      });
+    });
+  }
   svg.selectAll("*").remove();
   const defs = svg.append("defs");
   defs.append("marker")
@@ -694,35 +1679,50 @@ function render() {
   // Layer 4: moved regions
   root = mapGroup.append("g");
   const groups = root.selectAll("g.region")
-    .data(regions)
+    .data(dualDom ? mountedRegions : regions)
     .join("g")
     .attr("class", "region")
-    .attr("transform", offsetTransform);
+    .attr("transform", offsetTransform)
+    .attr("opacity", d => dualDom ? (regionVisibleNow(d) ? 1 : 0) : null)
+    .attr("pointer-events", d => dualDom ? (regionVisibleNow(d) ? "all" : "none") : null);
 
   const regionPaths = groups.selectAll("path")
-    .data(d => grouped.get(d) || [])
+    .data(d => mountGroupFeatures(d))
     .join("path")
     .attr("fill", d => color(String(d.properties.drag_region)))
     .attr("d", path);
   regionPaths.append("title")
     .text(d => String(d.properties.drag_region));
 
+  const dualLabelsNow = hasDualLabels();
+  const labelSelectedInit = dualLabelsNow ? labelSelectionSet() : null;
+  const labelVisibleInit = function(d) {
+    return options.labels && labelStateVisible(d) &&
+      labelSelectedInit.has(String(d.label_id));
+  };
   const connectorLayer = mapGroup.append("g");
   connectorLayer.selectAll("path.connector")
-    .data(options.labels ? visibleLabelRows().filter(d => truthy(d.connector)) : [])
+    .data(options.labels
+      ? mountedLabelRows().filter(d => truthy(d.connector))
+      : [])
     .join("path")
     .attr("class", d => `connector ${connectorType(d)} ${connectorLineType()}`)
     .style("stroke", options.connectorColor || "#334155")
     .style("stroke-width", d => `${positiveNumber(d.connector_linewidth, options.connectorLinewidth || 1.3)}px`)
     .attr("marker-end", () => connectorEndpoint() === "arrow" ? "url(#connector-arrow)" : null)
+    .attr("opacity", d => dualLabelsNow ? (labelVisibleInit(d) ? 1 : 0) : null)
     .attr("d", connectorPath);
 
   labelLayer = mapGroup.append("g");
   const labelGroups = labelLayer.selectAll("g.label")
-    .data(options.labels ? visibleLabelRows() : [])
+    .data(mountedLabelRows())
     .join("g")
     .attr("class", d => `label ${labelType(d)}`)
-    .attr("transform", labelTransform);
+    .attr("transform", labelTransform)
+    .attr("opacity", d => dualLabelsNow ? (labelVisibleInit(d) ? 1 : 0) : null)
+    .attr("pointer-events", d => dualLabelsNow
+      ? (labelVisibleInit(d) ? "all" : "none")
+      : null);
   labelGroups.each(function(d) {
     const group = d3.select(this);
     if (labelType(d) === "box") {
@@ -773,11 +1773,77 @@ function render() {
   });
   // SVG layer order (bottom → top):
   //   originLayer → movementConnectorLayer → trailLayer → root/regions
-  //   → connectorLayer (label connectors) → labelLayer
+  //   → connectorLayer (label connectors) → labelLayer → elasticLayer
+  elasticLayer = null;
+  if (elastic && bloomBoundaryOn) {
+    elasticBoundaryData = buildElasticBoundaryData();
+    if (elasticBoundaryData.length > 0) {
+      elasticLayer = mapGroup.append("g").attr("class", "elastic-layer");
+      const returnGroups = elasticLayer.selectAll("g.elastic-return")
+        .data(elasticBoundaryData)
+        .join("g")
+        .attr("class", "elastic-return")
+        .attr("opacity", g => dualDom
+          ? (branchExpandedLike(g.id) && bloomBoundaryOn ? 1 : 0)
+          : (elasticPlayed ? 1 : 0))
+        .attr("pointer-events", g => dualDom &&
+          !(branchExpandedLike(g.id) && bloomBoundaryOn) ? "none" : null);
+      returnGroups.append("rect").attr("class", "frame").attr("rx", 14);
+      const frameLabelPrefix = (elastic && elastic.boundaryLabel)
+        ? String(elastic.boundaryLabel)
+        : "Reset to";
+      returnGroups.append("text")
+        .text(g => "↩ " + frameLabelPrefix + " " + elasticShortLabel(g.id));
+      // The dotted frame is the group's drag handle: dragging it moves all
+      // of the group's children (labels and the frame follow). A plain
+      // click (< 3px) compresses the branch back to its parent.
+      returnGroups.call(d3.drag()
+        .on("start", function(event, g) {
+          dragMovedPx = 0;
+          d3.select(this).interrupt();
+          const members = new Set(g.regions);
+          root.selectAll("g.region")
+            .filter(d => members.has(String(d)))
+            .interrupt();
+        })
+        .on("drag", function(event, g) {
+          dragMovedPx += Math.hypot(event.dx, event.dy);
+          for (const r of g.regions) {
+            const o = regionOffsets.get(r);
+            if (!o) continue;
+            o.dx_m += event.dx / metricScale;
+            o.dy_m -= event.dy / metricScale;
+          }
+          scheduleLayoutUpdate();
+        })
+        .on("end", function(event, g) {
+          if (dragMovedPx < clickThresholdPx()) {
+            collapseBranch(g.id);
+            return;
+          }
+          updateLayout();
+          schedulePostState();
+          // Real group drag: report the moved offsets right away so the
+          // host never collapses or re-blooms from stale positions.
+          if (window.parent !== window) {
+            window.parent.postMessage(
+              {type: "dragmapr-boundary-drag", parent: String(g.id),
+               regionOffsets: regionOffsetRows()},
+              messageTargetOrigin()
+            );
+          }
+        }));
+      syncElasticBoundaries();
+    }
+  }
   syncLegend();
+  playElasticTransition();
 
   const regionDrag = d3.drag()
     .on("start", function(event, region) {
+      // Stop a running elastic bloom so the drag owns the transform.
+      d3.select(this).interrupt();
+      dragMovedPx = 0;
       activeDragRegion = String(region);
       setActiveRegion(region, "Dragging");
       trailLastScreenX = event.sourceEvent ? event.sourceEvent.clientX : event.x;
@@ -787,6 +1853,7 @@ function render() {
     })
     .on("drag", function(event, region) {
       const o = regionOffsets.get(region);
+      dragMovedPx += Math.hypot(event.dx, event.dy);
       o.dx_m += event.dx / metricScale;
       o.dy_m -= event.dy / metricScale;
       if (options.showDragTrail === true) {
@@ -807,15 +1874,56 @@ function render() {
       updateTrail();
       updateLayout();
       activeDragRegion = null;
+      if (dragMovedPx < clickThresholdPx()) {
+        // A click, not a drag. Snapshot the active rows first, start the
+        // bloom/unbloom optimistically (the engine has everything cached),
+        // then tell the host; its echo reconciles by direction.
+        const clickRows = regionOffsetRows();
+        if (dualDom) {
+          const k = String(region);
+          if (shellParents.has(k)) {
+            const st = branchState.get(k);
+            if (st === "collapsed" || st === "unblooming") {
+              optimisticInheritOffsets(k);
+              bloomBranch(k);
+            }
+          } else {
+            const parentKey = childParentIndex.get(k);
+            if (parentKey && branchExpandedLike(parentKey)) {
+              unbloomBranch(parentKey);
+            }
+          }
+        }
+        if (window.parent !== window) {
+          window.parent.postMessage(
+            {type: "dragmapr-region-click", region: String(region),
+             regionOffsets: clickRows},
+            messageTargetOrigin()
+          );
+        }
+        clearActiveRegion(400);
+        return;
+      }
       setActiveRegion(region, "Moved");
       clearActiveRegion(1200);
     });
-  const labelDrag = d3.drag().on("drag", function(event, label) {
-    const o = labelOffsets.get(String(label.label_id));
-    o.dx_m += event.dx / metricScale;
-    o.dy_m -= event.dy / metricScale;
-    scheduleLayoutUpdate();
-  }).on("end", updateLayout);
+  const labelDrag = d3.drag()
+    .on("start", function(event, label) {
+      d3.select(this).interrupt();
+      svg.selectAll("path.connector")
+        .filter(d => String(d.label_id) === String(label.label_id))
+        .interrupt();
+    })
+    .on("drag", function(event, label) {
+      const o = labelOffsets.get(String(label.label_id));
+      o.dx_m += event.dx / metricScale;
+      o.dy_m -= event.dy / metricScale;
+      d3.select(this).attr("transform", labelTransform(label));
+      svg.selectAll("path.connector")
+        .filter(d => String(d.label_id) === String(label.label_id))
+        .attr("d", connectorPath);
+    })
+    .on("end", updateLayout);
   groups
     .on("pointerenter", function(event, region) {
       if (activeDragRegion === null) setActiveRegion(region, "Region");
@@ -839,15 +1947,27 @@ function scheduleLayoutUpdate() {
 }
 
 function updateLayout() {
-  svg.selectAll("g.region")
-    .attr("transform", offsetTransform);
+  // Never stomp a transform mid-animation: branch transitions own their
+  // nodes until they finish or are interrupted by a newer claim.
+  svg.selectAll("g.region").each(function(d) {
+    if (!nodeLayoutLocked(this)) {
+      d3.select(this).attr("transform", offsetTransform(String(d)));
+    }
+  });
   syncOriginOutlines();
   syncMovementConnectors();
   syncMovementBand();
-  svg.selectAll("path.connector")
-    .attr("d", connectorPath);
-  svg.selectAll("g.label")
-    .attr("transform", labelTransform);
+  syncElasticBoundaries();
+  svg.selectAll("path.connector").each(function(d) {
+    if (!nodeLayoutLocked(this)) {
+      d3.select(this).attr("d", connectorPath);
+    }
+  });
+  svg.selectAll("g.label").each(function(d) {
+    if (!nodeLayoutLocked(this)) {
+      d3.select(this).attr("transform", labelTransform);
+    }
+  });
   updateCsv();
 }
 
@@ -1089,7 +2209,12 @@ window.addEventListener("message", function(event) {
   }
   if (event.data && event.data.type === "dragmapr-set-label-values") {
     options.labelValues = event.data.values == null ? null : event.data.values;
-    render();
+    if (hasDualLabels()) {
+      // No re-render: visibility is an output of state + selection.
+      syncLabelVisibility();
+    } else {
+      render();
+    }
   }
   if (event.data && event.data.type === "dragmapr-set-side-panel") {
     options.sidePanel = !!event.data.sidePanel;
@@ -1097,13 +2222,28 @@ window.addEventListener("message", function(event) {
     render();
   }
   if (event.data && event.data.type === "dragmapr-set-label-data") {
-    const previous = labelOffsets;
-    labelRows = event.data.labels || [];
-    labelOffsets = new Map(labelRows.map(d => [
-      String(d.label_id),
-      previous.get(String(d.label_id)) || {dx_m: 0, dy_m: 0}
-    ]));
-    render();
+    if (hasDualLabels()) {
+      // The host's table covers the ACTIVE level only. Merge text and
+      // color edits by id; never drop the inactive level's cached rows.
+      const incoming = new Map(
+        (event.data.labels || []).map(l => [String(l.label_id), l])
+      );
+      labelRows.forEach(function(row) {
+        const upd = incoming.get(String(row.label_id));
+        if (!upd) return;
+        if (upd.label != null) row.label = upd.label;
+        if (upd.label_color != null) row.label_color = upd.label_color;
+      });
+      renderSoon();
+    } else {
+      const previous = labelOffsets;
+      labelRows = event.data.labels || [];
+      labelOffsets = new Map(labelRows.map(d => [
+        String(d.label_id),
+        previous.get(String(d.label_id)) || {dx_m: 0, dy_m: 0}
+      ]));
+      renderSoon();
+    }
   }
   if (event.data && event.data.type === "dragmapr-set-label-options") {
     Object.assign(options, event.data.options || {});
@@ -1143,6 +2283,9 @@ window.addEventListener("message", function(event) {
     }
     trailSnapshots = [];
     render();
+  }
+  if (event.data && event.data.type === "dragmapr-set-bloom") {
+    applyBloom(event.data);
   }
   if (event.data && event.data.type === "dragmapr-reset-view") {
     resetPan();

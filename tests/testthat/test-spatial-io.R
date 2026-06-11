@@ -285,7 +285,7 @@ test_that("spatial studio has a fallback for helper readiness", {
   expect_match(studio_code, "event.target.matches('iframe.studio-helper-frame')", fixed = TRUE)
   expect_match(studio_code, "generation !== helperState.activeGeneration", fixed = TRUE)
   expect_match(studio_code, "}, 1500);", fixed = TRUE)
-  expect_match(studio_code, "fullLoadingTimer", fixed = TRUE)
+  expect_match(studio_code, "studioBusy.safetyTimer", fixed = TRUE)
   expect_match(studio_code, "}, 120000);", fixed = TRUE)
   expect_match(studio_code, "session$onFlushed(function()", fixed = TRUE)
   expect_match(
@@ -305,10 +305,10 @@ test_that("spatial studio applies text edits explicitly and locks controls durin
   expect_false(grepl('observeEvent(input$edit_label_text', studio_code, fixed = TRUE))
   expect_match(studio_code, 'actionButton("apply_static_title"', fixed = TRUE)
   expect_match(studio_code, 'observeEvent(input$apply_static_title', fixed = TRUE)
-  expect_match(studio_code, "dragmapr-helper-busy", fixed = TRUE)
+  expect_match(studio_code, "studio-busy-processing", fixed = TRUE)
   expect_match(
     studio_code,
-    "list(state$source_version, projected_sf(), region_col(), label_col())",
+    "list(state$source_version, projected_sf(), region_col(), label_col(),",
     fixed = TRUE
   )
   expect_match(studio_code, "Shiny.addCustomMessageHandler('dragmapr-side-panel'", fixed = TRUE)

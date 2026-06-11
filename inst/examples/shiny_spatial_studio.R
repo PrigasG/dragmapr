@@ -122,6 +122,13 @@ studio_sidebar_panel <- function(title, subtitle = NULL, ..., open = FALSE) {
 # Legend is suppressed automatically in render_dragged_map() above this count.
 LEGEND_THRESHOLD  <- 25L
 
+# Labels are automatically thinned above this count unless the user
+# explicitly chooses labels in the label picker. This keeps the Studio
+# readable when a child grouping has dozens or hundreds of regions.
+LABEL_AUTO_LIMIT <- 25L
+LABEL_AUTO_MIN   <- 1L
+LABEL_AUTO_MAX   <- 250L
+
 default_palette <- c(
   "#4C78A8", "#F58518", "#54A24B", "#B279A2", "#E45756",
   "#72B7B2", "#EECA3B", "#B74F6F", "#8CD17D", "#79706E"
@@ -226,6 +233,13 @@ choose_column <- function(candidate, cols, fallback = NULL) {
 }
 
 default_studio_region_col <- function(x, cols) {
+  # Column-name agnostic default: no spatial file is required to use any
+  # particular naming. Detection works in three relative passes:
+  #   1. exact well-known names,
+  #   2. substring matches ("COUNTY_NAM", "MUN_NAME", "NAMELSAD", ...),
+  #   3. data-driven scoring over cardinality and column type.
+  # One-row-per-region files (cardinality == nrow) are valid grouping columns
+  # and must not be excluded.
   if (length(cols) == 0L) return(NULL)
   lower <- tolower(cols)
   exact_priority <- c("hhs_region", "region", "group", "county", "district", "zone")
@@ -235,20 +249,42 @@ default_studio_region_col <- function(x, cols) {
   }
 
   n <- max(1L, nrow(x))
-  cardinality <- vapply(cols, function(col) {
-    length(unique(stats::na.omit(as.character(x[[col]]))))
+  vals <- lapply(cols, function(col) as.character(x[[col]]))
+  cardinality <- vapply(vals, function(v) {
+    length(unique(stats::na.omit(trimws(v))))
   }, integer(1L))
-  useful <- cardinality > 1L & cardinality <= min(50L, max(2L, floor(n / 2L)))
-  id_like <- grepl("(id|objectid|gnis|ssn|code|census|pop|acre|mile|density|den)$|^(id)$", lower)
-  named <- grepl("region|group|county|district|zone|type|class|category", lower)
-  candidates <- which(useful & !id_like)
-  named_candidates <- candidates[named[candidates]]
-  if (length(named_candidates) > 0L) {
-    return(cols[named_candidates[order(cardinality[named_candidates], decreasing = TRUE)][1]])
+  text_like <- vapply(seq_along(cols), function(i) {
+    is.character(x[[cols[i]]]) || is.factor(x[[cols[i]]])
+  }, logical(1L))
+  id_like <- grepl(
+    "(id|objectid|gnis|ssn|fips|geoid|code|census|pop|acre|mile|area|length|leng|perimeter|density|den)$|^(id|fid|gid|objectid|geoid|fips)",
+    lower
+  )
+  named <- grepl(
+    "region|group|county|district|zone|name|nam$|mun|city|town|state|prov|ward|parish|borough|territor|type|class|category",
+    lower
+  )
+
+  usable <- cardinality > 1L & !id_like
+  pick_best <- function(idx) {
+    if (length(idx) == 0L) return(NULL)
+    # Prefer a manageable number of groups: the largest cardinality that
+    # still stays at or below 100 groups; otherwise the smallest available.
+    small <- idx[cardinality[idx] <= 100L]
+    if (length(small) > 0L) {
+      return(cols[small[order(cardinality[small], decreasing = TRUE)][1]])
+    }
+    cols[idx[order(cardinality[idx])][1]]
   }
-  if (length(candidates) > 0L) {
-    return(cols[candidates[order(cardinality[candidates], decreasing = TRUE)][1]])
-  }
+
+  out <- pick_best(which(usable & named & text_like))
+  if (!is.null(out)) return(out)
+  out <- pick_best(which(usable & text_like))
+  if (!is.null(out)) return(out)
+  out <- pick_best(which(usable & named))
+  if (!is.null(out)) return(out)
+  out <- pick_best(which(usable))
+  if (!is.null(out)) return(out)
   cols[1]
 }
 
@@ -548,12 +584,18 @@ p.studio-subtitle {
   pointer-events: none;
   transition: opacity 0.18s ease, visibility 0s linear 0.18s;
 }
+body.studio-busy .studio-load-veil,
 body.dragmapr-loading .studio-load-veil {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
   transition-delay: 0s;
 }
+body.studio-busy .container-fluid {
+  user-select: none;
+}
+body.studio-busy-processing .studio-load-panel { transform: scale(0.98); }
+body.studio-busy-loading .studio-load-panel { transform: scale(1); }
 .studio-load-panel {
   display: flex;
   align-items: center;
@@ -576,6 +618,55 @@ body.dragmapr-loading .studio-load-veil {
   color: #64748b;
   font-size: 0.78rem;
   margin-top: 2px;
+}
+
+/* ---- Subtle divider between control clusters ---- */
+.studio-divider {
+  border-top: 1px dashed #dbe3ee;
+  margin: 14px 0 12px;
+}
+
+/* ---- Always-visible current setup card ---- */
+.studio-setup-card {
+  background: #ffffff;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+.studio-setup-card .setup-title {
+  font-weight: 700;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+.studio-setup-card .setup-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.studio-setup-card .setup-row span:first-child { color: #64748b; }
+.studio-setup-card .setup-row span:last-child {
+  color: #172033;
+  font-weight: 600;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+.studio-setup-card .setup-tip {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+  font-size: 0.78rem;
+  color: #475569;
+  line-height: 1.4;
 }
 
 /* ---- Color picker rows ---- */
@@ -835,18 +926,6 @@ body.shiny-busy .studio-progress-bar { opacity: 1; }
   pointer-events: none;
   transition: opacity 0.16s ease, visibility 0s linear 0.16s;
 }
-.helper-wrap.is-updating .helper-overlay {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transition-delay: 0s;
-}
-body.dragmapr-helper-busy .studio-helper-frame {
-  opacity: 0.55;
-  filter: blur(0.4px);
-  pointer-events: none;
-  transition: opacity 0.16s ease, filter 0.16s ease;
-}
 .helper-overlay p {
   font-size: 0.85rem;
   color: #6b7280;
@@ -865,74 +944,25 @@ body.dragmapr-helper-busy .studio-helper-frame {
 .shiny-output-container.recalculating { opacity: 0.45; transition: opacity 0.2s; }
 
 
-/* ---- Fixed sidebar blocker while drag helper rebuilds ---- */
-#studio-sidebar-freeze {
-  position: fixed;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9997;
-  background: rgba(248, 250, 252, 0.74);
-  backdrop-filter: blur(2px);
-  border-radius: 8px;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.16s ease, visibility 0s linear 0.16s;
-}
-
-body.dragmapr-helper-busy #studio-sidebar-freeze {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transition-delay: 0s;
-}
-
-.studio-sidebar-freeze-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  max-width: 260px;
-  padding: 12px 14px;
-  border: 1px solid #dbe3ee;
-  border-radius: 9px;
-  background: #ffffff;
-  color: #475569;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
-}
-
-.studio-sidebar-freeze-card strong {
-  display: block;
-  color: #172033;
-  font-size: 0.86rem;
-}
-
-.studio-sidebar-freeze-card span {
-  display: block;
-  margin-top: 2px;
-  color: #64748b;
-  font-size: 0.74rem;
-  line-height: 1.25;
-}
-
-/* Hide only studio glasstabs dropdowns while the helper rebuilds */
-body.dragmapr-helper-busy .gt-ms-dropdown,
-body.dragmapr-helper-busy .gt-select-dropdown,
-body.dragmapr-helper-busy .gt-dropdown,
-body.dragmapr-helper-busy #legend_filter-dropdown,
-body.dragmapr-helper-busy #label_filter-dropdown,
-body.dragmapr-helper-busy #region_col-dropdown,
-body.dragmapr-helper-busy #label_col-dropdown,
-
-body.dragmapr-helper-busy #annotation_mode-dropdown,
-body.dragmapr-helper-busy #label_marker_shape-dropdown,
-body.dragmapr-helper-busy #legend_position-dropdown,
-body.dragmapr-helper-busy #connector_type-dropdown,
-body.dragmapr-helper-busy #connector_linetype-dropdown,
-body.dragmapr-helper-busy #connector_endpoint-dropdown,
-body.dragmapr-helper-busy #movement_connector_linetype-dropdown,
-body.dragmapr-helper-busy #movement_connector_endpoint-dropdown,
-body.dragmapr-helper-busy #map_background-dropdown {
+/* Hide studio glasstabs dropdowns while the app is busy */
+body.studio-busy .gt-ms-dropdown,
+body.studio-busy .gt-select-dropdown,
+body.studio-busy .gt-dropdown,
+body.studio-busy #legend_filter-dropdown,
+body.studio-busy #label_filter-dropdown,
+body.studio-busy #region_col-dropdown,
+body.studio-busy #label_col-dropdown,
+body.studio-busy #bloom_child_col-dropdown,
+body.studio-busy #bloom_parents-dropdown,
+body.studio-busy #annotation_mode-dropdown,
+body.studio-busy #label_marker_shape-dropdown,
+body.studio-busy #legend_position-dropdown,
+body.studio-busy #connector_type-dropdown,
+body.studio-busy #connector_linetype-dropdown,
+body.studio-busy #connector_endpoint-dropdown,
+body.studio-busy #movement_connector_linetype-dropdown,
+body.studio-busy #movement_connector_endpoint-dropdown,
+body.studio-busy #map_background-dropdown {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
@@ -946,11 +976,11 @@ ui <- function(request) {
   debug_mode <- grepl("(^|&)debug=1(&|$)", request$QUERY_STRING %||% "")
 
   fluidPage(
-  tags$head(
-    # Iframe bridge: relays drag state from helper to Shiny inputs
-    tags$script(HTML(dragmapr_iframe_bridge(iframe_selector = "iframe.studio-helper-frame"))),
-    # Label-toggle message handler (app-specific, stays inline)
-    tags$script(HTML("
+    tags$head(
+      # Iframe bridge: relays drag state from helper to Shiny inputs
+      tags$script(HTML(dragmapr_iframe_bridge(iframe_selector = "iframe.studio-helper-frame"))),
+      # Label-toggle message handler (app-specific, stays inline)
+      tags$script(HTML("
       // Use a specific selector so Shiny's own internal iframes (download
       // handlers, etc.) never intercept messages meant for the map helper.
       function getHelperFrame() {
@@ -966,13 +996,89 @@ ui <- function(request) {
         }
       }
       var helperState = {
-        fullLoading: false,
         activeGeneration: null,
         readyGeneration: null,
-        fallbackTimer: null,
-        fullLoadingTimer: null,
-        preBusyTimer: null
+        fallbackTimer: null
       };
+      // The dotted bloom frame now has two gestures: drag moves the branch,
+      // plain click compresses/unblooms the branch. The server separates
+      // those by comparing the helper-reported offsets with current state.
+      var studioBloomBoundaryBehavior = 'drag';
+      var studioIgnoreRegionClicksUntil = 0;
+      var studioVisualFreezeUntil = 0;
+      var studioVisualFlushTimer = null;
+      var studioDeferredVisuals = {
+        labels: null,
+        labelValues: null,
+        legendValues: null,
+        labelData: null,
+        labelOptions: null,
+        labelColors: null
+      };
+      function helperPostMessage(payload) {
+        var iframe = getHelperFrame();
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage(payload, helperTargetOrigin());
+        }
+      }
+      function studioVisualFreezeActive() {
+        return Date.now() < studioVisualFreezeUntil;
+      }
+      function beginStudioVisualFreeze(delayMs) {
+        delayMs = Number(delayMs || 320);
+        if (!isFinite(delayMs) || delayMs < 0) delayMs = 320;
+        studioVisualFreezeUntil = Math.max(studioVisualFreezeUntil, Date.now() + delayMs);
+        helperPostMessage({
+          type: 'dragmapr-freeze-visuals',
+          active: true,
+          durationMs: delayMs
+        });
+        scheduleStudioVisualFlush(delayMs + 25);
+      }
+      function scheduleStudioVisualFlush(delayMs) {
+        window.clearTimeout(studioVisualFlushTimer);
+        studioVisualFlushTimer = window.setTimeout(flushStudioDeferredVisuals, Math.max(0, delayMs || 0));
+      }
+      function hasDeferredStudioVisuals() {
+        return !!(
+          studioDeferredVisuals.labels ||
+          studioDeferredVisuals.labelValues ||
+          studioDeferredVisuals.legendValues ||
+          studioDeferredVisuals.labelData ||
+          studioDeferredVisuals.labelOptions ||
+          studioDeferredVisuals.labelColors
+        );
+      }
+      function flushStudioDeferredVisuals() {
+        if (studioVisualFreezeActive()) {
+          scheduleStudioVisualFlush(studioVisualFreezeUntil - Date.now() + 15);
+          return;
+        }
+        var pending = studioDeferredVisuals;
+        studioDeferredVisuals = {
+          labels: null,
+          labelValues: null,
+          legendValues: null,
+          labelData: null,
+          labelOptions: null,
+          labelColors: null
+        };
+        helperPostMessage({type: 'dragmapr-freeze-visuals', active: false});
+        if (pending.labelData) helperPostMessage(pending.labelData);
+        if (pending.labels) helperPostMessage(pending.labels);
+        if (pending.labelColors) helperPostMessage(pending.labelColors);
+        if (pending.labelOptions) helperPostMessage(pending.labelOptions);
+        if (pending.legendValues) helperPostMessage(pending.legendValues);
+        if (pending.labelValues) helperPostMessage(pending.labelValues);
+      }
+      function postOrDeferStudioVisual(key, payload) {
+        if (studioVisualFreezeActive()) {
+          studioDeferredVisuals[key] = payload;
+          scheduleStudioVisualFlush(studioVisualFreezeUntil - Date.now() + 15);
+          return;
+        }
+        helperPostMessage(payload);
+      }
       function helperGeneration(value) {
         return value == null ? null : String(value);
       }
@@ -1033,6 +1139,12 @@ ui <- function(request) {
         window.setTimeout(cleanupHelperCornerControls, 250);
         window.setTimeout(cleanupHelperCornerControls, 900);
       }
+      var studioBoundaryLabelPrefix = 'Drag to';
+      function scheduleHelperBoundaryLabelRewrite() {
+        // No late DOM text rewrite here. The helper HTML is rewritten before
+        // its JavaScript runs in drag_map_prototype(), which removes the
+        // visible 'Reset to' -> 'Drag to' flash.
+      }
       function closeStudioDropdowns() {
   var dropdownSelector = [
     '.gt-ms-dropdown',
@@ -1042,7 +1154,8 @@ ui <- function(request) {
     '#label_filter-dropdown',
     '#region_col-dropdown',
     '#label_col-dropdown',
-
+    '#bloom_child_col-dropdown',
+    '#bloom_parents-dropdown',
     '#annotation_mode-dropdown',
     '#label_marker_shape-dropdown',
     '#legend_position-dropdown',
@@ -1068,110 +1181,125 @@ ui <- function(request) {
   });
 }
 
-function getStudioSidebar() {
-  return document.querySelector('.container-fluid > .row > .col-sm-3 > .well') ||
-    document.querySelector('.col-sm-3 > .well');
-}
+// ---- Unified full-app busy veil ----------------------------------------
+// One blocker, two modes: loading (reading spatial data) and
+// processing (rebuilding the drag helper). lockCount stops an early
+// task from hiding the veil while a later task is still running.
+var studioBusy = {
+  mode: null,
+  generation: null,
+  lockCount: 0,
+  showTimer: null,
+  hideTimer: null,
+  safetyTimer: null,
+  shownAt: null,
+  minVisibleMs: 550,
+  showDelayMs: 120
+};
 
-function positionSidebarFreeze() {
-  var sidebar = getStudioSidebar();
-  var freeze = document.getElementById('studio-sidebar-freeze');
-  if (!sidebar || !freeze) return;
-
-  var rect = sidebar.getBoundingClientRect();
-
-  freeze.style.left = rect.left + 'px';
-  freeze.style.top = rect.top + 'px';
-  freeze.style.width = rect.width + 'px';
-  freeze.style.height = rect.height + 'px';
-}
-
-function applyHelperBusy(active) {
-  var wrap = document.querySelector('.helper-wrap');
-  var sidebar = getStudioSidebar();
-
-  if (active) {
-    closeStudioDropdowns();
-    positionSidebarFreeze();
-
-    document.body.classList.add('dragmapr-helper-busy');
-
-    if (wrap) {
-      wrap.classList.add('is-updating');
-    }
-
-    if (sidebar) {
-      if (sidebar.contains(document.activeElement)) {
-        document.activeElement.blur();
-      }
-      sidebar.setAttribute('inert', '');
-      sidebar.setAttribute('aria-busy', 'true');
-      sidebar.setAttribute('aria-disabled', 'true');
-    }
-
+function setBusyText(mode) {
+  var title = document.querySelector('.studio-load-panel strong');
+  var body = document.querySelector('.studio-load-panel span');
+  if (!title || !body) return;
+  if (mode === 'loading') {
+    title.textContent = 'Loading spatial data';
+    body.textContent = 'Reading geometry, columns, labels, and map state...';
     return;
   }
-
-  document.body.classList.remove('dragmapr-helper-busy');
-
-  if (wrap) {
-    wrap.classList.remove('is-updating');
+  if (mode === 'processing') {
+    title.textContent = 'Processing changes';
+    body.textContent = 'Updating the drag map and syncing controls...';
+    return;
   }
-
-  if (sidebar) {
-    sidebar.removeAttribute('inert');
-    sidebar.removeAttribute('aria-busy');
-    sidebar.removeAttribute('aria-disabled');
-  }
+  title.textContent = 'Working';
+  body.textContent = 'Please wait while the app finishes the current task...';
 }
 
-function preShowHelperBusy() {
-  if (helperState.fullLoading) return;
-
-  window.clearTimeout(helperState.preBusyTimer);
-
-  closeStudioDropdowns();
-  applyHelperBusy(true);
-
-  // Safety clear only if no real helper generation ever starts.
-  helperState.preBusyTimer = window.setTimeout(function() {
-    var shinyBusy = document.body.classList.contains('shiny-busy');
-    if (helperState.activeGeneration === null &&
-        !helperState.fullLoading &&
-        !shinyBusy) {
-      applyHelperBusy(false);
+function applyGlobalBusy(active, mode) {
+  document.body.classList.toggle('studio-busy', !!active);
+  document.body.classList.toggle('studio-busy-loading',
+    !!active && mode === 'loading');
+  document.body.classList.toggle('studio-busy-processing',
+    !!active && mode === 'processing');
+  // Drives the existing .studio-load-veil CSS.
+  document.body.classList.toggle('dragmapr-loading', !!active);
+  var appRoot = document.querySelector('.container-fluid');
+  if (appRoot) {
+    if (active) {
+      appRoot.setAttribute('aria-busy', 'true');
+      appRoot.setAttribute('aria-disabled', 'true');
+    } else {
+      appRoot.removeAttribute('aria-busy');
+      appRoot.removeAttribute('aria-disabled');
     }
-  }, 12000);
+  }
 }
 
-window.addEventListener('resize', function() {
-  if (document.body.classList.contains('dragmapr-helper-busy')) {
-    positionSidebarFreeze();
+function requestStudioBusy(mode, generation) {
+  mode = mode || 'processing';
+  window.clearTimeout(studioBusy.hideTimer);
+  window.clearTimeout(studioBusy.showTimer);
+  window.clearTimeout(studioBusy.safetyTimer);
+  studioBusy.mode = mode;
+  studioBusy.generation = generation || null;
+  studioBusy.lockCount = Math.max(1, studioBusy.lockCount + 1);
+  closeStudioDropdowns();
+  if (document.activeElement && document.activeElement.blur) {
+    document.activeElement.blur();
   }
-});
+  setBusyText(mode);
+  // Never let a missed release freeze the app forever.
+  studioBusy.safetyTimer = window.setTimeout(function() {
+    releaseStudioBusy(null, true);
+  }, 120000);
+  if (mode === 'loading') {
+    // Loading shows immediately.
+    studioBusy.shownAt = Date.now();
+    applyGlobalBusy(true, mode);
+    return;
+  }
+  // Processing waits briefly to avoid flashes on very fast rebuilds.
+  studioBusy.showTimer = window.setTimeout(function() {
+    studioBusy.shownAt = Date.now();
+    applyGlobalBusy(true, mode);
+  }, studioBusy.showDelayMs);
+}
 
-window.addEventListener('scroll', function() {
-  if (document.body.classList.contains('dragmapr-helper-busy')) {
-    positionSidebarFreeze();
+function releaseStudioBusy(generation, force) {
+  if (generation && studioBusy.generation &&
+      generation !== studioBusy.generation && !force) {
+    return;
   }
-}, true);
-      function syncLoadingVisuals() {
-        document.body.classList.toggle('dragmapr-loading', helperState.fullLoading);
-        var helperBusy = helperState.activeGeneration !== null &&
-          helperState.readyGeneration !== helperState.activeGeneration;
-        applyHelperBusy(!helperState.fullLoading && helperBusy);
-      }
-      function setFullLoading(active) {
-        helperState.fullLoading = !!active;
-        window.clearTimeout(helperState.fullLoadingTimer);
-        if (helperState.fullLoading) {
-          helperState.fullLoadingTimer = window.setTimeout(function() {
-            helperState.fullLoading = false;
-            syncLoadingVisuals();
-          }, 120000);
-        }
-        syncLoadingVisuals();
-      }
+  studioBusy.lockCount = Math.max(0, studioBusy.lockCount - 1);
+  if (studioBusy.lockCount > 0 && !force) return;
+  studioBusy.lockCount = 0;
+  window.clearTimeout(studioBusy.showTimer);
+  window.clearTimeout(studioBusy.safetyTimer);
+  var elapsed = studioBusy.shownAt ? Date.now() - studioBusy.shownAt : 9999;
+  var wait = Math.max(0, studioBusy.minVisibleMs - elapsed);
+  window.clearTimeout(studioBusy.hideTimer);
+  studioBusy.hideTimer = window.setTimeout(function() {
+    applyGlobalBusy(false, null);
+    studioBusy.mode = null;
+    studioBusy.generation = null;
+    studioBusy.shownAt = null;
+  }, wait);
+}
+
+// Immediate feedback when a rebuild-triggering control changes. Only used
+// for inputs that are normally followed by a helper rebuild (which
+// re-claims the veil with a generation and later releases it). The short
+// safety timer covers the rare case where no rebuild starts, e.g. an
+// invalid bloom column.
+function preShowHelperBusy() {
+  requestStudioBusy('processing', null);
+  window.clearTimeout(studioBusy.safetyTimer);
+  studioBusy.safetyTimer = window.setTimeout(function() {
+    if (studioBusy.mode === 'processing' && studioBusy.generation === null) {
+      releaseStudioBusy(null, true);
+    }
+  }, 4000);
+}
       function markHelperReady(generation) {
         generation = helperGeneration(generation);
         if (!generation || generation !== helperState.activeGeneration) {
@@ -1179,7 +1307,7 @@ window.addEventListener('scroll', function() {
         }
         window.clearTimeout(helperState.fallbackTimer);
         helperState.readyGeneration = generation;
-        setFullLoading(false);
+        releaseStudioBusy(generation, true);
         scheduleHelperCornerCleanup();
         Shiny.setInputValue(
           'helper_ready_token',
@@ -1227,28 +1355,22 @@ window.addEventListener('scroll', function() {
         }, 400);
       });
       Shiny.addCustomMessageHandler('dragmapr-labels', function(message) {
-        var iframe = getHelperFrame();
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage(
-            {type: 'dragmapr-set-labels', labels: !!message.labels}, helperTargetOrigin()
-          );
-        }
+        postOrDeferStudioVisual('labels', {
+          type: 'dragmapr-set-labels',
+          labels: !!message.labels
+        });
       });
       Shiny.addCustomMessageHandler('dragmapr-legend-values', function(message) {
-        var iframe = getHelperFrame();
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage(
-            {type: 'dragmapr-set-legend-values', values: message.values}, helperTargetOrigin()
-          );
-        }
+        postOrDeferStudioVisual('legendValues', {
+          type: 'dragmapr-set-legend-values',
+          values: message.values
+        });
       });
       Shiny.addCustomMessageHandler('dragmapr-label-values', function(message) {
-        var iframe = getHelperFrame();
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage(
-            {type: 'dragmapr-set-label-values', values: message.values}, helperTargetOrigin()
-          );
-        }
+        postOrDeferStudioVisual('labelValues', {
+          type: 'dragmapr-set-label-values',
+          values: message.values
+        });
       });
       Shiny.addCustomMessageHandler('dragmapr-side-panel', function(message) {
         var iframe = getHelperFrame();
@@ -1270,6 +1392,34 @@ window.addEventListener('scroll', function() {
           iframe.contentWindow.postMessage({type: 'dragmapr-reset-state'}, helperTargetOrigin());
         }
       });
+      Shiny.addCustomMessageHandler('dragmapr-bloom', function(message) {
+        message = message || {};
+        studioBloomBoundaryBehavior = String(message.boundaryBehavior || 'drag').toLowerCase();
+        studioBoundaryLabelPrefix = message.boundaryLabel || 'Drag to';
+        var collapseTargets = message.collapse || [];
+        var hasCollapse = Array.isArray(collapseTargets) && collapseTargets.length > 0;
+        var visualDelay = Number(message.visualFreezeMs || message.labelRefreshDelayMs || message.collapseDurationMs || 0);
+        if (hasCollapse || message.deferVisuals) {
+          beginStudioVisualFreeze(Math.max(visualDelay || 0, 320));
+        }
+        helperPostMessage({
+          type: 'dragmapr-set-bloom',
+          expanded: message.expanded || [],
+          animate: message.animate || [],
+          collapse: collapseTargets,
+          deferVisuals: !!message.deferVisuals,
+          visualFreezeMs: message.visualFreezeMs || message.labelRefreshDelayMs || null,
+          collapseDurationMs: message.collapseDurationMs || null,
+          collapseScale: message.collapseScale || null,
+          collapseOpacity: message.collapseOpacity || null,
+          boundary: message.boundary !== false,
+          boundaryBehavior: studioBloomBoundaryBehavior,
+          boundaryLabel: message.boundaryLabel || 'Drag to',
+          boundaryDragThreshold: message.boundaryDragThreshold || 8,
+          regionOffsets: message.regionOffsets || []
+        });
+        scheduleHelperBoundaryLabelRewrite();
+      });
       Shiny.addCustomMessageHandler('dragmapr-state', function(message) {
         var iframe = getHelperFrame();
         if (iframe && iframe.contentWindow) {
@@ -1281,20 +1431,16 @@ window.addEventListener('scroll', function() {
         }
       });
       Shiny.addCustomMessageHandler('dragmapr-label-data', function(message) {
-        var iframe = getHelperFrame();
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage(
-            {type: 'dragmapr-set-label-data', labels: message.labels || []}, helperTargetOrigin()
-          );
-        }
+        postOrDeferStudioVisual('labelData', {
+          type: 'dragmapr-set-label-data',
+          labels: message.labels || []
+        });
       });
       Shiny.addCustomMessageHandler('dragmapr-label-options', function(message) {
-        var iframe = getHelperFrame();
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage(
-            {type: 'dragmapr-set-label-options', options: message.options || {}}, helperTargetOrigin()
-          );
-        }
+        postOrDeferStudioVisual('labelOptions', {
+          type: 'dragmapr-set-label-options',
+          options: message.options || {}
+        });
       });
       Shiny.addCustomMessageHandler('dragmapr-region-palette', function(message) {
         var iframe = getHelperFrame();
@@ -1305,15 +1451,18 @@ window.addEventListener('scroll', function() {
         }
       });
       Shiny.addCustomMessageHandler('dragmapr-label-colors', function(message) {
-        var iframe = getHelperFrame();
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage(
-            {type: 'dragmapr-set-label-colors', colors: message.colors || {}}, helperTargetOrigin()
-          );
-        }
+        postOrDeferStudioVisual('labelColors', {
+          type: 'dragmapr-set-label-colors',
+          colors: message.colors || {}
+        });
       });
       Shiny.addCustomMessageHandler('dragmapr-loading', function(message) {
-        setFullLoading(!!(message && message.active));
+        var active = !!(message && message.active);
+        if (active) {
+          requestStudioBusy('loading', null);
+        } else {
+          releaseStudioBusy(null, true);
+        }
       });
       Shiny.addCustomMessageHandler('dragmapr-helper-loading', function(message) {
         var active = !!(message && message.active);
@@ -1322,13 +1471,13 @@ window.addEventListener('scroll', function() {
           helperState.activeGeneration = generation;
           helperState.readyGeneration = null;
           scheduleHelperFallback(generation);
+          requestStudioBusy('processing', generation);
         } else if (!generation || generation === helperState.activeGeneration) {
           window.clearTimeout(helperState.fallbackTimer);
           helperState.activeGeneration = null;
           helperState.readyGeneration = null;
-          setFullLoading(false);
+          releaseStudioBusy(generation, true);
         }
-        syncLoadingVisuals();
       });
       // Full-page loading is controlled from the Shiny server via
       // the dragmapr-loading custom message. Avoid also starting it from
@@ -1339,6 +1488,42 @@ window.addEventListener('scroll', function() {
         if (iframe && event.source === iframe.contentWindow &&
             event.data && event.data.type === 'dragmapr-ready') {
           markHelperReady(event.data.generation);
+          scheduleHelperBoundaryLabelRewrite();
+        }
+        if (iframe && event.source === iframe.contentWindow &&
+            event.data && event.data.type === 'dragmapr-boundary-drag') {
+          // A real dotted-frame drag is sent separately from a click. Save the
+          // reported offsets and keep the branch open.
+          studioIgnoreRegionClicksUntil = Date.now() + 220;
+          Shiny.setInputValue('boundary_drag_offsets', {
+            parent: event.data.parent || null,
+            regionOffsets: event.data.regionOffsets || [],
+            nonce: Date.now()
+          }, {priority: 'event'});
+        }
+        if (iframe && event.source === iframe.contentWindow &&
+            event.data && event.data.type === 'dragmapr-collapse-branch') {
+          // Plain click on the dotted frame. The helper starts the reversible
+          // leaf-return animation locally and sends the latest offsets so the
+          // server can collapse without an abrupt visual jump.
+          studioIgnoreRegionClicksUntil = Date.now() + 220;
+          Shiny.setInputValue('collapse_branch', {
+            parent: event.data.parent || null,
+            regionOffsets: event.data.regionOffsets || [],
+            boundaryBehavior: studioBloomBoundaryBehavior,
+            nonce: Date.now()
+          }, {priority: 'event'});
+        }
+        if (iframe && event.source === iframe.contentWindow &&
+            event.data && event.data.type === 'dragmapr-region-click') {
+          if (Date.now() < studioIgnoreRegionClicksUntil) return;
+          // Plain click (no drag) on a region: used to bloom a parent
+          // into its children or compress an expanded branch.
+          Shiny.setInputValue('helper_region_click', {
+            region: event.data.region || null,
+            regionOffsets: event.data.regionOffsets || [],
+            nonce: Date.now()
+          }, {priority: 'event'});
         }
       });
       document.addEventListener('load', function(event) {
@@ -1346,6 +1531,7 @@ window.addEventListener('scroll', function() {
             event.target.matches('iframe.studio-helper-frame')) {
           scheduleHelperFallback(currentHelperGeneration());
           scheduleHelperCornerCleanup();
+          scheduleHelperBoundaryLabelRewrite();
         }
       }, true);
       document.addEventListener('click', function(event) {
@@ -1375,332 +1561,372 @@ window.addEventListener('scroll', function() {
         }
       });
       if (window.jQuery) {
+        // Only inputs that trigger a full helper rebuild. Presentation
+        // controls (filters, styles, background) update the live iframe
+        // over postMessage and must not lock the app.
+        var rebuildInputs = [
+          'region_col',
+          'label_col',
+          'bloom_child_col',
+          'bloom_dissolve'
+        ];
+        // Re-rendered panels re-register their inputs and fire
+        // shiny:inputchanged with UNCHANGED values (e.g. the Bloom panel
+        // refreshes after each expansion). Only treat a genuine value
+        // change as a rebuild trigger, otherwise client-side blooms would
+        // flash a pointless processing veil.
+        var lastRebuildInputValues = {};
         jQuery(document).on('shiny:inputchanged', function(event) {
           if (!event || !event.name) return;
-          if (event.name === 'region_col' || event.name === 'label_col') {
-            preShowHelperBusy();
+          if (rebuildInputs.indexOf(event.name) < 0) return;
+          var serialized;
+          try {
+            serialized = JSON.stringify(event.value == null ? null : event.value);
+          } catch (e) {
+            serialized = String(event.value);
           }
+          var seen = Object.prototype.hasOwnProperty.call(
+            lastRebuildInputValues, event.name
+          );
+          if (seen && lastRebuildInputValues[event.name] === serialized) {
+            return;  // re-registration, not a user change
+          }
+          lastRebuildInputValues[event.name] = serialized;
+          if (!seen) return;  // first registration at startup is a baseline
+          preShowHelperBusy();
         });
       }
     ")),
-    tags$style(HTML(studio_css))
-  ),
+      tags$style(HTML(studio_css))
+    ),
 
-  # Progress bar shown automatically whenever Shiny is busy.
-  tags$div(class = "studio-progress-bar"),
-  tags$div(
-    class = "studio-load-veil",
+    # Progress bar shown automatically whenever Shiny is busy.
+    tags$div(class = "studio-progress-bar"),
     tags$div(
-      class = "studio-load-panel",
-      tags$div(class = "studio-spinner"),
+      class = "studio-load-veil",
       tags$div(
-        tags$strong("Loading spatial data"),
-        tags$span("Reading geometry, columns, labels, and preview state...")
-      )
-    )
-  ),
-
-  tags$div(id = "studio-sidebar-freeze"),
-
-  tags$h2("dragmapr spatial studio", class = "studio-title"),
-  tags$p("Upload polygon data, drag the layout, then export.",
-         class = "studio-subtitle"),
-
-  sidebarLayout(
-    sidebarPanel(
-      width = 3,
-
-      studio_sidebar_panel(
-        "Data source",
-        "Upload files or start from the demo",
-        open = TRUE,
-        fileInput(
-          "spatial_upload", "Upload spatial file",
-          multiple = TRUE,
-          accept = c(".zip", ".shp", ".dbf", ".shx", ".prj", ".cpg", ".gpkg", ".geojson", ".json")
-        ),
+        class = "studio-load-panel",
+        tags$div(class = "studio-spinner"),
         tags$div(
-          class = "studio-action-row",
-          actionButton("load_demo", "Use bundled HHS demo", class = "btn-sm btn-default")
-        ),
-        tags$div("Open saved project", class = "studio-subgroup-title"),
-        tags$p(
-          "Reopen a Project ZIP previously downloaded from Spatial Studio.",
-          class = "studio-help"
-        ),
-        fileInput(
-          "project_upload", "Open project ZIP",
-          multiple = FALSE,
-          accept = ".zip"
-        )
-      ),
-
-      studio_sidebar_panel(
-        "Columns & colors",
-        "Choose the grouping field and palette",
-        open = TRUE,
-        uiOutput("column_controls"),
-        tags$div(class = "studio-field-gap"),
-        uiOutput("color_pickers")
-      ),
-
-      studio_sidebar_panel(
-        "Labels",
-        "Show, edit, filter, and style map labels",
-        open = TRUE,
-        tags$div("Visibility", class = "studio-subgroup-title"),
-        checkboxInput("show_labels", "Show labels", value = TRUE),
-        uiOutput("label_filter_ui"),
-
-        tags$div("Label text", class = "studio-subgroup-title"),
-        uiOutput("label_editor_ui"),
-
-        tags$div("Label style", class = "studio-subgroup-title"),
-        uiOutput("label_color_ui"),
-        tags$div(class = "studio-field-gap"),
-        studio_select(
-          "annotation_mode", "Annotation style",
-          choices  = c("Short labels" = "labels", "Info boxes" = "boxes"),
-          selected = "labels",
-          placeholder = "Choose label style"
-        ),
-        tags$div(class = "studio-field-gap"),
-        studio_select(
-          "label_marker_shape", "Text label marker",
-          choices = c("Circle" = "circle", "Rounded box" = "rect", "Text only" = "none"),
-          selected = "circle",
-          placeholder = "Choose marker style"
-        ),
-        tags$div(class = "studio-field-gap"),
-        sliderInput("label_text_size", "Text size (px)",
-                    min = 7, max = 22, value = 11, step = 1),
-        uiOutput("label_size_controls")
-      ),
-
-      studio_sidebar_panel(
-        "Legend",
-        "Control map keys and placement",
-        tags$div("Visibility", class = "studio-subgroup-title"),
-        checkboxInput("show_legend", "Show legend in drag and preview", value = TRUE),
-        checkboxInput("legend_show_all", "Allow more than 25 legend keys", value = FALSE),
-        uiOutput("legend_filter_ui"),
-
-        tags$div("Placement", class = "studio-subgroup-title"),
-        textInput("legend_title", "Legend title", value = "Region"),
-        studio_select(
-          "legend_position",
-          "Legend position",
-          choices = c("Bottom" = "bottom", "Top" = "top", "Left" = "left", "Right" = "right", "None" = "none"),
-          selected = "bottom",
-          placeholder = "Choose legend position"
-        )
-      ),
-
-      studio_sidebar_panel(
-        "Connectors",
-        "Lines between labels and regions",
-        tags$div("Visibility", class = "studio-subgroup-title"),
-        checkboxInput("show_connectors", "Show connector lines", value = FALSE),
-        checkboxInput(
-          "connector_smart",
-          tags$span(
-            "Smart connector style",
-            title = "Choose straight, elbow, or curved connector paths from the current label displacement."
-          ),
-          value = FALSE
-        ),
-        tags$p(
-          "Smart style chooses connector geometry from the current label displacement.",
-          class = "studio-help"
-        ),
-
-        tags$div("Line style", class = "studio-subgroup-title"),
-        studio_color_input("connector_color", "Line color", value = "#334155"),
-        studio_select(
-          "connector_type", "Connector style",
-          choices  = c("Straight" = "straight", "Elbow" = "elbow",
-                       "Curve" = "curve", "Squiggle" = "squiggle"),
-          selected = "straight",
-          placeholder = "Choose connector style"
-        ),
-        tags$div(class = "studio-field-gap"),
-        studio_select(
-          "connector_linetype", "Line style",
-          choices = c("Solid" = "solid", "Dashed" = "dashed", "Dotted" = "dotted"),
-          selected = "solid",
-          placeholder = "Choose line style"
-        ),
-        tags$div(class = "studio-field-gap"),
-        studio_select(
-          "connector_endpoint", "Endpoint",
-          choices = c("None" = "none", "Arrow" = "arrow"),
-          selected = "none",
-          placeholder = "Choose endpoint"
-        ),
-        tags$div(class = "studio-field-gap"),
-        sliderInput("connector_linewidth", "Connector thickness",
-                    min = 0.25, max = 2.5, value = 0.45, step = 0.05)
-      ),
-
-      studio_sidebar_panel(
-        "Movement context",
-        "Original outlines, motion lines, and trails",
-        tags$div("Context layers", class = "studio-subgroup-title"),
-        checkboxInput("show_origin_outlines", "Show origin outlines", value = FALSE),
-        checkboxInput("show_movement_connectors", "Show movement connector", value = FALSE),
-        checkboxInput("show_movement_band", "Show swept movement shadow", value = FALSE),
-        checkboxInput("show_drag_trail", "Show drag preview trail", value = FALSE),
-
-        tags$div("Movement connector style", class = "studio-subgroup-title"),
-        studio_color_input("movement_connector_color", "Movement connector color", value = "#64748b"),
-        sliderInput("movement_connector_opacity", "Movement connector opacity",
-                    min = 0, max = 1, value = 0.72, step = 0.05),
-        sliderInput("movement_connector_linewidth", "Movement connector thickness",
-                    min = 0.25, max = 3, value = 0.45, step = 0.05),
-        studio_select(
-          "movement_connector_linetype", "Movement connector line style",
-          choices = c("Solid" = "solid", "Dashed" = "dashed", "Dotted" = "dotted"),
-          selected = "solid",
-          placeholder = "Choose movement line style"
-        ),
-        tags$div(class = "studio-field-gap"),
-        studio_select(
-          "movement_connector_endpoint", "Movement connector arrow",
-          choices = c("Closed arrow" = "closed", "Open arrow" = "open", "None" = "none"),
-          selected = "closed",
-          placeholder = "Choose movement arrow"
-        )
-      ),
-
-      studio_sidebar_panel(
-        "Export",
-        "Download images, data, helper files, and bundles",
-        tags$div("Static output", class = "studio-subgroup-title"),
-        textInput("static_title", "Static map title", value = "dragmapr spatial studio"),
-        studio_select(
-          "map_background", "Map background",
-          choices = c("White" = "white", "Transparent" = "transparent",
-                      "Light grid" = "light_grid", "Dark" = "dark"),
-          selected = "white",
-          placeholder = "Choose map background"
-        ),
-        tags$div(class = "studio-field-gap"),
-        fluidRow(
-          column(4, numericInput("static_width", "Width", value = 10, min = 2, max = 30, step = 0.5)),
-          column(4, numericInput("static_height", "Height", value = 8, min = 2, max = 30, step = 0.5)),
-          column(4, numericInput("static_dpi", "DPI", value = 300, min = 72, max = 600, step = 24))
-        ),
-        tags$p(
-          "The R script expects the Project ZIP in the same folder, or you can edit project_path.",
-          class = "studio-help"
-        ),
-
-        tags$div("Downloads", class = "studio-subgroup-title"),
-
-        tags$div(
-          class = "download-group",
-          tags$div("Map output", class = "download-group-label"),
-          tags$div(
-            class = "download-grid",
-            downloadButton("download_png", "PNG", class = "btn-default btn-span")
-          )
-        ),
-
-        tags$div(
-          class = "download-group",
-          tags$div("Data files", class = "download-group-label"),
-          tags$div(
-            class = "download-grid",
-            downloadButton("download_region_csv", "Region CSV"),
-            downloadButton("download_label_csv",  "Label CSV"),
-            downloadButton("download_labels",     "Labels table"),
-            downloadButton("download_geojson",    "GeoJSON"),
-            downloadButton("download_gpkg",       "GPKG")
-          )
-        ),
-
-        tags$div(
-          class = "download-group",
-          tags$div("Code & bundles", class = "download-group-label"),
-          tags$div(
-            class = "download-grid",
-            downloadButton(
-              "download_script", "R script",
-              onclick = "Shiny.setInputValue('script_download_requested', Date.now(), {priority: 'event'});"
-            ),
-            downloadButton("download_html",          "HTML helper"),
-            downloadButton("download_bundle",        "Project ZIP"),
-            downloadButton("download_static_bundle", "Static bundle")
-          )
+          tags$strong("Loading spatial data"),
+          tags$span("Reading geometry, columns, labels, and preview state...")
         )
       )
     ),
 
-    mainPanel(
-      width = 9,
-      uiOutput("status_bar"),
-      tags$div(
-        class = "map-control-toolbar",
-        tags$span("Map controls", class = "map-control-title"),
-        uiOutput("history_controls")
-      ),
-      tags$div(
-        class = "workspace-tabs",
-        tabsetPanel(
-          id = "workspace_tab",
-          tabPanel(
-            "Drag",
-            tags$div(
-              class = "helper-wrap",
-              uiOutput("helper"),
-              tags$div(
-                id = "helper-overlay",
-                class = "helper-overlay",
-                tags$div(class = "studio-spinner"),
-                tags$p("Updating drag map...")
-              )
-            )
+    tags$h2("dragmapr spatial studio", class = "studio-title"),
+    tags$p("Upload polygon data, drag the layout, then export.",
+           class = "studio-subtitle"),
+
+    sidebarLayout(
+      sidebarPanel(
+        width = 3,
+
+        uiOutput("current_setup_card"),
+
+        studio_sidebar_panel(
+          "Start",
+          "Load data and see what was detected",
+          open = TRUE,
+          fileInput(
+            "spatial_upload", "Upload spatial file",
+            multiple = TRUE,
+            accept = c(".zip", ".shp", ".dbf", ".shx", ".prj", ".cpg", ".gpkg", ".geojson", ".json")
           ),
-          tabPanel(
-            "Preview",
-            tags$div(
-              class = "preview-toolbar",
-              actionButton("refresh_preview", "Refresh preview", class = "btn-sm btn-default"),
-              checkboxInput("auto_preview", "Auto-refresh after dragging", value = FALSE)
+          tags$div(
+            class = "studio-action-row",
+            actionButton("load_demo", "Use bundled HHS demo", class = "btn-sm btn-default")
+          ),
+          tags$div("Open saved project", class = "studio-subgroup-title"),
+          tags$p(
+            "Reopen a Project ZIP previously downloaded from Spatial Studio.",
+            class = "studio-help"
+          ),
+          fileInput(
+            "project_upload", "Open project ZIP",
+            multiple = FALSE,
+            accept = ".zip"
+          ),
+          tags$div(class = "studio-divider"),
+          tags$div("Detected", class = "studio-subgroup-title"),
+          uiOutput("start_summary")
+        ),
+
+        studio_sidebar_panel(
+          "Grouping & bloom",
+          "What to group by and what it expands into",
+          open = TRUE,
+          uiOutput("column_controls"),
+          tags$div(class = "studio-divider"),
+          uiOutput("bloom_controls")
+        ),
+
+        studio_sidebar_panel(
+          "Labels & text boxes",
+          "Short names on the map, or callout notes",
+          open = TRUE,
+          tags$p(
+            "Labels are short names. Text boxes are notes or callouts.",
+            class = "studio-help"
+          ),
+          tags$div("Visibility", class = "studio-subgroup-title"),
+          checkboxInput("show_labels", "Show labels", value = TRUE),
+          checkboxInput("label_auto_limit", "Auto-limit crowded labels", value = TRUE),
+          numericInput(
+            "label_auto_limit_n", "Auto label limit",
+            value = LABEL_AUTO_LIMIT, min = LABEL_AUTO_MIN,
+            max = LABEL_AUTO_MAX, step = 1
+          ),
+          uiOutput("label_filter_ui"),
+          tags$div(class = "studio-divider"),
+          tags$div("Label text", class = "studio-subgroup-title"),
+          uiOutput("label_editor_ui"),
+          tags$div(class = "studio-divider"),
+          studio_select(
+            "annotation_mode", "Label style",
+            choices  = c("Short labels" = "labels", "Text boxes" = "boxes"),
+            selected = "labels",
+            placeholder = "Choose label style"
+          ),
+          tags$div(class = "studio-field-gap"),
+          checkboxInput("show_connectors", "Show connector lines", value = FALSE),
+          checkboxInput(
+            "connector_smart",
+            tags$span(
+              "Smart connector style",
+              title = "Choose straight, elbow, or curved connector paths from the current label displacement."
             ),
-            plotOutput("preview", height = 620)
+            value = FALSE
           ),
-          if (isTRUE(debug_mode)) tabPanel(
-            "State",
-            tags$h4("Key reactives"),
-            tags$pre(paste(
-              "source_sf()       raw sf from upload / demo / project bundle",
-              "projected_sf()    after prepare_dragmapr_sf()",
-              "region_col()      chosen grouping column",
-              "label_col()       chosen label column",
-              "label_table()     make_region_labels() + style flags",
-              "region_state()    current region offsets",
-              "label_state()     current label offsets",
-              "state$label_edits edited label text keyed by label_id",
-              "region_palette()  named color vector",
-              "current_plot()    ggplot2 object from render_dragged_map()",
-              sep = "\n"
-            )),
-            tags$h4("Region offsets"),
-            verbatimTextOutput("region_state_text", placeholder = TRUE),
-            tags$h4("Label offsets"),
-            verbatimTextOutput("label_state_text", placeholder = TRUE)
+          tags$p(
+            "Smart style chooses connector geometry from the current label displacement.",
+            class = "studio-help"
           )
         ),
-        conditionalPanel(
-          condition = "input.workspace_tab === 'Drag'",
-          class = "workspace-offset-toggle",
-          checkboxInput("show_helper_panel", "Offset panel", value = TRUE)
+
+        studio_sidebar_panel(
+          "Appearance",
+          "Colors, legend, label style, and background",
+          tags$div("Colors", class = "studio-subgroup-title"),
+          uiOutput("color_pickers"),
+          tags$div(class = "studio-field-gap"),
+          uiOutput("label_color_ui"),
+          tags$div(class = "studio-divider"),
+          tags$div("Legend", class = "studio-subgroup-title"),
+          checkboxInput("show_legend", "Show legend in drag and preview", value = TRUE),
+          checkboxInput("legend_show_all", "Allow more than 25 legend keys", value = FALSE),
+          uiOutput("legend_filter_ui"),
+          textInput("legend_title", "Legend title", value = "Region"),
+          studio_select(
+            "legend_position",
+            "Legend position",
+            choices = c("Bottom" = "bottom", "Top" = "top", "Left" = "left", "Right" = "right", "None" = "none"),
+            selected = "bottom",
+            placeholder = "Choose legend position"
+          ),
+          tags$div(class = "studio-divider"),
+          tags$div("Label appearance", class = "studio-subgroup-title"),
+          studio_select(
+            "label_marker_shape", "Text label marker",
+            choices = c("Circle" = "circle", "Rounded box" = "rect", "Text only" = "none"),
+            selected = "circle",
+            placeholder = "Choose marker style"
+          ),
+          tags$div(class = "studio-field-gap"),
+          sliderInput("label_text_size", "Text size (px)",
+                      min = 7, max = 22, value = 11, step = 1),
+          uiOutput("label_size_controls"),
+          tags$div(class = "studio-divider"),
+          tags$div("Map background", class = "studio-subgroup-title"),
+          studio_select(
+            "map_background", "Map background",
+            choices = c("White" = "white", "Transparent" = "transparent",
+                        "Light grid" = "light_grid", "Dark" = "dark"),
+            selected = "white",
+            placeholder = "Choose map background"
+          )
+        ),
+
+        studio_sidebar_panel(
+          "Export & project",
+          "Save your work and download outputs",
+          tags$div("Static output", class = "studio-subgroup-title"),
+          textInput("static_title", "Static map title", value = "dragmapr spatial studio"),
+          actionButton("apply_static_title", "Apply title", class = "btn-sm btn-primary"),
+          tags$div(class = "studio-field-gap"),
+          fluidRow(
+            column(4, numericInput("static_width", "Width", value = 10, min = 2, max = 30, step = 0.5)),
+            column(4, numericInput("static_height", "Height", value = 8, min = 2, max = 30, step = 0.5)),
+            column(4, numericInput("static_dpi", "DPI", value = 300, min = 72, max = 600, step = 24))
+          ),
+          tags$p(
+            "The R script expects the Project ZIP in the same folder, or you can edit project_path.",
+            class = "studio-help"
+          ),
+          tags$div(class = "studio-divider"),
+          tags$div("Downloads", class = "studio-subgroup-title"),
+
+          tags$div(
+            class = "download-group",
+            tags$div("Map output", class = "download-group-label"),
+            tags$div(
+              class = "download-grid",
+              downloadButton("download_png", "PNG", class = "btn-default btn-span")
+            )
+          ),
+
+          tags$div(
+            class = "download-group",
+            tags$div("Data files", class = "download-group-label"),
+            tags$div(
+              class = "download-grid",
+              downloadButton("download_region_csv", "Region CSV"),
+              downloadButton("download_label_csv",  "Label CSV"),
+              downloadButton("download_labels",     "Labels table"),
+              downloadButton("download_geojson",    "GeoJSON"),
+              downloadButton("download_gpkg",       "GPKG")
+            )
+          ),
+
+          tags$div(
+            class = "download-group",
+            tags$div("Code & bundles", class = "download-group-label"),
+            tags$div(
+              class = "download-grid",
+              downloadButton(
+                "download_script", "R script",
+                onclick = "Shiny.setInputValue('script_download_requested', Date.now(), {priority: 'event'});"
+              ),
+              downloadButton("download_html",          "HTML helper"),
+              downloadButton("download_bundle",        "Project ZIP"),
+              downloadButton("download_static_bundle", "Static bundle")
+            )
+          )
+        ),
+
+        studio_sidebar_panel(
+          "Advanced",
+          "Connector styling and movement context layers",
+          tags$div("Connector line style", class = "studio-subgroup-title"),
+          studio_color_input("connector_color", "Line color", value = "#334155"),
+          studio_select(
+            "connector_type", "Connector style",
+            choices  = c("Straight" = "straight", "Elbow" = "elbow",
+                         "Curve" = "curve", "Squiggle" = "squiggle"),
+            selected = "straight",
+            placeholder = "Choose connector style"
+          ),
+          tags$div(class = "studio-field-gap"),
+          studio_select(
+            "connector_linetype", "Line style",
+            choices = c("Solid" = "solid", "Dashed" = "dashed", "Dotted" = "dotted"),
+            selected = "solid",
+            placeholder = "Choose line style"
+          ),
+          tags$div(class = "studio-field-gap"),
+          studio_select(
+            "connector_endpoint", "Endpoint",
+            choices = c("None" = "none", "Arrow" = "arrow"),
+            selected = "none",
+            placeholder = "Choose endpoint"
+          ),
+          tags$div(class = "studio-field-gap"),
+          sliderInput("connector_linewidth", "Connector thickness",
+                      min = 0.25, max = 2.5, value = 0.45, step = 0.05),
+          tags$div(class = "studio-divider"),
+          tags$div("Context layers", class = "studio-subgroup-title"),
+          checkboxInput("show_origin_outlines", "Show origin outlines", value = FALSE),
+          checkboxInput("show_movement_connectors", "Show movement connectors", value = FALSE),
+          checkboxInput("show_movement_band", "Show swept movement shadow", value = FALSE),
+          checkboxInput("show_drag_trail", "Show drag preview trail", value = FALSE),
+          tags$div(class = "studio-divider"),
+          tags$div("Movement connector style", class = "studio-subgroup-title"),
+          studio_color_input("movement_connector_color", "Movement connector color", value = "#64748b"),
+          sliderInput("movement_connector_opacity", "Movement connector opacity",
+                      min = 0, max = 1, value = 0.72, step = 0.05),
+          sliderInput("movement_connector_linewidth", "Movement connector thickness",
+                      min = 0.25, max = 3, value = 0.45, step = 0.05),
+          studio_select(
+            "movement_connector_linetype", "Movement connector line style",
+            choices = c("Solid" = "solid", "Dashed" = "dashed", "Dotted" = "dotted"),
+            selected = "solid",
+            placeholder = "Choose movement line style"
+          ),
+          tags$div(class = "studio-field-gap"),
+          studio_select(
+            "movement_connector_endpoint", "Movement connector arrow",
+            choices = c("Closed arrow" = "closed", "Open arrow" = "open", "None" = "none"),
+            selected = "closed",
+            placeholder = "Choose movement arrow"
+          )
+        )
+      ),
+
+      mainPanel(
+        width = 9,
+        uiOutput("status_bar"),
+        tags$div(
+          class = "map-control-toolbar",
+          tags$span("Map controls", class = "map-control-title"),
+          uiOutput("history_controls")
+        ),
+        tags$div(
+          class = "workspace-tabs",
+          tabsetPanel(
+            id = "workspace_tab",
+            tabPanel(
+              "Drag",
+              tags$div(
+                class = "helper-wrap",
+                uiOutput("helper"),
+                tags$div(
+                  id = "helper-overlay",
+                  class = "helper-overlay",
+                  tags$div(class = "studio-spinner"),
+                  tags$p("Updating drag map...")
+                )
+              )
+            ),
+            tabPanel(
+              "Preview",
+              tags$div(
+                class = "preview-toolbar",
+                actionButton("refresh_preview", "Refresh preview", class = "btn-sm btn-default"),
+                checkboxInput("auto_preview", "Auto-refresh after dragging", value = FALSE)
+              ),
+              plotOutput("preview", height = 620)
+            ),
+            if (isTRUE(debug_mode)) tabPanel(
+              "State",
+              tags$h4("Key reactives"),
+              tags$pre(paste(
+                "source_sf()       raw sf from upload / demo / project bundle",
+                "projected_sf()    after prepare_dragmapr_sf()",
+                "region_col()      chosen grouping column",
+                "label_col()       chosen label column",
+                "label_table()     make_region_labels() + style flags",
+                "region_state()    current region offsets",
+                "label_state()     current label offsets",
+                "state$label_edits edited label text keyed by label_id",
+                "region_palette()  named color vector",
+                "current_plot()    ggplot2 object from render_dragged_map()",
+                sep = "\n"
+              )),
+              tags$h4("Region offsets"),
+              verbatimTextOutput("region_state_text", placeholder = TRUE),
+              tags$h4("Label offsets"),
+              verbatimTextOutput("label_state_text", placeholder = TRUE)
+            )
+          ),
+          conditionalPanel(
+            condition = "input.workspace_tab === 'Drag'",
+            class = "workspace-offset-toggle",
+            checkboxInput("show_helper_panel", "Offset panel", value = TRUE)
+          )
         )
       )
     )
   )
-)
 }
 
 # ---- Server -------------------------------------------------------------------
@@ -1723,6 +1949,10 @@ server <- function(input, output, session) {
     label_csv_cache       = NULL,
     column_offset_store = list(),  # per-column {region, label} cache keyed by region_context_key()
     active_region_path = NULL,     # character vector: e.g. c("COUNTY", "MUN") when hierarchy active
+    column_ui_nonce = 0L,          # bumped by "Use recommended grouping"
+    bloom_parents = character(),   # expanded parent keys (max BLOOM_MAX_PARENTS)
+    bloom_child_col_active = NULL, # child column currently in effect for bloom
+    bloom_version = 0L,            # bumped to force a helper rebuild
     label_edits      = list(),
     region_palette_override = NULL,
     label_palette_override  = NULL,
@@ -1736,6 +1966,8 @@ server <- function(input, output, session) {
     redo_stack = list(),
     history_armed = FALSE,
     history_ignore_until = NULL,
+    boundary_drag_ignore_until = NULL,
+    boundary_drag_parent = NULL,
     restoring_history = FALSE
   )
 
@@ -1806,6 +2038,8 @@ server <- function(input, output, session) {
     state$redo_stack <- list()
     state$history_armed <- FALSE
     state$history_ignore_until <- NULL
+    state$boundary_drag_ignore_until <- NULL
+    state$boundary_drag_parent <- NULL
     state$helper_signature <- NULL
     state$column_offset_store <- list()
   }
@@ -1852,6 +2086,7 @@ server <- function(input, output, session) {
   }
 
   INTERNAL_REGION_COL <- "..dragmapr_region_key.."
+  BLOOM_MAX_PARENTS   <- 2L  # keep the page readable: at most two expanded parents
 
   clean_group_value <- function(x) {
     x <- trimws(as.character(x))
@@ -1894,6 +2129,281 @@ server <- function(input, output, session) {
     )
     out$region <- as.character(out$region)
     out
+  }
+
+  # ---- Selective bloom (local elastic expansion) -----------------------------
+  # The user picks a child column ("bloom into") and up to BLOOM_MAX_PARENTS
+  # parent regions. Only those parents are subdivided into children; the rest
+  # of the map keeps the parent grouping. Everything is keyed by the same
+  # composite region paths the helper uses as drag_region values, so this is
+  # entirely column-name agnostic.
+
+  bloom_child_keys <- function(x, path, child_col) {
+    make_region_path(x, unique(c(as.character(path), child_col)))
+  }
+
+  # Adopt an offsets snapshot sent by the helper alongside click/collapse
+  # messages, so bloom math never runs on polling-lagged state. Shiny
+  # deserializes the JSON array as a data frame (simplifyDataFrame), but a
+  # plain list of rows is also accepted defensively.
+  # apply_helper_offset_rows <- function(rows) {
+  #   if (is.null(rows) || length(rows) == 0L) return(invisible(FALSE))
+  #   df <- NULL
+  #   if (is.data.frame(rows)) {
+  #     if (all(c("region", "dx_m", "dy_m") %in% names(rows))) {
+  #       df <- data.frame(
+  #         region = as.character(rows$region),
+  #         dx_m   = suppressWarnings(as.numeric(rows$dx_m)),
+  #         dy_m   = suppressWarnings(as.numeric(rows$dy_m)),
+  #         stringsAsFactors = FALSE
+  #       )
+  #     }
+  #   } else if (is.list(rows)) {
+  #     df <- tryCatch(
+  #       data.frame(
+  #         region = vapply(rows, function(r) as.character(r$region %||% ""), character(1L)),
+  #         dx_m = vapply(rows, function(r) {
+  #           suppressWarnings(as.numeric(r$dx_m %||% 0))
+  #         }, numeric(1L)),
+  #         dy_m = vapply(rows, function(r) {
+  #           suppressWarnings(as.numeric(r$dy_m %||% 0))
+  #         }, numeric(1L)),
+  #         stringsAsFactors = FALSE
+  #       ),
+  #       error = function(e) NULL
+  #     )
+  #   }
+  #   if (is.null(df)) return(invisible(FALSE))
+  #   df$region[is.na(df$region)] <- ""
+  #   df$dx_m[!is.finite(df$dx_m)] <- 0
+  #   df$dy_m[!is.finite(df$dy_m)] <- 0
+  #   df <- df[nzchar(df$region) & (df$dx_m != 0 | df$dy_m != 0), , drop = FALSE]
+  #   state$region_csv_cache <- if (nrow(df) > 0L) csv_text(df) else NULL
+  #   invisible(TRUE)
+  # }
+  normalize_offset_rows_from_helper <- function(rows) {
+    if (is.null(rows) || length(rows) == 0L) {
+      return(NULL)
+    }
+
+    df <- NULL
+
+    if (is.data.frame(rows)) {
+      if (all(c("region", "dx_m", "dy_m") %in% names(rows))) {
+        df <- data.frame(
+          region = as.character(rows$region),
+          dx_m   = suppressWarnings(as.numeric(rows$dx_m)),
+          dy_m   = suppressWarnings(as.numeric(rows$dy_m)),
+          stringsAsFactors = FALSE
+        )
+      }
+    } else if (is.list(rows)) {
+      df <- tryCatch(
+        data.frame(
+          region = vapply(rows, function(r) as.character(r$region %||% ""), character(1L)),
+          dx_m = vapply(rows, function(r) {
+            suppressWarnings(as.numeric(r$dx_m %||% 0))
+          }, numeric(1L)),
+          dy_m = vapply(rows, function(r) {
+            suppressWarnings(as.numeric(r$dy_m %||% 0))
+          }, numeric(1L)),
+          stringsAsFactors = FALSE
+        ),
+        error = function(e) NULL
+      )
+    }
+
+    if (is.null(df)) {
+      return(NULL)
+    }
+
+    df$region[is.na(df$region)] <- ""
+    df$region <- trimws(df$region)
+    df$dx_m[!is.finite(df$dx_m)] <- 0
+    df$dy_m[!is.finite(df$dy_m)] <- 0
+
+    df <- df[nzchar(df$region), , drop = FALSE]
+    df <- df[!duplicated(df$region, fromLast = TRUE), , drop = FALSE]
+
+    rownames(df) <- NULL
+    df
+  }
+
+  merge_region_offset_rows <- function(incoming) {
+    if (is.null(incoming) || !is.data.frame(incoming) || nrow(incoming) == 0L) {
+      return(invisible(FALSE))
+    }
+
+    existing <- bloom_offset_df()
+
+    # Remove only the regions that the helper just reported.
+    # Keep every other parent/child offset untouched.
+    existing <- existing[
+      !(as.character(existing$region) %in% as.character(incoming$region)),
+      ,
+      drop = FALSE
+    ]
+
+    # Do not store zero rows, but a zero row from incoming still clears that
+    # specific region because we removed it from existing above.
+    incoming <- incoming[
+      incoming$dx_m != 0 | incoming$dy_m != 0,
+      ,
+      drop = FALSE
+    ]
+
+    out <- rbind(existing, incoming)
+    out <- out[nzchar(as.character(out$region)), , drop = FALSE]
+    out <- out[!duplicated(out$region, fromLast = TRUE), , drop = FALSE]
+
+    state$region_csv_cache <- if (nrow(out) > 0L) csv_text(out) else NULL
+
+    invisible(TRUE)
+  }
+
+  apply_helper_offset_rows <- function(rows) {
+    incoming <- normalize_offset_rows_from_helper(rows)
+    merge_region_offset_rows(incoming)
+  }
+
+  helper_offset_rows_changed <- function(rows, tol = 1e-6) {
+    incoming <- normalize_offset_rows_from_helper(rows)
+    if (is.null(incoming) || !is.data.frame(incoming) || nrow(incoming) == 0L) {
+      return(FALSE)
+    }
+
+    current <- bloom_offset_df()
+    current <- current[!duplicated(as.character(current$region), fromLast = TRUE), , drop = FALSE]
+    idx <- match(as.character(incoming$region), as.character(current$region))
+
+    cur_dx <- rep(0, nrow(incoming))
+    cur_dy <- rep(0, nrow(incoming))
+    matched <- !is.na(idx)
+    cur_dx[matched] <- current$dx_m[idx[matched]]
+    cur_dy[matched] <- current$dy_m[idx[matched]]
+
+    any(abs(incoming$dx_m - cur_dx) > tol | abs(incoming$dy_m - cur_dy) > tol)
+  }
+
+  # Current region offsets as a clean data frame (possibly empty).
+  bloom_offset_df <- function() {
+    df <- tryCatch(read_csv_text(state$region_csv_cache), error = function(e) NULL)
+    if (is.null(df) || !all(c("region", "dx_m", "dy_m") %in% names(df))) {
+      return(data.frame(region = character(), dx_m = numeric(), dy_m = numeric(),
+                        stringsAsFactors = FALSE))
+    }
+    df <- df[, c("region", "dx_m", "dy_m")]
+    df$region <- as.character(df$region)
+    df$dx_m <- suppressWarnings(as.numeric(df$dx_m))
+    df$dy_m <- suppressWarnings(as.numeric(df$dy_m))
+    df$dx_m[!is.finite(df$dx_m)] <- 0
+    df$dy_m[!is.finite(df$dy_m)] <- 0
+    df
+  }
+
+  # Single source of truth for expanding/collapsing bloomed parents.
+  # Saves the parent offset before expansion, hands it to the children,
+  # restores it on collapse, and pushes the new bloom state to the live
+  # helper iframe (no rebuild, no loading overlay).
+  set_bloom_parents <- function(new_sel, notify = TRUE, path = NULL) {
+    new_sel <- unique(as.character(new_sel %||% character()))
+    new_sel <- new_sel[!is.na(new_sel) & nzchar(new_sel)]
+    if (length(new_sel) > BLOOM_MAX_PARENTS) {
+      new_sel <- utils::tail(new_sel, BLOOM_MAX_PARENTS)
+    }
+    old_sel   <- state$bloom_parents
+    child_col <- state$bloom_child_col_active
+    if (is.null(child_col) || !nzchar(child_col %||% "")) {
+      state$bloom_parents <- character()
+      return(invisible(FALSE))
+    }
+    x <- projected_sf()
+    if (!child_col %in% names(x)) {
+      state$bloom_parents <- character()
+      return(invisible(FALSE))
+    }
+    path <- as.character(path %||% active_region_path())
+    base_keys  <- make_region_path(x, path)
+    child_keys <- bloom_child_keys(x, path, child_col)
+    new_sel <- new_sel[new_sel %in% base_keys]
+    if (identical(sort(new_sel), sort(old_sel))) {
+      return(invisible(FALSE))
+    }
+
+    added   <- setdiff(new_sel, old_sel)
+    removed <- setdiff(old_sel, new_sel)
+    df <- bloom_offset_df()
+
+    for (p in removed) {
+      # The collapsed parent lands at the mean of its children's current
+      # positions, so dragging the whole group then compressing keeps the
+      # branch where the user left it.
+      kids <- unique(child_keys[base_keys == p])
+      kid_rows <- df[df$region %in% kids, , drop = FALSE]
+      n_kids <- max(length(kids), 1L)
+      pdx <- sum(kid_rows$dx_m) / n_kids
+      pdy <- sum(kid_rows$dy_m) / n_kids
+      df <- df[!(df$region %in% kids) & df$region != p, , drop = FALSE]
+      if (pdx != 0 || pdy != 0) {
+        df <- rbind(df, data.frame(region = p, dx_m = pdx, dy_m = pdy,
+                                   stringsAsFactors = FALSE))
+      }
+    }
+
+    for (p in added) {
+      # Children inherit the parent's current offset exactly.
+      idx <- match(p, df$region)
+      pdx <- if (!is.na(idx)) df$dx_m[idx] else 0
+      pdy <- if (!is.na(idx)) df$dy_m[idx] else 0
+      df <- df[df$region != p, , drop = FALSE]
+      kids <- unique(child_keys[base_keys == p])
+      if ((pdx != 0 || pdy != 0) && length(kids) > 0L) {
+        df <- rbind(df, data.frame(region = kids, dx_m = pdx, dy_m = pdy,
+                                   stringsAsFactors = FALSE))
+      }
+    }
+
+    state$region_csv_cache <- if (nrow(df) > 0L) csv_text(df) else NULL
+    state$bloom_parents <- new_sel
+
+    # Layout history belongs to one grouping state.
+    state$undo_stack <- list()
+    state$redo_stack <- list()
+    state$history_armed <- FALSE
+    state$history_ignore_until <- NULL
+
+    if (length(added) > 0L) {
+      set_status(
+        paste0("Bloomed '", paste(added, collapse = "', '"), "' into '",
+               child_col, "'. Use the dotted frame to drag the whole branch; ",
+               "click a child to compress it back to the parent."),
+        "ok"
+      )
+    } else if (length(removed) > 0L) {
+      set_status(
+        paste0("Compressed '", paste(removed, collapse = "', '"),
+               "' back to '", utils::tail(path, 1L), "'."),
+        "info"
+      )
+    }
+    if (isTRUE(notify)) {
+      session$sendCustomMessage("dragmapr-bloom", list(
+        expanded              = as.list(new_sel),
+        animate               = as.list(added),
+        collapse              = as.list(removed),
+        deferVisuals          = length(removed) > 0L,
+        visualFreezeMs        = if (length(removed) > 0L) 340 else 0,
+        collapseDurationMs    = 260,
+        collapseScale         = 0.16,
+        collapseOpacity       = 0.04,
+        boundary              = isTRUE(input$bloom_boundary %||% TRUE),
+        boundaryBehavior      = "drag",
+        boundaryLabel         = "Drag to",
+        boundaryDragThreshold = 8,
+        regionOffsets         = rows_for_message(bloom_offset_df())
+      ))
+    }
+    invisible(TRUE)
   }
 
   rows_for_message <- function(x) {
@@ -2170,17 +2680,42 @@ server <- function(input, output, session) {
     path
   })
 
+  # TRUE when a valid bloom child column is set and at least one parent is
+  # currently expanded.
+  bloom_active <- reactive({
+    child_col <- state$bloom_child_col_active
+    !is.null(child_col) && nzchar(child_col %||% "") &&
+      length(state$bloom_parents) > 0L &&
+      child_col %in% names(projected_sf())
+  })
+
   map_sf <- reactive({
     x    <- projected_sf()
     path <- active_region_path()
-    if (length(path) > 1L) {
+    if (isTRUE(bloom_active())) {
+      # Mixed-level view: expanded parents render as children, the rest of
+      # the map keeps the parent grouping.
+      base  <- make_region_path(x, path)
+      child <- bloom_child_keys(x, path, state$bloom_child_col_active)
+      x[[INTERNAL_REGION_COL]] <- ifelse(base %in% state$bloom_parents, child, base)
+    } else if (length(path) > 1L) {
       x[[INTERNAL_REGION_COL]] <- make_region_path(x, path)
     }
     x
   })
 
   effective_region_col <- reactive({
-    if (length(active_region_path()) > 1L) INTERNAL_REGION_COL else region_col()
+    if (isTRUE(bloom_active()) || length(active_region_path()) > 1L) {
+      INTERNAL_REGION_COL
+    } else {
+      region_col()
+    }
+  })
+
+  # Groups at the parent level (ignoring any bloom expansion).
+  parent_level_groups <- reactive({
+    req(region_col())
+    stable_unique(make_region_path(projected_sf(), active_region_path()))
   })
 
   available_columns <- reactive(safe_names(projected_sf()))
@@ -2203,17 +2738,81 @@ server <- function(input, output, session) {
     stable_unique(map_sf()[[effective_region_col()]])
   })
 
-  region_palette <- reactive({
+  darken_hex <- function(hex, amount = 0.38) {
+    # Note: pmax(0, m) would strip the matrix's dim attribute (pmax copies
+    # attributes from its FIRST argument), making m[1, ] fail with
+    # "incorrect number of dimensions". Values here are already in [0, 1]
+    # and (1 - amount) <= 1, so no clamping is needed at all.
+    rgb <- grDevices::col2rgb(hex) / 255
+    rgb <- rgb * (1 - max(0, min(1, amount)))
+    grDevices::rgb(rgb[1, ], rgb[2, ], rgb[3, ])
+  }
+
+  stable_palette_for <- function(keys, palette = default_palette) {
+    keys <- stable_unique(keys)
+    stats::setNames(rep(palette, length.out = length(keys)), keys)
+  }
+
+  parent_region_palette <- reactive({
     req(region_col())
-    groups <- region_groups()
-    n      <- length(groups)
+
+    parents <- parent_level_groups()
+    pal <- stable_palette_for(parents, default_palette)
+
     override <- state$region_palette_override
-    base_palette <- stats::setNames(rep(default_palette, length.out = n), groups)
     if (!is.null(override)) {
-      keep <- intersect(names(override), groups)
-      base_palette[keep] <- unname(override[keep])
+      keep <- intersect(names(override), names(pal))
+      pal[keep] <- unname(override[keep])
     }
-    base_palette
+
+    pal
+  })
+
+  bloom_child_palette <- reactive({
+    child_col <- state$bloom_child_col_active
+
+    if (is.null(child_col) || !nzchar(child_col %||% "")) {
+      return(character())
+    }
+
+    x <- projected_sf()
+    if (!child_col %in% names(x)) {
+      return(character())
+    }
+
+    path <- active_region_path()
+
+    parent_keys <- make_region_path(x, path)
+    child_keys  <- bloom_child_keys(x, path, child_col)
+
+    parent_pal <- parent_region_palette()
+    child_groups <- stable_unique(child_keys)
+
+    out <- character(length(child_groups))
+    names(out) <- child_groups
+
+    for (parent in stable_unique(parent_keys)) {
+      kids <- stable_unique(child_keys[parent_keys == parent])
+      # `[` (not `[[`) so a missing parent gives NA instead of erroring
+      # during data/column transitions.
+      parent_color <- unname(parent_pal[parent])
+
+      if (length(parent_color) != 1L || is.na(parent_color)) {
+        parent_color <- "#334155"
+      }
+
+      amounts <- seq(0.28, 0.52, length.out = length(kids))
+
+      for (i in seq_along(kids)) {
+        out[[kids[i]]] <- darken_hex(parent_color, amount = amounts[i])
+      }
+    }
+
+    out
+  })
+
+  region_palette <- reactive({
+    c(parent_region_palette(), bloom_child_palette())
   })
 
   legend_values <- reactive({
@@ -2237,9 +2836,17 @@ server <- function(input, output, session) {
 
   helper_region_palette <- reactive({
     pal <- region_palette()
-    selected <- legend_values()
-    selected <- intersect(selected, names(pal))
-    c(pal[selected], pal[setdiff(names(pal), selected)])
+
+    parent_names <- names(parent_region_palette())
+    child_names  <- names(bloom_child_palette())
+
+    ordered <- unique(c(
+      intersect(parent_names, names(pal)),
+      intersect(child_names, names(pal)),
+      names(pal)
+    ))
+
+    pal[ordered]
   })
 
   legend_max_keys <- reactive({
@@ -2290,14 +2897,106 @@ server <- function(input, output, session) {
     apply_label_edits(labels, state$label_edits)
   })
 
+  label_auto_limit_n <- reactive({
+    n <- suppressWarnings(as.integer(input$label_auto_limit_n %||% LABEL_AUTO_LIMIT))
+    if (!is.finite(n)) n <- LABEL_AUTO_LIMIT
+    max(LABEL_AUTO_MIN, min(LABEL_AUTO_MAX, n))
+  })
+
+  label_area_scores <- reactive({
+    labels <- all_label_table()
+    ids <- as.character(labels$label_id)
+    out <- stats::setNames(rep(0, length(ids)), ids)
+    if (length(ids) == 0L) {
+      return(out)
+    }
+
+    x <- map_sf()
+    region_col_now <- effective_region_col()
+    if (!region_col_now %in% names(x) || nrow(x) == 0L) {
+      return(out)
+    }
+
+    groups <- as.character(x[[region_col_now]])
+    areas <- suppressWarnings(as.numeric(sf::st_area(sf::st_geometry(x))))
+    areas[!is.finite(areas)] <- 0
+
+    summed <- tapply(areas, groups, sum, na.rm = TRUE)
+    keep <- intersect(names(summed), ids)
+    out[keep] <- as.numeric(summed[keep])
+    out
+  })
+
+  bloom_child_label_ids <- reactive({
+    child_col <- state$bloom_child_col_active
+    if (is.null(child_col) || !nzchar(child_col %||% "") ||
+        length(state$bloom_parents) == 0L ||
+        !child_col %in% names(projected_sf())) {
+      return(character())
+    }
+
+    x <- projected_sf()
+    path <- active_region_path()
+    base_keys  <- make_region_path(x, path)
+    child_keys <- bloom_child_keys(x, path, child_col)
+    unique(as.character(child_keys[base_keys %in% state$bloom_parents]))
+  })
+
+  auto_visible_label_ids <- reactive({
+    labels <- all_label_table()
+    ids <- as.character(labels$label_id)
+    if (length(ids) == 0L) {
+      return(ids)
+    }
+
+    limit <- label_auto_limit_n()
+    if (!isTRUE(input$label_auto_limit) || length(ids) <= limit) {
+      return(ids)
+    }
+
+    areas <- label_area_scores()
+    moved <- as.character(bloom_offset_df()$region)
+    bloom_kids <- bloom_child_label_ids()
+
+    score <- areas[ids]
+    score[!is.finite(score)] <- 0
+    score <- score + ifelse(ids %in% moved, max(score, 1) * 10, 0)
+    score <- score + ifelse(ids %in% bloom_kids, max(score, 1) * 100, 0)
+
+    # `order()` has one `decreasing` flag, so sort the numeric score by
+    # negating it and then use stable text tie-breakers.
+    ordered <- ids[order(-score, as.character(labels$label), as.character(labels$region), method = "radix")]
+    utils::head(unique(as.character(ordered)), limit)
+  })
+
   visible_label_ids <- reactive({
-    ids <- all_label_table()$label_id
+    ids <- as.character(all_label_table()$label_id)
     selected <- state$label_filter_selection
     if (is.null(selected)) {
-      ids
+      auto_visible_label_ids()
     } else {
       intersect(as.character(selected), ids)
     }
+  })
+
+  label_display_summary <- reactive({
+    total <- length(as.character(all_label_table()$label_id))
+    visible <- length(visible_label_ids())
+    selected <- state$label_filter_selection
+
+    if (total == 0L) {
+      return("No labels available for the current grouping.")
+    }
+    if (!isTRUE(input$show_labels)) {
+      return(paste0(total, " label", if (total == 1L) "" else "s", " available. Labels are hidden."))
+    }
+    if (!is.null(selected)) {
+      return(paste0("Showing ", visible, " of ", total, " selected label", if (visible == 1L) "" else "s", "."))
+    }
+    if (isTRUE(input$label_auto_limit) && visible < total) {
+      return(paste0("Auto showing ", visible, " of ", total, " labels. Use the picker to choose exact labels or Select all when needed."))
+    }
+    paste0("Showing all ", total, " label", if (total == 1L) "" else "s", ".")
   })
 
   label_palette <- reactive({
@@ -2374,20 +3073,54 @@ server <- function(input, output, session) {
   region_csv_raw <- debounce(reactive(input$region_csv), 250)
   label_csv_raw  <- debounce(reactive(input$label_csv),  250)
 
+  # observeEvent(region_csv_raw(), {
+  #   incoming <- region_csv_raw()
+  #   if (!is.null(incoming) && nzchar(incoming)) {
+  #     incoming_df <- tryCatch(read_csv_text(incoming), error = function(e) NULL)
+  #     if (!is.null(incoming_df) && "region" %in% names(incoming_df)) {
+  #       current_groups <- tryCatch(region_groups(), error = function(e) NULL)
+  #       # Reject broadcasts from the old column's iframe: only accept if the
+  #       # incoming region names exactly match the current column's groups.
+  #       if (is.null(current_groups) ||
+  #           setequal(as.character(incoming_df$region), as.character(current_groups))) {
+  #         state$region_csv_cache <- incoming
+  #       }
+  #     }
+  #   }
+  # }, ignoreInit = TRUE)
+
   observeEvent(region_csv_raw(), {
     incoming <- region_csv_raw()
-    if (!is.null(incoming) && nzchar(incoming)) {
-      incoming_df <- tryCatch(read_csv_text(incoming), error = function(e) NULL)
-      if (!is.null(incoming_df) && "region" %in% names(incoming_df)) {
-        current_groups <- tryCatch(region_groups(), error = function(e) NULL)
-        # Reject broadcasts from the old column's iframe: only accept if the
-        # incoming region names exactly match the current column's groups.
-        if (is.null(current_groups) ||
-            setequal(as.character(incoming_df$region), as.character(current_groups))) {
-          state$region_csv_cache <- incoming
-        }
+
+    if (is.null(incoming) || !nzchar(incoming)) {
+      return()
+    }
+
+    incoming_df <- tryCatch(read_csv_text(incoming), error = function(e) NULL)
+
+    if (is.null(incoming_df) || !"region" %in% names(incoming_df)) {
+      return()
+    }
+
+    incoming_df <- normalize_offset_rows_from_helper(incoming_df)
+
+    if (is.null(incoming_df) || nrow(incoming_df) == 0L) {
+      return()
+    }
+
+    current_groups <- tryCatch(region_groups(), error = function(e) NULL)
+
+    # Accept partial updates only when every incoming key belongs to the
+    # current visible/bloomed key set. This prevents old iframe broadcasts
+    # from another grouping from corrupting the state.
+    if (!is.null(current_groups)) {
+      ok <- all(as.character(incoming_df$region) %in% as.character(current_groups))
+      if (!ok) {
+        return()
       }
     }
+
+    merge_region_offset_rows(incoming_df)
   }, ignoreInit = TRUE)
 
   observeEvent(label_csv_raw(), {
@@ -2628,27 +3361,331 @@ server <- function(input, output, session) {
     )
   })
 
+  # First nesting child column for a given parent column, or NULL. Used for
+  # the "Detected" summary and the recommended-grouping action.
+  recommend_bloom_child <- function(x, parent_col) {
+    cols <- setdiff(safe_names(x), parent_col)
+    if (is.null(parent_col) || length(cols) == 0L) return(NULL)
+    parent_v <- clean_group_value(x[[parent_col]])
+    old_n <- length(unique(parent_v))
+    for (col in cols) {
+      child_v <- clean_group_value(x[[col]])
+      new_n <- length(unique(child_v))
+      if (new_n <= old_n || new_n > 600L) next
+      comp_n <- length(unique(paste(parent_v, child_v, sep = "\r")))
+      if (comp_n <= ceiling(new_n * 1.5)) return(col)
+    }
+    NULL
+  }
+
+  # Always-visible summary of the current configuration.
+  output$current_setup_card <- renderUI({
+    cols <- available_columns()
+    if (length(cols) == 0L) return(NULL)
+    rcol <- region_col() %||% "-"
+    child <- state$bloom_child_col_active
+    expanded <- state$bloom_parents
+    n_parents <- length(parent_level_groups())
+    labels_txt <- if (isTRUE(input$show_labels %||% TRUE)) {
+      if (isTRUE(input$label_auto_limit %||% TRUE)) {
+        paste0("Auto, up to ", input$label_auto_limit_n %||% LABEL_AUTO_LIMIT)
+      } else {
+        "On"
+      }
+    } else {
+      "Off"
+    }
+    tip <- if (is.null(child) || !nzchar(child %||% "")) {
+      "Tip: pick 'Expand into' below, then click a group on the map to bloom it."
+    } else if (length(expanded) == 0L) {
+      paste0("Tip: click a ", rcol, " on the map to bloom it into ", child, ".")
+    } else {
+      "Tip: drag the dotted frame to move a branch; click it to collapse."
+    }
+    tags$div(
+      class = "studio-setup-card",
+      tags$div("Current setup", class = "setup-title"),
+      tags$div(class = "setup-row",
+               tags$span("Group map by"), tags$span(rcol)),
+      tags$div(class = "setup-row",
+               tags$span("Expand into"),
+               tags$span(if (!is.null(child) && nzchar(child %||% "")) child else "Off")),
+      tags$div(class = "setup-row",
+               tags$span("Groups"), tags$span(format(n_parents))),
+      tags$div(class = "setup-row",
+               tags$span("Expanded"),
+               tags$span(if (length(expanded) > 0L) {
+                 paste(expanded, collapse = ", ")
+               } else {
+                 "None"
+               })),
+      tags$div(class = "setup-row",
+               tags$span("Labels"), tags$span(labels_txt)),
+      tags$div(tip, class = "setup-tip")
+    )
+  })
+
+  # "Detected" block inside Start.
+  output$start_summary <- renderUI({
+    x <- projected_sf()
+    cols <- available_columns()
+    if (is.null(x) || !inherits(x, "sf") || length(cols) == 0L) {
+      return(tags$p("Upload a spatial file to see what dragmapr detects.",
+                    class = "studio-help"))
+    }
+    geom_types <- unique(as.character(sf::st_geometry_type(x)))
+    rec_parent <- default_studio_region_col(x, cols)
+    rec_child <- tryCatch(recommend_bloom_child(x, rec_parent),
+                          error = function(e) NULL)
+    tagList(
+      tags$div(class = "setup-row",
+               tags$span("Features"), tags$span(format(nrow(x)))),
+      tags$div(class = "setup-row",
+               tags$span("Geometry"),
+               tags$span(paste(utils::head(geom_types, 2L), collapse = ", "))),
+      tags$div(class = "setup-row",
+               tags$span("CRS"),
+               tags$span(if (isTRUE(sf::st_is_longlat(x))) "Geographic" else "Projected")),
+      tags$div(class = "setup-row",
+               tags$span("Recommended"),
+               tags$span(if (!is.null(rec_child)) {
+                 paste0(rec_parent, " → ", rec_child)
+               } else {
+                 rec_parent %||% "-"
+               })),
+      tags$div(class = "studio-action-row",
+               actionButton("use_recommended", "Use recommended grouping",
+                            class = "btn-sm btn-default"))
+    )
+  })
+
+  observeEvent(input$use_recommended, {
+    x <- projected_sf()
+    cols <- available_columns()
+    if (length(cols) == 0L) return()
+    rec <- default_studio_region_col(x, cols)
+    if (is.null(rec) || identical(rec, input$region_col)) {
+      set_status(paste0("Already grouping by '", rec %||% "-", "'."), "info")
+      return()
+    }
+    state$pending_region_col <- rec
+    state$pending_label_col  <- rec
+    state$column_ui_nonce <- state$column_ui_nonce + 1L
+    set_status(paste0("Grouping by '", rec, "'. Pick 'Expand into' in the ",
+                      "Grouping & bloom section to enable bloom."), "info")
+  })
+
+  # Once the recommended grouping has landed in the input, stop forcing it.
+  observeEvent(input$region_col, {
+    if (!is.null(state$pending_region_col) &&
+        identical(input$region_col, state$pending_region_col)) {
+      state$pending_region_col <- NULL
+      state$pending_label_col  <- NULL
+    }
+  }, ignoreInit = TRUE)
+
   output$column_controls <- renderUI({
+    state$column_ui_nonce  # re-render when "Use recommended grouping" runs
     cols <- available_columns()
     if (length(cols) == 0L) return(tags$p("No non-geometry columns found.", style = "color:#6b7280; font-size:0.83rem;"))
     default_col <- state$pending_region_col %||% default_studio_region_col(projected_sf(), cols)
     default_label <- state$pending_label_col %||% default_col
+    selected_region <- state$pending_region_col %||%
+      choose_column(isolate(input$region_col), cols, default_col)
+    selected_label <- state$pending_label_col %||%
+      choose_column(isolate(input$label_col), cols, default_label)
     tagList(
       studio_select(
-        "region_col", "Group / region column",
+        "region_col", "Group map by",
         choices = cols,
-        selected = choose_column(isolate(input$region_col), cols, default_col),
+        selected = choose_column(selected_region, cols, default_col),
         placeholder = "Choose grouping column"
       ),
       tags$div(class = "studio-field-gap"),
       studio_select(
-        "label_col",  "Label column",
+        "label_col",  "Label names from",
         choices = cols,
-        selected = choose_column(isolate(input$label_col), cols, default_label),
+        selected = choose_column(selected_label, cols, default_label),
         placeholder = "Choose label column"
       )
     )
   })
+
+  output$bloom_controls <- renderUI({
+    cols <- available_columns()
+    if (length(cols) == 0L) return(NULL)
+    path <- active_region_path()
+    child_choices <- setdiff(cols, as.character(path))
+    parents <- parent_level_groups()
+    active_child <- state$bloom_child_col_active %||% ""
+    tagList(
+      tags$p(
+        paste0(
+          "Pick what a parent should bloom into, then click a parent on the ",
+          "map (or choose below). At most ", BLOOM_MAX_PARENTS, " parents ",
+          "can be expanded at a time; expanding another replaces the oldest."
+        ),
+        class = "studio-help"
+      ),
+      studio_select(
+        "bloom_child_col", "Expand into (child column)",
+        choices  = c(stats::setNames("", "Off"),
+                     stats::setNames(child_choices, child_choices)),
+        selected = if (nzchar(active_child) && active_child %in% child_choices) {
+          active_child
+        } else {
+          ""
+        },
+        placeholder = "Choose child column"
+      ),
+      tags$div(class = "studio-field-gap"),
+      studio_multi_select(
+        "bloom_parents",
+        paste0("Expanded groups (max ", BLOOM_MAX_PARENTS, ")"),
+        choices  = parents,
+        selected = intersect(state$bloom_parents, parents),
+        placeholder = "Click the map or choose groups"
+      ),
+      checkboxInput(
+        "bloom_boundary", "Show dotted drag handle",
+        value = isTRUE(isolate(input$bloom_boundary) %||% TRUE)
+      ),
+      checkboxInput(
+        "bloom_dissolve", "Show parent only when collapsed",
+        value = isTRUE(isolate(input$bloom_dissolve) %||% TRUE)
+      )
+    )
+  })
+
+  # Arm or disarm bloom. Changing the target collapses everything first,
+  # and the chosen column must actually nest inside the current grouping.
+  observeEvent(input$bloom_child_col, {
+    sel <- as.character(input$bloom_child_col %||% "")
+    cur <- state$bloom_child_col_active %||% ""
+    if (identical(sel, cur)) return()
+    if (length(state$bloom_parents) > 0L) {
+      set_bloom_parents(character())
+    }
+    if (!nzchar(sel)) {
+      state$bloom_child_col_active <- NULL
+      if (nzchar(cur)) {
+        # Disarm: rebuild once so the helper drops the bloom machinery.
+        state$bloom_version <- state$bloom_version + 1L
+      }
+      return()
+    }
+    x <- projected_sf()
+    if (!sel %in% names(x)) return()
+    path <- active_region_path()
+    parent_v <- make_region_path(x, path)
+    child_v  <- clean_group_value(x[[sel]])
+    comp_v   <- paste(parent_v, child_v, sep = "\r")
+    old_n  <- length(unique(parent_v))
+    new_n  <- length(unique(child_v))
+    comp_n <- length(unique(comp_v))
+    if (!(new_n > old_n && comp_n <= ceiling(new_n * 1.5))) {
+      state$bloom_child_col_active <- NULL
+      if (nzchar(cur)) {
+        state$bloom_version <- state$bloom_version + 1L
+      }
+      set_status(
+        paste0("'", sel, "' does not nest inside '",
+               utils::tail(as.character(path), 1L),
+               "', so it cannot be a bloom target. Pick a column whose ",
+               "values subdivide each parent region."),
+        "error"
+      )
+      return()
+    }
+    state$bloom_child_col_active <- sel
+    # Arm: one rebuild embeds parent + child keys in the helper; after this,
+    # expanding and collapsing is instant (postMessage, no rebuild).
+    state$bloom_version <- state$bloom_version + 1L
+    set_status(
+      paste0("Bloom armed: click a parent region on the map (or pick ",
+             "parents in the Bloom panel) to expand it into '", sel, "'."),
+      "info"
+    )
+  }, ignoreInit = TRUE)
+
+  # Boundary visibility is pushed to the live helper, never a rebuild.
+  observeEvent(input$bloom_boundary, {
+    if (length(state$bloom_parents) == 0L) return()
+    session$sendCustomMessage("dragmapr-bloom", list(
+      expanded              = as.list(state$bloom_parents),
+      animate               = list(),
+      boundary              = isTRUE(input$bloom_boundary),
+      boundaryBehavior      = "drag",
+      boundaryLabel         = "Drag to",
+      boundaryDragThreshold = 8,
+      regionOffsets         = rows_for_message(bloom_offset_df())
+    ))
+  }, ignoreInit = TRUE)
+
+  # Debounced so the transient NULL emitted while the picker re-renders does
+  # not collapse the current expansion.
+  bloom_parents_input <- debounce(reactive(input$bloom_parents), 300)
+  observeEvent(bloom_parents_input(), {
+    set_bloom_parents(bloom_parents_input())
+  }, ignoreNULL = FALSE, ignoreInit = TRUE)
+
+  # Click on the map (relayed by the helper): expand an unexpanded parent,
+  # or compress the branch when one of its children is clicked.
+  observeEvent(input$helper_region_click, {
+    key <- as.character(input$helper_region_click$region %||% "")
+    if (!nzchar(key)) return()
+    child_col <- state$bloom_child_col_active
+    if (is.null(child_col) || !nzchar(child_col %||% "")) return()
+    apply_helper_offset_rows(input$helper_region_click$regionOffsets)
+    x <- projected_sf()
+    if (!child_col %in% names(x)) return()
+    path <- active_region_path()
+    base_keys  <- make_region_path(x, path)
+    child_keys <- bloom_child_keys(x, path, child_col)
+    current <- state$bloom_parents
+    if (key %in% current) {
+      set_bloom_parents(setdiff(current, key))
+    } else if (key %in% base_keys) {
+      set_bloom_parents(c(current, key))  # FIFO clamp handles the max
+    } else {
+      hit <- unique(base_keys[child_keys == key & base_keys %in% current])
+      if (length(hit) > 0L) {
+        set_bloom_parents(setdiff(current, hit))
+      }
+    }
+  })
+
+  # Dotted group frame interaction. The helper separates frame drag from
+  # frame click before it talks back to Shiny. Drag messages save offsets
+  # and keep the branch open; click messages remove the parent from the
+  # expanded set after the reversible leaf animation starts.
+  observeEvent(input$boundary_drag_offsets, {
+    parent_key <- as.character(input$boundary_drag_offsets$parent %||% "")
+    state$boundary_drag_parent <- parent_key
+    state$boundary_drag_ignore_until <- Sys.time() + 0.35
+    apply_helper_offset_rows(input$boundary_drag_offsets$regionOffsets)
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$collapse_branch, {
+    parent_key <- as.character(input$collapse_branch$parent %||% "")
+    if (!nzchar(parent_key)) return()
+
+    # Keep the latest helper-reported position before compressing, so a branch
+    # that was dragged and then clicked returns exactly where the user left
+    # it. The helper has already filtered real drag gestures into
+    # boundary_drag_offsets, so changed rows here should not block collapse.
+    apply_helper_offset_rows(input$collapse_branch$regionOffsets)
+
+    if (parent_key %in% state$bloom_parents) {
+      set_bloom_parents(setdiff(state$bloom_parents, parent_key))
+    }
+  }, ignoreInit = TRUE)
+
+  # New data invalidates any expansion state.
+  observeEvent(state$source_version, {
+    state$bloom_parents <- character()
+    state$bloom_child_col_active <- NULL
+  }, ignoreInit = TRUE)
 
   output$color_pickers <- renderUI({
     req(region_col())
@@ -2773,7 +3810,7 @@ server <- function(input, output, session) {
     )
     selected <- isolate(state$label_filter_selection)
     if (is.null(selected)) {
-      selected <- unname(choices)
+      selected <- intersect(isolate(auto_visible_label_ids()), unname(choices))
     } else {
       selected <- intersect(as.character(selected), unname(choices))
     }
@@ -2787,9 +3824,34 @@ server <- function(input, output, session) {
         placeholder = "Choose labels to show",
         all_label = "All labels"
       ),
+      tags$p(label_display_summary(), class = "studio-help"),
+      tags$div(
+        class = "studio-action-row",
+        actionButton("label_use_auto", "Use auto", class = "btn btn-default btn-xs"),
+        actionButton("label_show_all", "Show all", class = "btn btn-default btn-xs")
+      ),
       tags$div(class = "studio-field-gap")
     )
   })
+
+  observeEvent(input$label_use_auto, {
+    state$label_filter_selection <- NULL
+    session$sendCustomMessage(
+      "dragmapr-label-values",
+      list(values = as.list(visible_label_ids()))
+    )
+    set_status("Label visibility returned to Auto.", "info")
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$label_show_all, {
+    ids <- as.character(all_label_table()$label_id)
+    state$label_filter_selection <- ids
+    session$sendCustomMessage(
+      "dragmapr-label-values",
+      list(values = as.list(ids))
+    )
+    set_status(paste0("Showing all ", length(ids), " labels."), "info")
+  }, ignoreInit = TRUE)
 
   output$label_editor_ui <- renderUI({
     labels <- base_label_table()
@@ -2914,10 +3976,10 @@ server <- function(input, output, session) {
     set_status("Applied selected label text.", "ok")
   }, ignoreInit = TRUE)
 
-  observeEvent(input$static_title, {
+  observeEvent(input$apply_static_title, {
     title <- input$static_title %||% "dragmapr spatial studio"
     state$static_title <- if (is_blank(title)) "dragmapr spatial studio" else title
-  }, ignoreInit = FALSE)
+  }, ignoreInit = TRUE)
 
   observeEvent(input$reset_label_text, {
     id <- input$edit_label_id
@@ -2974,7 +4036,7 @@ server <- function(input, output, session) {
     keep <- intersect(as.character(selected), ids)
     if (length(keep) == 0L && length(selected) > 0L) {
       state$label_filter_selection <- NULL
-      set_status("Project label selection did not match the current labels, so all labels are visible.", "info")
+      set_status("Project label selection did not match the current labels, so label visibility returned to Auto.", "info")
     } else if (!identical(keep, selected)) {
       state$label_filter_selection <- keep
     }
@@ -2994,12 +4056,17 @@ server <- function(input, output, session) {
   # Presentation-only changes are sent to the existing iframe so they do not
   # reset drag state or show a map overlay.
   observeEvent(
-    list(state$source_version, projected_sf(), region_col(), label_col()),
+    list(state$source_version, projected_sf(), region_col(), label_col(),
+         state$bloom_version, input$bloom_dissolve),
     {
+      bloom_armed_now <- nzchar(state$bloom_child_col_active %||% "")
       signature <- list(
         source_version = state$source_version,
         region_col = region_col(),
-        label_col = label_col()
+        label_col = label_col(),
+        bloom_version = state$bloom_version,
+        bloom_dissolve = bloom_armed_now &&
+          isTRUE(input$bloom_dissolve %||% TRUE)
       )
       if (identical(signature, state$helper_signature)) {
         return()
@@ -3029,6 +4096,13 @@ server <- function(input, output, session) {
           }
           old_context_key <- region_context_key(old_path)
 
+          # Compress any bloomed parents first so the saved layout (and any
+          # inheritance below) is keyed by the plain parent grouping.
+          if (length(state$bloom_parents) > 0L) {
+            set_bloom_parents(character(), notify = FALSE, path = old_path)
+          }
+          state$bloom_child_col_active <- NULL
+
           # Save the current visible layout for the current grouping path.
           state$column_offset_store[[old_context_key]] <- list(
             region = state$region_csv_cache,
@@ -3036,15 +4110,27 @@ server <- function(input, output, session) {
             path   = old_path
           )
 
-          old_n <- tryCatch(
-            length(unique(clean_group_value(projected_sf()[[old_rkey]]))),
-            error = function(e) 1L
-          )
-          new_n <- tryCatch(
-            length(unique(clean_group_value(projected_sf()[[new_rkey]]))),
-            error = function(e) 1L
-          )
-          going_finer <- new_n >= old_n
+          # Data-driven hierarchy detection (column-name agnostic).
+          # The new column is treated as a child level only when it actually
+          # subdivides the current grouping AND each of its values stays
+          # within (approximately) one parent group. Duplicated child names
+          # across parents (e.g. the same municipality name in two counties)
+          # are allowed; unrelated cross-cutting attributes are not.
+          hierarchy_info <- tryCatch({
+            x_now <- projected_sf()
+            old_groups_v <- make_region_path(x_now, old_path)
+            new_alone_v  <- clean_group_value(x_now[[new_rkey]])
+            comp_v <- paste(old_groups_v, new_alone_v, sep = "\r")
+            list(
+              old_n  = length(unique(old_groups_v)),
+              new_n  = length(unique(new_alone_v)),
+              comp_n = length(unique(comp_v))
+            )
+          }, error = function(e) list(old_n = 1L, new_n = 1L, comp_n = 1L))
+          old_n  <- hierarchy_info$old_n
+          new_n  <- hierarchy_info$new_n
+          comp_n <- hierarchy_info$comp_n
+          going_finer <- new_n > old_n && comp_n <= ceiling(new_n * 1.5)
 
           if (going_finer) {
             # Parent to child: inherit from the current visible parent layout.
@@ -3146,10 +4232,141 @@ server <- function(input, output, session) {
         } else {
           FALSE
         }
+        # Bloom armed: ship parent-level keys plus per-feature child keys so
+        # expand/collapse runs fully client-side (postMessage, no rebuild,
+        # no loading overlay, animation always visible).
+        helper_region_col <- effective_region_col()
+        helper_transition <- NULL
+        bloom_col <- state$bloom_child_col_active
+        if (!is.null(bloom_col) && nzchar(bloom_col %||% "") &&
+            bloom_col %in% names(helper_x)) {
+          pathb <- active_region_path()
+          helper_x[["..dragmapr_bloom_parent.."]] <-
+            make_region_path(helper_x, pathb)
+          helper_x[["..dragmapr_bloom_child.."]] <-
+            bloom_child_keys(helper_x, pathb, bloom_col)
+          helper_region_col <- "..dragmapr_bloom_parent.."
+          helper_transition <- list(
+            child_region_col        = "..dragmapr_bloom_child..",
+            expanded                = state$bloom_parents,
+            boundary                = isTRUE(input$bloom_boundary %||% TRUE),
+            boundary_behavior       = "drag",
+            boundary_label          = "Drag to",
+            # Below this many pixels a frame/region gesture is a click;
+            # 3 was too tight (ordinary clicks register a little jitter and
+            # were treated as drags, so unbloom appeared to ignore clicks).
+            boundary_drag_threshold = 8,
+            collapse_duration_ms    = 260,
+            collapse_scale          = 0.16,
+            collapse_opacity        = 0.04,
+            collapse_visual_freeze_ms = 340
+          )
+
+          # DOM-size guard: with both levels mounted in the helper, very
+          # detailed child geometry would create too many SVG points.
+          # Simplify the DISPLAY geometry only - every export and download
+          # is built server-side from the full-resolution data.
+          if (nrow(helper_x) > 2000L) {
+            simplified <- tryCatch({
+              bb <- sf::st_bbox(helper_x)
+              tol <- sqrt((bb[["xmax"]] - bb[["xmin"]])^2 +
+                            (bb[["ymax"]] - bb[["ymin"]])^2) * 5e-4
+              sf::st_simplify(helper_x, dTolerance = tol,
+                              preserveTopology = TRUE)
+            }, error = function(e) NULL)
+            if (!is.null(simplified) &&
+                !any(sf::st_is_empty(sf::st_geometry(simplified)))) {
+              helper_x <- simplified
+              set_status(
+                paste0("Large file: the interactive map uses simplified ",
+                       "outlines for smooth animation. Exports keep full ",
+                       "detail."),
+                "info"
+              )
+            }
+          }
+
+          # Dual-level labels: ship BOTH the parent and the child label
+          # tables, tagged by level, so the helper can show and animate
+          # labels purely from branch state (no server round-trip during
+          # bloom or unbloom).
+          if (isTRUE(input$show_labels)) {
+            helper_labels <- tryCatch({
+              keyframe <- unique(data.frame(
+                parent = helper_x[["..dragmapr_bloom_parent.."]],
+                child  = helper_x[["..dragmapr_bloom_child.."]],
+                stringsAsFactors = FALSE
+              ))
+              label_mode <- input$annotation_mode %||% "labels"
+              pl <- make_studio_labels(
+                helper_x,
+                region_col     = "..dragmapr_bloom_parent..",
+                label_col      = label_col(),
+                mode           = label_mode,
+                width_px       = input$box_width  %||% 170,
+                height_px      = input$box_height %||% 76,
+                connector      = isTRUE(input$show_connectors),
+                connector_type = input$connector_type %||% "straight"
+              )
+              cl <- make_studio_labels(
+                helper_x,
+                region_col     = "..dragmapr_bloom_child..",
+                label_col      = label_col(),
+                mode           = label_mode,
+                width_px       = input$box_width  %||% 170,
+                height_px      = input$box_height %||% 76,
+                connector      = isTRUE(input$show_connectors),
+                connector_type = input$connector_type %||% "straight"
+              )
+              pl$label_level  <- "parent"
+              pl$label_parent <- pl$region
+              cl$label_level  <- "child"
+              cl$label_parent <- keyframe$parent[
+                match(as.character(cl$region), as.character(keyframe$child))
+              ]
+              lab <- rbind(pl, cl)
+              lab <- apply_label_edits(lab, state$label_edits)
+              pal <- label_palette()
+              lab$label_color <- unname(pal[as.character(lab$label_id)])
+              lab$label_color[is.na(lab$label_color)] <- "#111827"
+              shift_label_table_by_offsets(lab, helper_base)
+            }, error = function(e) helper_labels)
+          }
+
+          # Dissolved parent shells: computed once per arming. The helper
+          # shows a shell while its parent is collapsed and swaps to the
+          # child polygons when it expands, so child detail stays hidden
+          # until the bloom reveals it.
+          if (isTRUE(input$bloom_dissolve %||% TRUE)) {
+            helper_x[["..dragmapr_bloom_shell.."]] <- 0L
+            shell_rows <- lapply(
+              split(seq_len(nrow(helper_x)),
+                    helper_x[["..dragmapr_bloom_parent.."]]),
+              function(idx) {
+                geom <- tryCatch(
+                  suppressWarnings(
+                    sf::st_union(sf::st_geometry(helper_x)[idx])
+                  ),
+                  error = function(e) NULL
+                )
+                if (is.null(geom) || length(geom) == 0L) return(NULL)
+                row <- helper_x[idx[1L], , drop = FALSE]
+                sf::st_geometry(row) <- geom
+                row[["..dragmapr_bloom_shell.."]] <- 1L
+                row
+              }
+            )
+            shell_rows <- Filter(Negate(is.null), shell_rows)
+            if (length(shell_rows) > 0L) {
+              helper_x <- rbind(helper_x, do.call(rbind, shell_rows))
+              helper_transition$shell_col <- "..dragmapr_bloom_shell.."
+            }
+          }
+        }
 
         drag_map_prototype(
           helper_x,
-          region_col          = effective_region_col(),
+          region_col          = helper_region_col,
           label_col           = label_col(),
           labels              = helper_labels,
           label_values        = visible_label_ids(),
@@ -3188,6 +4405,7 @@ server <- function(input, output, session) {
           movement_connector_endpoint = input$movement_connector_endpoint %||% "closed",
           show_drag_trail      = isTRUE(input$show_drag_trail),
           side_panel          = isTRUE(input$show_helper_panel %||% TRUE),
+          transition          = helper_transition,
           file                = helper_file
         )
         state$helper_token    <- next_generation
@@ -3217,6 +4435,18 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   observeEvent(visible_label_ids(), {
+    session$sendCustomMessage(
+      "dragmapr-label-values",
+      list(values = as.list(visible_label_ids()))
+    )
+  }, ignoreInit = TRUE)
+
+  observeEvent(list(input$label_auto_limit, input$label_auto_limit_n), {
+    # Auto settings only apply when the user has not made an explicit label
+    # selection. The multi-select remains the override for exact control.
+    if (!is.null(state$label_filter_selection)) {
+      return()
+    }
     session$sendCustomMessage(
       "dragmapr-label-values",
       list(values = as.list(visible_label_ids()))

@@ -74,6 +74,30 @@
 #' @param side_panel Show the built-in copy/download side panel in the helper
 #'   HTML. Defaults to `TRUE`; Shiny apps that provide their own controls can
 #'   set this to `FALSE`.
+#' @param transition Optional local elastic transition played on first render,
+#'   typically built from [build_elastic_transition()] output when switching
+#'   from a parent grouping to a child grouping. A named list with elements:
+#'   `anchors` (data frame with `region`, `ax_m`, `ay_m` columns,
+#'   where `ax_m`/`ay_m` is each region's bloom start point relative to its
+#'   final position, in map units; optional when `groups` is supplied, in
+#'   which case only the boundaries are drawn), `groups` (named list mapping each
+#'   parent label to the character vector of child region values it contains;
+#'   used to draw a dotted group-drag boundary per expanded group),
+#'   `child_region_col` (column in `x` holding each feature's child-level
+#'   region key, enabling client-side expand/collapse), `shell_col` (column
+#'   flagging dissolved parent-shell features with `1`; while a parent is
+#'   collapsed only its shell is drawn and the child features stay hidden),
+#'   `expanded` (parent values to start expanded), `duration_ms`, `overshoot`,
+#'   and `boundary` (set `FALSE` to skip the dotted frame). The frame is now
+#'   treated as a two-gesture group handle by default: dragging it moves all
+#'   bloomed children in the branch together, while a plain click compresses
+#'   the branch back to the parent.
+#'   Optional transition fields include `boundary_behavior` (`"drag"`,
+#'   `"reset"`, or `"none"`), `boundary_drag_threshold` in screen pixels
+#'   before a pointer gesture is treated as a drag, and `boundary_label` for
+#'   helper text. Use `"Drag to"` so the helper can label each frame as
+#'   `"Drag to <parent/location>"`.
+#'   `NULL` (default) disables the animation.
 #' @param file Output HTML path. When `NULL`, a temporary `.html` file is
 #'   created. Pass an explicit path to save the helper somewhere durable.
 #' @param open Open the written file in the default browser via
@@ -141,6 +165,7 @@ drag_map_prototype <- function(x,
                                movement_connector_endpoint = c("closed", "open", "none"),
                                show_drag_trail = FALSE,
                                side_panel = TRUE,
+                               transition = NULL,
                                file = NULL,
                                open = FALSE) {
   if (!inherits(x, "sf")) {
@@ -260,6 +285,7 @@ drag_map_prototype <- function(x,
   if (!is.logical(side_panel) || length(side_panel) != 1L || is.na(side_panel)) {
     stop("`side_panel` must be TRUE or FALSE.", call. = FALSE)
   }
+  transition <- normalize_prototype_transition(transition)
   if (!is.logical(open) || length(open) != 1L || is.na(open)) {
     stop("`open` must be TRUE or FALSE.", call. = FALSE)
   }
@@ -273,6 +299,28 @@ drag_map_prototype <- function(x,
   tmp <- tempfile(fileext = ".geojson")
   export <- x
   export$drag_region <- as.character(export[[region_col]])
+  if (!is.null(transition$childRegionCol)) {
+    if (!transition$childRegionCol %in% names(x)) {
+      stop(
+        "`transition$child_region_col` ('", transition$childRegionCol,
+        "') not found in `x`.",
+        call. = FALSE
+      )
+    }
+    export$drag_child_region <- as.character(export[[transition$childRegionCol]])
+  }
+  if (!is.null(transition$shellCol)) {
+    if (!transition$shellCol %in% names(x)) {
+      stop(
+        "`transition$shell_col` ('", transition$shellCol,
+        "') not found in `x`.",
+        call. = FALSE
+      )
+    }
+    shell_flag <- suppressWarnings(as.integer(export[[transition$shellCol]]))
+    shell_flag[is.na(shell_flag)] <- 0L
+    export$drag_shell <- shell_flag
+  }
   sf::st_write(export, tmp, driver = "GeoJSON", delete_dsn = TRUE, quiet = TRUE,
                layer_options = "RFC7946=NO")
   geojson_text <- paste(readLines(tmp, warn = FALSE), collapse = "\n")
@@ -326,7 +374,8 @@ drag_map_prototype <- function(x,
     movementConnectorLinetype = movement_connector_linetype,
     movementConnectorEndpoint = movement_connector_endpoint,
     showDragTrail = isTRUE(show_drag_trail),
-    sidePanel = isTRUE(side_panel)
+    sidePanel = isTRUE(side_panel),
+    elasticTransition = transition
   )
 
   template <- system.file("prototype", "index.html", package = "dragmapr", mustWork = TRUE)
@@ -340,11 +389,254 @@ drag_map_prototype <- function(x,
   html <- sub("__OPTIONS__", json_for_script(options), html, fixed = TRUE)
   html <- sub("__HTML_CLASS__", if (isTRUE(side_panel)) "" else "no-side-panel", html, fixed = TRUE)
 
+  visual_freeze_script <- paste0(
+    "<script>
+",
+    "(function(){
+",
+    "  if (window.__dragmaprVisualFreezeInstalled) return;
+",
+    "  window.__dragmaprVisualFreezeInstalled = true;
+",
+    "  var timer = null;
+",
+    "  function setFrozen(active, durationMs){
+",
+    "    document.documentElement.classList.toggle('dragmapr-visual-freeze', !!active);
+",
+    "    document.body.classList.toggle('dragmapr-visual-freeze', !!active);
+",
+    "    window.clearTimeout(timer);
+",
+    "    if (active) {
+",
+    "      timer = window.setTimeout(function(){ setFrozen(false, 0); }, Math.max(0, Number(durationMs || 320)));
+",
+    "    }
+",
+    "  }
+",
+    "  var style = document.createElement('style');
+",
+    "  style.textContent = '.dragmapr-visual-freeze text, .dragmapr-visual-freeze .legend, .dragmapr-visual-freeze [class*=legend], .dragmapr-visual-freeze [class*=label] { transition: opacity 120ms ease; }';
+",
+    "  document.head.appendChild(style);
+",
+    "  window.addEventListener('message', function(event){
+",
+    "    var data = event.data || {};
+",
+    "    if (data.type === 'dragmapr-freeze-visuals') {
+",
+    "      setFrozen(!!data.active, data.durationMs);
+",
+    "    }
+",
+    "  }, true);
+",
+    "})();
+",
+    "</script>
+"
+  )
+  if (grepl("</body>", html, fixed = TRUE)) {
+    html <- sub("</body>", paste0(visual_freeze_script, "</body>"), html, fixed = TRUE)
+  } else {
+    html <- paste0(html, "
+", visual_freeze_script)
+  }
+
   writeLines(html, file, useBytes = TRUE)
   if (isTRUE(open)) {
     utils::browseURL(file)
   }
   invisible(file)
+}
+
+# Internal: validate the `transition` argument of drag_map_prototype() and
+# convert it to the camelCase payload embedded in the helper HTML.
+normalize_prototype_transition <- function(transition) {
+  if (is.null(transition)) {
+    return(NULL)
+  }
+  if (!is.list(transition)) {
+    stop(
+      "`transition` must be NULL or a named list with an `anchors` data ",
+      "frame (columns: region, ax_m, ay_m) and/or a named `groups` list. ",
+      "See ?drag_map_prototype.",
+      call. = FALSE
+    )
+  }
+  anchors <- transition$anchors
+  if (!is.null(anchors)) {
+    if (!is.data.frame(anchors) ||
+        !all(c("region", "ax_m", "ay_m") %in% names(anchors))) {
+      stop(
+        "`transition$anchors` must be a data frame with `region`, `ax_m`, ",
+        "and `ay_m` columns (bloom start point relative to each region's ",
+        "final position, in map units).",
+        call. = FALSE
+      )
+    }
+    anchors <- data.frame(
+      region = as.character(anchors$region),
+      ax_m   = suppressWarnings(as.numeric(anchors$ax_m)),
+      ay_m   = suppressWarnings(as.numeric(anchors$ay_m)),
+      stringsAsFactors = FALSE
+    )
+    anchors$ax_m[!is.finite(anchors$ax_m)] <- 0
+    anchors$ay_m[!is.finite(anchors$ay_m)] <- 0
+    anchors <- anchors[!is.na(anchors$region) & nzchar(anchors$region), , drop = FALSE]
+    if (nrow(anchors) == 0L) {
+      anchors <- NULL
+    }
+  }
+
+  groups <- transition$groups
+  if (!is.null(groups)) {
+    if (!is.list(groups) || is.null(names(groups)) || any(!nzchar(names(groups)))) {
+      stop(
+        "`transition$groups` must be a named list mapping each parent ",
+        "label to a character vector of child region values.",
+        call. = FALSE
+      )
+    }
+    groups <- lapply(groups, function(g) as.character(g))
+    if (length(groups) == 0L) {
+      groups <- NULL
+    }
+  }
+
+  child_region_col <- transition$child_region_col
+  if (!is.null(child_region_col) &&
+      (!is.character(child_region_col) || length(child_region_col) != 1L ||
+       is.na(child_region_col) || !nzchar(child_region_col))) {
+    stop(
+      "`transition$child_region_col` must be a single column name holding ",
+      "each feature's child-level region key.",
+      call. = FALSE
+    )
+  }
+  shell_col <- transition$shell_col
+  if (!is.null(shell_col) &&
+      (!is.character(shell_col) || length(shell_col) != 1L ||
+       is.na(shell_col) || !nzchar(shell_col))) {
+    stop(
+      "`transition$shell_col` must be a single column name flagging ",
+      "dissolved parent-shell features (1) versus child features (0).",
+      call. = FALSE
+    )
+  }
+  expanded <- transition$expanded
+  if (!is.null(expanded)) {
+    expanded <- as.character(expanded)
+    expanded <- expanded[!is.na(expanded) & nzchar(expanded)]
+    if (length(expanded) == 0L) expanded <- NULL
+  }
+
+  if (is.null(anchors) && is.null(groups) && is.null(child_region_col)) {
+    return(NULL)
+  }
+
+  duration_ms <- transition$duration_ms %||% 550
+  overshoot   <- transition$overshoot %||% 1.70158
+  if (!is.numeric(duration_ms) || length(duration_ms) != 1L ||
+      !is.finite(duration_ms) || duration_ms <= 0) {
+    stop("`transition$duration_ms` must be a single positive number.", call. = FALSE)
+  }
+  if (!is.numeric(overshoot) || length(overshoot) != 1L ||
+      !is.finite(overshoot) || overshoot < 0) {
+    stop("`transition$overshoot` must be a single non-negative number.", call. = FALSE)
+  }
+
+  collapse_duration_ms <- transition$collapse_duration_ms %||%
+    transition$collapseDurationMs %||% 260
+  collapse_visual_freeze_ms <- transition$collapse_visual_freeze_ms %||%
+    transition$collapseVisualFreezeMs %||% 340
+  collapse_scale <- transition$collapse_scale %||% transition$collapseScale %||% 0.16
+  collapse_opacity <- transition$collapse_opacity %||% transition$collapseOpacity %||% 0.04
+  if (!is.numeric(collapse_duration_ms) || length(collapse_duration_ms) != 1L ||
+      !is.finite(collapse_duration_ms) || collapse_duration_ms <= 0) {
+    stop("`transition$collapse_duration_ms` must be a single positive number.", call. = FALSE)
+  }
+  if (!is.numeric(collapse_visual_freeze_ms) || length(collapse_visual_freeze_ms) != 1L ||
+      !is.finite(collapse_visual_freeze_ms) || collapse_visual_freeze_ms < 0) {
+    stop("`transition$collapse_visual_freeze_ms` must be a single non-negative number.", call. = FALSE)
+  }
+  if (!is.numeric(collapse_scale) || length(collapse_scale) != 1L ||
+      !is.finite(collapse_scale) || collapse_scale < 0 || collapse_scale > 1) {
+    stop("`transition$collapse_scale` must be a number between 0 and 1.", call. = FALSE)
+  }
+  if (!is.numeric(collapse_opacity) || length(collapse_opacity) != 1L ||
+      !is.finite(collapse_opacity) || collapse_opacity < 0 || collapse_opacity > 1) {
+    stop("`transition$collapse_opacity` must be a number between 0 and 1.", call. = FALSE)
+  }
+
+  boundary_behavior <- transition$boundary_behavior %||%
+    transition$boundaryBehavior %||% "drag"
+  if (!is.character(boundary_behavior) || length(boundary_behavior) != 1L ||
+      is.na(boundary_behavior) || !nzchar(boundary_behavior)) {
+    stop(
+      "`transition$boundary_behavior` must be one of 'drag', 'reset', ",
+      "or 'none'.",
+      call. = FALSE
+    )
+  }
+  boundary_behavior <- match.arg(
+    tolower(boundary_behavior),
+    choices = c("drag", "reset", "none")
+  )
+
+  boundary_drag_threshold <- transition$boundary_drag_threshold %||%
+    transition$boundaryDragThreshold %||% 8
+  if (!is.numeric(boundary_drag_threshold) ||
+      length(boundary_drag_threshold) != 1L ||
+      !is.finite(boundary_drag_threshold) ||
+      boundary_drag_threshold < 0) {
+    stop(
+      "`transition$boundary_drag_threshold` must be a single ",
+      "non-negative number.",
+      call. = FALSE
+    )
+  }
+
+  boundary_label <- transition$boundary_label %||% transition$boundaryLabel
+  if (is.null(boundary_label) && identical(boundary_behavior, "drag")) {
+    boundary_label <- "Drag to"
+  }
+  if (!is.null(boundary_label)) {
+    if (!is.character(boundary_label) || length(boundary_label) != 1L ||
+        is.na(boundary_label)) {
+      stop(
+        "`transition$boundary_label` must be a single string or NULL.",
+        call. = FALSE
+      )
+    }
+    boundary_label <- unname(boundary_label)
+  }
+
+  # Drop NULL elements entirely: jsonlite serializes NULL as `{}`, which is
+  # truthy in JavaScript and breaks array handling in the helper. `I()` keeps
+  # length-one vectors as JSON arrays.
+  payload <- list(
+    anchors        = anchors,
+    groups         = groups,
+    childRegionCol = child_region_col,
+    shellCol       = shell_col,
+    expanded       = if (is.null(expanded)) NULL else I(expanded),
+    durationMs            = unname(duration_ms),
+    overshoot             = unname(overshoot),
+    collapseDurationMs    = unname(collapse_duration_ms),
+    collapseVisualFreezeMs = unname(collapse_visual_freeze_ms),
+    collapseScale         = unname(collapse_scale),
+    collapseOpacity       = unname(collapse_opacity),
+    boundary              = !identical(transition$boundary, FALSE) &&
+      !identical(boundary_behavior, "none"),
+    boundaryBehavior      = boundary_behavior,
+    boundaryDragThreshold = unname(boundary_drag_threshold),
+    boundaryLabel         = boundary_label
+  )
+  payload[!vapply(payload, is.null, logical(1L))]
 }
 
 json_for_script <- function(x, ...) {

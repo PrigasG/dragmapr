@@ -426,3 +426,46 @@ normalize_label_state <- function(state, source) {
   out
 }
 
+
+#' Select a readable subset of label IDs
+#'
+#' This helper is useful for interfaces that should keep all label state, but
+#' show only a manageable subset by default. It returns label IDs only; callers
+#' can pass the result to `label_values` in [drag_map_prototype()] or
+#' [render_dragged_map()].
+#'
+#' @param labels A drag label table accepted by [as_drag_labels()].
+#' @param max_labels Maximum number of label IDs to return.
+#' @param prefer Optional label IDs to keep first, for example labels from an
+#'   expanded branch or labels the user has edited.
+#'
+#' @return A character vector of label IDs.
+#' @export
+#' @examples
+#' labels <- as_drag_labels(data.frame(
+#'   label_id = c("A", "B", "C"), region = c("A", "B", "C"),
+#'   label = c("A", "B", "C"), x = 1:3, y = 1:3
+#' ))
+#' select_label_ids(labels, max_labels = 2)
+select_label_ids <- function(labels, max_labels = 25, prefer = NULL) {
+  labels <- normalize_labels(labels)
+
+  max_labels <- suppressWarnings(as.integer(max_labels))
+  if (length(max_labels) != 1L || !is.finite(max_labels) || max_labels < 0L) {
+    stop("`max_labels` must be a non-negative whole number.", call. = FALSE)
+  }
+
+  ids <- as.character(labels$label_id)
+  if (length(ids) == 0L || max_labels == 0L) {
+    return(character())
+  }
+
+  if (is.null(prefer) || length(prefer) == 0L) {
+    prefer <- character()
+  }
+  prefer <- unique(as.character(prefer))
+  prefer <- intersect(prefer[nzchar(prefer)], ids)
+  rest <- setdiff(ids, prefer)
+
+  utils::head(unique(c(prefer, rest)), max_labels)
+}

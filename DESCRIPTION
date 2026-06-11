@@ -1,6 +1,6 @@
 Package: dragmapr
 Title: Create Draggable Plots from Projected Geometry
-Version: 0.1.0
+Version: 0.2.0
 Authors@R:
     person("George", "Arthur", , "prigasgenthian48@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-1975-1459"))
@@ -10,14 +10,19 @@ Description: Creates interactive draggable plots from grouped projected
     download the resulting offset tables. Labels can be derived
     automatically with make_region_labels(), supplied directly with
     as_drag_labels(), and their moved positions saved and restored with
-    read_label_state() and apply_label_state(). When a reproducible static
+    read_label_state() and apply_label_state(). Hierarchical spatial
+    datasets are supported via make_hierarchy_key() and inherit_layout(),
+    which propagate parent-level drag offsets to finer child groupings.
+    Automatic starting layouts are provided by suggest_offsets() using
+    radial, grid, or directional algorithms. Spatial file diagnostics are
+    available through dragmapr_diagnostics(). When a reproducible static
     image is also needed, render_dragged_map() reconstructs the layout as
     a 'ggplot2' plot from the source geometry plus the exported offset
-    tables, and render_dragmapr_project() renders complete Spatial Studio
-    project bundles. The interactive layer is built on the 'D3' library:
-    Bostock, Ogievetsky and Heer (2011) <doi:10.1109/TVCG.2011.185>.
-    Spatial data handling uses the 'sf' package: Pebesma (2018)
-    <doi:10.32614/RJ-2018-009>.
+    tables. Project bundles can be written with write_dragmapr_project()
+    and rendered with render_dragmapr_project(). The interactive layer is
+    built on the 'D3' library: Bostock, Ogievetsky and Heer (2011)
+    <doi:10.1109/TVCG.2011.185>. Spatial data handling uses the 'sf'
+    package: Pebesma (2018) <doi:10.32614/RJ-2018-009>.
 License: MIT + file LICENSE
 URL: https://prigasg.github.io/dragmapr/
 BugReports: https://github.com/PrigasG/dragmapr/issues

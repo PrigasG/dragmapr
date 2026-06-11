@@ -12,6 +12,8 @@ render_dragged_map(
   label_offsets = NULL,
   labels = NULL,
   label_values = NULL,
+  max_labels = Inf,
+  label_prefer = NULL,
   region_palette = NULL,
   region_labels = NULL,
   show_legend = TRUE,
@@ -71,7 +73,16 @@ render_dragged_map(
 \code{as_drag_labels()}. Use \code{FALSE} to omit labels from the static render.}
 
 \item{label_values}{Optional character vector of label IDs to render.
-\code{NULL} renders all labels.}
+\code{NULL} renders all labels unless \code{max_labels} is finite.}
+
+\item{max_labels}{Maximum number of label IDs to render when \code{label_values}
+is \code{NULL}. Defaults to \code{Inf}, preserving the existing behavior of
+rendering all labels. Set to a finite value such as \code{25} to keep static
+exports readable.}
+
+\item{label_prefer}{Optional label IDs to prioritize when \code{max_labels} is
+finite. Useful for moved regions, expanded branches, or labels the user
+selected manually.}
 
 \item{region_palette}{Optional named vector of fill colors keyed by region.}
 

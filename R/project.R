@@ -107,6 +107,39 @@ render_dragmapr_project <- function(project,
   do.call(render_dragged_map, args)
 }
 
+#' Read a dragmapr project bundle
+#'
+#' Reads a Spatial Studio project ZIP or extracted project directory and
+#' returns its components as a named list. This is the low-level companion to
+#' [render_dragmapr_project()]: use it when you want to access the raw source
+#' geometry, offsets, labels, or palette programmatically before rendering.
+#'
+#' @param project Path to a `dragmapr-project.zip` file or an extracted project
+#'   directory created by Spatial Studio.
+#'
+#' @return A named list with elements:
+#'   \describe{
+#'     \item{`source`}{The source `sf` object read from `source.gpkg`.}
+#'     \item{`region_offsets`}{Data frame from `drag_region_offsets.csv`, or
+#'       `NULL` if not present.}
+#'     \item{`label_offsets`}{Data frame from `drag_label_offsets.csv`, or
+#'       `NULL` if not present.}
+#'     \item{`labels`}{Label table from `labels.csv` (as returned by
+#'       [as_drag_labels()]), or `NULL`.}
+#'     \item{`region_palette`}{Named character vector of colors from
+#'       `palette.csv`, or `NULL`.}
+#'     \item{`metadata`}{Named list parsed from `metadata.json`.}
+#'     \item{`path`}{Path to the extracted project directory.}
+#'   }
+#' @export
+#' @seealso [render_dragmapr_project()] to render a project bundle directly;
+#'   [write_dragmapr_project()] to create a project bundle from R objects.
+#' @examples
+#' if(interactive()){
+#' bundle <- read_dragmapr_project("dragmapr-project.zip")
+#' names(bundle)
+#' nrow(bundle$source)
+#' }
 read_dragmapr_project <- function(project) {
   if (!is.character(project) || length(project) != 1L || !nzchar(project)) {
     stop("`project` must be a path to a Spatial Studio ZIP file or extracted directory.", call. = FALSE)
@@ -318,4 +351,146 @@ project_smart_connector_labels <- function(labels, label_offsets) {
     ifelse(abs(dx) > abs(dy) * 1.6 | abs(dy) > abs(dx) * 1.6, "elbow", "curve")
   )
   labels
+}
+
+#' Write a dragmapr project bundle
+#'
+#' Packages a source `sf` object together with region offsets, label offsets,
+#' labels, a palette, and metadata into a ZIP file that can be reopened in
+#' Spatial Studio or rendered with [render_dragmapr_project()]. This lets you
+#' create and share reproducible project bundles entirely from R, without
+#' opening the Shiny app.
+#'
+#' @param x An `sf` object in a projected CRS — the source geometry for the
+#'   project.
+#' @param region_col Column in `x` defining draggable groups.
+#' @param file Output path for the ZIP file. Should end in `.zip`. When
+#'   `NULL`, a temporary file is created and its path returned invisibly.
+#' @param region_offsets Optional data frame with `region`, `dx_m`, and `dy_m`
+#'   columns, or a path to such a CSV. When `NULL`, all regions are placed at
+#'   their original positions.
+#' @param label_offsets Optional data frame with `label_id`, `region`, `dx_m`,
+#'   and `dy_m` columns, or a path to such a CSV.
+#' @param labels Optional label table as returned by [make_region_labels()] or
+#'   [as_drag_labels()].
+#' @param region_palette Optional named character vector of fill colors (names
+#'   are region values, values are hex strings).
+#' @param label_col Column used for default label text. Defaults to
+#'   `region_col`.
+#' @param title Optional project title stored in metadata.
+#' @param ... Additional named metadata fields written to `metadata.json`.
+#'
+#' @return Invisibly returns `file` (the path to the written ZIP).
+#' @export
+#' @seealso [read_dragmapr_project()] to read a project back into R;
+#'   [render_dragmapr_project()] to render a project bundle directly.
+#' @examples
+#' \donttest{
+#' poly <- sf::st_sf(
+#'   region = c("A", "B"),
+#'   geometry = sf::st_sfc(
+#'     sf::st_polygon(list(rbind(c(0,1e5),c(1e5,1e5),c(1e5,2e5),c(0,2e5),c(0,1e5)))),
+#'     sf::st_polygon(list(rbind(c(0,0),c(1e5,0),c(1e5,1e5),c(0,1e5),c(0,0)))),
+#'     crs = 3857
+#'   )
+#' )
+#' offsets <- data.frame(region = c("A", "B"), dx_m = c(50000, -50000), dy_m = 0)
+#' zip_path <- write_dragmapr_project(
+#'   poly,
+#'   region_col     = "region",
+#'   region_offsets = offsets,
+#'   title          = "Demo project",
+#'   file           = tempfile(fileext = ".zip")
+#' )
+#' file.exists(zip_path)
+#' }
+write_dragmapr_project <- function(x,
+                                   region_col,
+                                   file           = NULL,
+                                   region_offsets = NULL,
+                                   label_offsets  = NULL,
+                                   labels         = NULL,
+                                   region_palette = NULL,
+                                   label_col      = region_col,
+                                   title          = NULL,
+                                   ...) {
+  if (!inherits(x, "sf")) {
+    stop("`x` must be an sf object.", call. = FALSE)
+  }
+  if (!region_col %in% names(x)) {
+    stop("region_col '", region_col, "' not found in `x`.", call. = FALSE)
+  }
+  if (is.null(file)) {
+    file <- tempfile("dragmapr-project-", fileext = ".zip")
+  }
+  if (!is.character(file) || length(file) != 1L || !nzchar(file)) {
+    stop("`file` must be a single non-empty file path.", call. = FALSE)
+  }
+
+  # Validate offsets if supplied
+  if (!is.null(region_offsets)) {
+    if (is.character(region_offsets) && length(region_offsets) == 1L) {
+      region_offsets <- read_offsets(region_offsets)
+    }
+    region_offsets <- normalize_offsets(region_offsets, source = "`region_offsets`")
+  }
+
+  proj_dir <- tempfile("dragmapr_write_")
+  dir.create(proj_dir, recursive = TRUE)
+  on.exit(unlink(proj_dir, recursive = TRUE), add = TRUE)
+
+  # source.gpkg
+  sf::st_write(x, file.path(proj_dir, "source.gpkg"), quiet = TRUE, delete_dsn = TRUE)
+
+  # drag_region_offsets.csv
+  if (!is.null(region_offsets)) {
+    utils::write.csv(region_offsets, file.path(proj_dir, "drag_region_offsets.csv"),
+                     row.names = FALSE)
+  }
+
+  # drag_label_offsets.csv
+  if (!is.null(label_offsets)) {
+    utils::write.csv(label_offsets, file.path(proj_dir, "drag_label_offsets.csv"),
+                     row.names = FALSE)
+  }
+
+  # labels.csv
+  if (!is.null(labels)) {
+    label_df <- tryCatch(as_drag_labels(labels), error = function(e) as.data.frame(labels))
+    utils::write.csv(label_df, file.path(proj_dir, "labels.csv"), row.names = FALSE)
+  }
+
+  # palette.csv
+  if (!is.null(region_palette)) {
+    if (!is.character(region_palette) || is.null(names(region_palette))) {
+      stop("`region_palette` must be a named character vector of hex colors.", call. = FALSE)
+    }
+    pal_df <- data.frame(region = names(region_palette), color = unname(region_palette),
+                         stringsAsFactors = FALSE)
+    utils::write.csv(pal_df, file.path(proj_dir, "palette.csv"), row.names = FALSE)
+  }
+
+  # metadata.json
+  extra_meta <- list(...)
+  metadata <- c(
+    list(
+      region_col  = region_col,
+      label_col   = label_col,
+      title       = if (is.null(title)) "" else as.character(title),
+      created_by  = "write_dragmapr_project",
+      dragmapr_version = as.character(utils::packageVersion("dragmapr"))
+    ),
+    extra_meta
+  )
+  jsonlite::write_json(metadata, file.path(proj_dir, "metadata.json"),
+                       auto_unbox = TRUE, pretty = TRUE)
+
+  # Create ZIP — change into the project dir so zip paths are relative
+  old_wd <- getwd()
+  on.exit(setwd(old_wd), add = TRUE)
+  setwd(proj_dir)
+  files_to_zip <- list.files(proj_dir, full.names = FALSE)
+  utils::zip(normalizePath(file, mustWork = FALSE), files_to_zip, flags = "-r9Xq")
+
+  invisible(file)
 }

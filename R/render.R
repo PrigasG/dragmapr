@@ -9,7 +9,14 @@
 #' @param labels Optional label table from `make_region_labels()` or
 #'   `as_drag_labels()`. Use `FALSE` to omit labels from the static render.
 #' @param label_values Optional character vector of label IDs to render.
-#'   `NULL` renders all labels.
+#'   `NULL` renders all labels unless `max_labels` is finite.
+#' @param max_labels Maximum number of label IDs to render when `label_values`
+#'   is `NULL`. Defaults to `Inf`, preserving the existing behavior of
+#'   rendering all labels. Set to a finite value such as `25` to keep static
+#'   exports readable.
+#' @param label_prefer Optional label IDs to prioritize when `max_labels` is
+#'   finite. Useful for moved regions, expanded branches, or labels the user
+#'   selected manually.
 #' @param region_palette Optional named vector of fill colors keyed by region.
 #' @param region_labels Optional named vector of legend labels keyed by region.
 #' @param show_legend Show the region fill legend.  When the number of distinct
@@ -117,6 +124,8 @@ render_dragged_map <- function(x,
                                label_offsets = NULL,
                                labels = NULL,
                                label_values = NULL,
+                               max_labels = Inf,
+                               label_prefer = NULL,
                                region_palette = NULL,
                                region_labels = NULL,
                                show_legend = TRUE,
@@ -170,6 +179,13 @@ render_dragged_map <- function(x,
   }
   if (!is.null(label_values) && !is.character(label_values)) {
     stop("`label_values` must be a character vector or NULL.", call. = FALSE)
+  }
+  if (!is.numeric(max_labels) || length(max_labels) != 1L ||
+      is.na(max_labels) || max_labels < 0) {
+    stop("`max_labels` must be a non-negative number or Inf.", call. = FALSE)
+  }
+  if (!is.null(label_prefer) && !is.character(label_prefer)) {
+    stop("`label_prefer` must be a character vector or NULL.", call. = FALSE)
   }
   if (!is.logical(show_origin_outlines) || length(show_origin_outlines) != 1L || is.na(show_origin_outlines)) {
     stop("`show_origin_outlines` must be TRUE or FALSE.", call. = FALSE)
@@ -244,6 +260,13 @@ render_dragged_map <- function(x,
     data.frame(label_id = character(), region = character(), label = character(), x = numeric(), y = numeric())
   } else {
     as_drag_labels(labels)
+  }
+  if (is.null(label_values) && is.finite(max_labels) && nrow(base_labels) > max_labels) {
+    label_values <- select_label_ids(
+      base_labels,
+      max_labels = as.integer(max_labels),
+      prefer = label_prefer
+    )
   }
   if (!is.null(label_values)) {
     base_labels <- base_labels[as.character(base_labels$label_id) %in% label_values, , drop = FALSE]
@@ -462,7 +485,7 @@ render_dragged_map <- function(x,
             fontface = "bold",
             size = label_size,
             fill = marker_fill,
-            label.size = 0,
+            linewidth = 0,
             label.padding = grid::unit(0.08, "lines")
           )
       }
