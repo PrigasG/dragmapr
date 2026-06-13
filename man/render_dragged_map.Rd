@@ -191,13 +191,13 @@ Render an adjusted draggable plot with labels
 }
 \examples{
 # render_dragged_map() is an optional static-export step.
-# The primary workflow is drag_map_prototype(open = TRUE): open the
+# The primary workflow is drag_map_prototype(open = interactive()): open the
 # interactive HTML, drag regions and labels to your liking, then
 # copy or download the offset CSVs.  Only call render_dragged_map()
 # if you also need a reproducible ggplot2 image from those offsets.
 if(interactive()){
 # Step 1 (always): open the interactive draggable plot.
-drag_map_prototype(poly, region_col = "region", open = TRUE)
+drag_map_prototype(poly, region_col = "region", open = interactive())
 
 # Step 2 (optional): after dragging, reconstruct as a static image.
 region_offsets <- read_offsets("my_region_offsets.csv")

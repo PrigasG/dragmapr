@@ -164,11 +164,13 @@ Several Shiny examples are bundled but not evaluated in this vignette because
 they launch interactive apps:
 
 ```{r, eval = FALSE}
-shiny::runApp(system.file("examples", "shiny_draggable_plot.R", package = "dragmapr"))
-shiny::runApp(system.file("examples", "shiny_custom_labels.R", package = "dragmapr"))
-shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
-shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
-shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragmapr"))
+if (interactive()) {
+  shiny::runApp(system.file("examples", "shiny_draggable_plot.R", package = "dragmapr"))
+  shiny::runApp(system.file("examples", "shiny_custom_labels.R", package = "dragmapr"))
+  shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
+  shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
+  shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragmapr"))
+}
 ```
 
 `shiny_draggable_export.R` demonstrates a common app pattern: users drag the

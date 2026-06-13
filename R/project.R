@@ -385,7 +385,7 @@ project_smart_connector_labels <- function(labels, label_offsets) {
 #' @seealso [read_dragmapr_project()] to read a project back into R;
 #'   [render_dragmapr_project()] to render a project bundle directly.
 #' @examples
-#' \donttest{
+#' if(interactive()){
 #' poly <- sf::st_sf(
 #'   region = c("A", "B"),
 #'   geometry = sf::st_sfc(

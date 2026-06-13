@@ -52,16 +52,18 @@ drag_map_prototype(
   region_palette = hhs$region_colors,
   show_legend = TRUE,
   legend_title = "HHS region",
-  open = TRUE
+  open = interactive()
 )
 ```
 
 For a full Spatial Studio session, launch the bundled app:
 
 ```{r, eval = FALSE}
-shiny::runApp(system.file(
-  "examples",
-  "shiny_spatial_studio.R",
-  package = "dragmapr"
-))
+if (interactive()) {
+  shiny::runApp(system.file(
+    "examples",
+    "shiny_spatial_studio.R",
+    package = "dragmapr"
+  ))
+}
 ```

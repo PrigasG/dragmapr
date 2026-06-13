@@ -21,7 +21,9 @@ The simplest Shiny pattern is to write a helper HTML file into a Shiny resource
 directory and show it in an iframe.
 
 ```{r, eval = FALSE}
-shiny::runApp(system.file("examples", "shiny_draggable_plot.R", package = "dragmapr"))
+if (interactive()) {
+  shiny::runApp(system.file("examples", "shiny_draggable_plot.R", package = "dragmapr"))
+}
 ```
 
 This is useful when the app only needs to let users explore or compose a layout.
@@ -34,7 +36,9 @@ metadata. Labels can be ordinary text labels, text-only draggable labels, or
 annotation boxes created with `as_drag_annotations()`.
 
 ```{r, eval = FALSE}
-shiny::runApp(system.file("examples", "shiny_custom_labels.R", package = "dragmapr"))
+if (interactive()) {
+  shiny::runApp(system.file("examples", "shiny_custom_labels.R", package = "dragmapr"))
+}
 ```
 
 The user-supplied label table is created with `as_drag_labels()` and can carry
@@ -49,7 +53,9 @@ posts offset state to its Shiny parent window. The Shiny app can then render a
 preview and expose a PNG download.
 
 ```{r, eval = FALSE}
-shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
+if (interactive()) {
+  shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
+}
 ```
 
 This pattern is useful for report builders, document workflows, or review apps
@@ -82,7 +88,9 @@ If offsets have already been saved, an app can skip the draggable helper and
 only provide static preview/export.
 
 ```{r, eval = FALSE}
-shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragmapr"))
+if (interactive()) {
+  shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragmapr"))
+}
 ```
 
 ## Spatial Studio
@@ -98,7 +106,9 @@ preview trails, and map background; preview a static render; set static export
 size and DPI; and download the current artifacts.
 
 ```{r, eval = FALSE}
-shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
+if (interactive()) {
+  shiny::runApp(system.file("examples", "shiny_spatial_studio.R", package = "dragmapr"))
+}
 ```
 
 Supported inputs: zipped shapefiles, shapefile sidecar files (`.shp` + `.dbf` +

@@ -53,7 +53,7 @@ drag_map_prototype(
   label_col = "region",
   labels = TRUE,
   draggable_labels = TRUE,
-  open = TRUE
+  open = interactive()
 )
 
 render_dragged_map(

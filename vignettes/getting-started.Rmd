@@ -14,7 +14,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 `dragmapr` is built around a deliberately small loop for draggable plots:
 
 1. Start with projected `sf` geometry and a grouping column.
-2. Open the draggable browser helper with `drag_map_prototype(open = TRUE)`.
+2. Open the draggable browser helper with `drag_map_prototype(open = interactive())`.
 3. Drag regions, labels, or annotation boxes until the layout looks right.
 4. Copy or download the offset CSVs from the helper panel.
 5. Optionally reproduce the layout as a static `ggplot2` image with `render_dragged_map()`.
@@ -66,10 +66,10 @@ These three arguments identify the geometry and what to group or label.
 
 ```{r, eval = FALSE}
 # Minimal call — one grouping column used for both groups and labels
-drag_map_prototype(regions, region_col = "region", open = TRUE)
+drag_map_prototype(regions, region_col = "region", open = interactive())
 
 # Separate column for label text
-drag_map_prototype(regions, region_col = "region", label_col = "label", open = TRUE)
+drag_map_prototype(regions, region_col = "region", label_col = "label", open = interactive())
 ```
 
 ---
@@ -85,16 +85,16 @@ Control whether labels appear and whether they can be dragged independently.
 
 ```{r, eval = FALSE}
 # No labels
-drag_map_prototype(regions, region_col = "region", labels = FALSE, open = TRUE)
+drag_map_prototype(regions, region_col = "region", labels = FALSE, open = interactive())
 
 # Labels follow regions but cannot be dragged separately
 drag_map_prototype(regions, region_col = "region",
-                   draggable_labels = FALSE, open = TRUE)
+                   draggable_labels = FALSE, open = interactive())
 
 # Custom label data frame
 custom_labels <- make_region_labels(regions, region_col = "region", label_col = "label")
 drag_map_prototype(regions, region_col = "region",
-                   labels = custom_labels, open = TRUE)
+                   labels = custom_labels, open = interactive())
 ```
 
 ---
@@ -123,7 +123,7 @@ drag_map_prototype(
   label_text_size    = 12,
   label_width        = 80,
   label_height       = 32,
-  open = TRUE
+  open = interactive()
 )
 
 # Circle markers
@@ -132,7 +132,7 @@ drag_map_prototype(
   label_marker_shape = "circle",
   label_radius       = 18,
   label_text_size    = 11,
-  open = TRUE
+  open = interactive()
 )
 
 # Text only — no visible marker, just draggable text
@@ -140,7 +140,7 @@ drag_map_prototype(
   regions, region_col = "region",
   label_marker_shape = "none",
   label_text_size    = 13,
-  open = TRUE
+  open = interactive()
 )
 
 # Annotation boxes (info-box style with connectors)
@@ -156,7 +156,7 @@ drag_map_prototype(
   labels           = notes,
   label_box_width  = 160,
   label_box_height = 70,
-  open = TRUE
+  open = interactive()
 )
 ```
 
@@ -187,7 +187,7 @@ drag_map_prototype(
   connector_linetype  = "dashed",
   connector_endpoint  = "arrow",
   connector_smart     = TRUE,
-  open = TRUE
+  open = interactive()
 )
 ```
 
@@ -218,7 +218,7 @@ drag_map_prototype(
   movement_connector_linetype = "dashed",
   movement_connector_endpoint = "open",
   show_drag_trail = TRUE,
-  open = TRUE
+  open = interactive()
 )
 ```
 
@@ -257,7 +257,7 @@ drag_map_prototype(
   regions, region_col = "region",
   region_offsets = region_csv,
   label_offsets  = label_csv,
-  open = TRUE
+  open = interactive()
 )
 ```
 
@@ -310,7 +310,7 @@ drag_map_prototype(
   regions, region_col = "region",
   region_palette = my_palette,
   show_legend    = TRUE,
-  open = TRUE
+  open = interactive()
 )
 ```
 
@@ -338,7 +338,7 @@ drag_map_prototype(
   legend_title    = "Region",
   legend_values   = c("North", "East"),
   max_legend_keys = 25,
-  open = TRUE
+  open = interactive()
 )
 ```
 
@@ -349,7 +349,7 @@ while preserving all label offsets:
 drag_map_prototype(
   regions, region_col = "region",
   label_values = c("North", "East"),
-  open = TRUE
+  open = interactive()
 )
 ```
 
@@ -457,9 +457,11 @@ See the [Shiny workflows vignette](shiny-workflows.html) for a full walkthrough,
 or run any example directly:
 
 ```{r, eval = FALSE}
-shiny::runApp(system.file("examples", "shiny_draggable_plot.R",   package = "dragmapr"))
-shiny::runApp(system.file("examples", "shiny_custom_labels.R",    package = "dragmapr"))
-shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
-shiny::runApp(system.file("examples", "shiny_spatial_studio.R",   package = "dragmapr"))
-shiny::runApp(system.file("examples", "shiny_static_export.R",    package = "dragmapr"))
+if (interactive()) {
+  shiny::runApp(system.file("examples", "shiny_draggable_plot.R",   package = "dragmapr"))
+  shiny::runApp(system.file("examples", "shiny_custom_labels.R",    package = "dragmapr"))
+  shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
+  shiny::runApp(system.file("examples", "shiny_spatial_studio.R",   package = "dragmapr"))
+  shiny::runApp(system.file("examples", "shiny_static_export.R",    package = "dragmapr"))
+}
 ```

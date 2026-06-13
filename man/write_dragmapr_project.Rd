@@ -57,7 +57,7 @@ create and share reproducible project bundles entirely from R, without
 opening the Shiny app.
 }
 \examples{
-\donttest{
+if(interactive()){
 poly <- sf::st_sf(
   region = c("A", "B"),
   geometry = sf::st_sfc(

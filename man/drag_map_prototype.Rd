@@ -207,7 +207,7 @@ poly <- sf::st_sf(
 # Primary usage: open the interactive draggable plot in the browser.
 # Drag regions and labels, then copy or download the offset CSVs.
 if(interactive()){
-drag_map_prototype(poly, region_col = "region", open = TRUE)
+drag_map_prototype(poly, region_col = "region", open = interactive())
 }
 
 # Write to a specific path without opening (e.g. for Shiny or CI).

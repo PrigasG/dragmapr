@@ -49,7 +49,7 @@ drag_map_prototype(
   region_offsets = hhs$region_offsets,
   label_offsets = hhs$label_offsets,
   region_palette = hhs$region_colors,
-  open = TRUE
+  open = interactive()
 )
 
 render_dragged_map(
