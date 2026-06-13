@@ -4930,6 +4930,4 @@ apply_smart_connector_types <- function(labels, label_offsets) {
   labels
 }
 
-if (interactive()) {
-  shinyApp(ui, server)
-}
+shinyApp(ui, server)
