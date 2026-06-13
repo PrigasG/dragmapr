@@ -2086,7 +2086,7 @@ server <- function(input, output, session) {
       current_ver    <- isolate(state$source_version)
       current_sig    <- isolate(state$helper_signature)
       # A rebuild is imminent when the signature source_version is behind the
-      # current source version — the prototype observer will fire next flush.
+      # current source version - the prototype observer will fire next flush.
       rebuild_pending <- is.null(current_sig) ||
         !identical(current_sig$source_version, current_ver)
       if (!helper_busy && !rebuild_pending) {
@@ -2180,6 +2180,36 @@ server <- function(input, output, session) {
     if (length(path) == 1L) return(clean_group_value(x[[path[1L]]]))
     parts <- lapply(path, function(col) paste0(col, "=", clean_group_value(x[[col]])))
     do.call(paste, c(parts, sep = " | "))
+  }
+
+  clean_region_display <- function(keys, max_chars = 42L, include_path = FALSE) {
+    keys <- as.character(keys)
+    vapply(keys, function(key) {
+      parts <- strsplit(key, " | ", fixed = TRUE)[[1L]]
+      values <- sub("^[^=]+=", "", parts)
+      text <- if (isTRUE(include_path) && length(values) > 1L) {
+        paste(values, collapse = " / ")
+      } else {
+        utils::tail(values, 1L)
+      }
+      text <- trimws(text)
+      if (!nzchar(text)) text <- "(missing)"
+      if (nchar(text, type = "width") > max_chars) {
+        paste0(substr(text, 1L, max(1L, max_chars - 3L)), "...")
+      } else {
+        text
+      }
+    }, character(1L), USE.NAMES = FALSE)
+  }
+
+  clean_region_choices <- function(keys, max_chars = 42L) {
+    keys <- as.character(keys)
+    labels <- clean_region_display(keys, max_chars = max_chars)
+    dup <- duplicated(labels) | duplicated(labels, fromLast = TRUE)
+    if (any(dup)) {
+      labels[dup] <- clean_region_display(keys[dup], max_chars = max_chars, include_path = TRUE)
+    }
+    stats::setNames(keys, labels)
   }
 
   inherit_offsets_across_paths <- function(x, old_path, new_path, old_offsets) {
@@ -2394,14 +2424,14 @@ server <- function(input, output, session) {
 
     if (length(added) > 0L) {
       set_status(
-        paste0("Bloomed '", paste(added, collapse = "', '"), "' into '",
+        paste0("Bloomed '", paste(clean_region_display(added, include_path = TRUE), collapse = "', '"), "' into '",
                child_col, "'. Use the dotted frame to drag the whole branch; ",
                "click a child to compress it back to the parent."),
         "ok"
       )
     } else if (length(removed) > 0L) {
       set_status(
-        paste0("Compressed '", paste(removed, collapse = "', '"),
+        paste0("Compressed '", paste(clean_region_display(removed, include_path = TRUE), collapse = "', '"),
                "' back to '", utils::tail(path, 1L), "'."),
         "info"
       )
@@ -3471,7 +3501,7 @@ server <- function(input, output, session) {
         tags$div(class = "setup-row",
                  tags$span("Recommended"),
                  tags$span(if (!is.null(rec_child)) {
-                   paste0(rec_parent, " → ", rec_child)
+                   paste0(rec_parent, " -> ", rec_child)
                  } else {
                    rec_parent %||% "-"
                  })),
@@ -3485,7 +3515,7 @@ server <- function(input, output, session) {
         tags$div(class = "setup-row",
                  tags$span("Expanded"),
                  tags$span(if (length(expanded) > 0L) {
-                   paste(expanded, collapse = ", ")
+                   paste(clean_region_display(expanded, include_path = TRUE), collapse = ", ")
                  } else {
                    "None"
                  })),
@@ -3597,7 +3627,7 @@ server <- function(input, output, session) {
       studio_multi_select(
         "bloom_parents",
         paste0("Expanded groups (max ", BLOOM_MAX_PARENTS, ")"),
-        choices  = parents,
+        choices  = clean_region_choices(parents),
         selected = intersect(state$bloom_parents, parents),
         placeholder = "Click the map or choose groups"
       ),
@@ -3755,7 +3785,7 @@ server <- function(input, output, session) {
         ),
         studio_select(
           "region_color_group", "Category",
-          choices = groups,
+          choices = clean_region_choices(groups),
           selected = selected,
           placeholder = "Choose category"
         ),
@@ -3769,7 +3799,7 @@ server <- function(input, output, session) {
       ),
       studio_select(
         "region_color_group", "Category",
-        choices = groups,
+        choices = clean_region_choices(groups),
         selected = selected,
         placeholder = "Choose category"
       ),
@@ -3830,7 +3860,7 @@ server <- function(input, output, session) {
     if (length(groups) == 0L) {
       return(NULL)
     }
-    choices <- stats::setNames(groups, groups)
+    choices <- clean_region_choices(groups)
     selected <- isolate(state$legend_filter_selection)
     if (is.null(selected)) {
       selected <- unname(choices)
@@ -3858,7 +3888,8 @@ server <- function(input, output, session) {
     labels <- all_label_table()
     choices <- stats::setNames(
       as.character(labels$label_id),
-      paste0(as.character(labels$label), " (", as.character(labels$region), ")")
+      paste0(as.character(labels$label), " (",
+             clean_region_display(as.character(labels$region), include_path = TRUE), ")")
     )
     selected <- isolate(state$label_filter_selection)
     if (is.null(selected)) {
@@ -4123,8 +4154,8 @@ server <- function(input, output, session) {
       }
       # When only the column changed (same source data), save and restore
       # per-column offset caches so switching columns never loses layout work.
-      #   Region offsets → keyed by region_col (geometries move together)
-      #   Label  offsets → keyed by region_col:label_col (label IDs change)
+      #   Region offsets -> keyed by region_col (geometries move together)
+      #   Label  offsets -> keyed by region_col:label_col (label IDs change)
       old_sig <- state$helper_signature
       if (!is.null(old_sig) &&
           identical(old_sig$source_version, signature$source_version) &&
@@ -4250,12 +4281,12 @@ server <- function(input, output, session) {
           state$history_ignore_until <- NULL
 
         } else if (label_changed) {
-          # Region column unchanged — preserve region offsets entirely.
+          # Region column unchanged - preserve region offsets entirely.
           # Only save/restore the label offsets per label-column key.
           state$column_offset_store[[old_lkey]] <- list(label = state$label_csv_cache)
           stored_l <- state$column_offset_store[[new_lkey]]
           state$label_csv_cache <- if (!is.null(stored_l)) stored_l$label else NULL
-          # region_csv_cache stays untouched — regions have not moved
+          # region_csv_cache stays untouched - regions have not moved
           set_status(paste0("Label column changed to '", signature$label_col, "'."), "info")
         }
       }

@@ -850,7 +850,7 @@ function syncLegend() {
     swatch.style.background = color(region);
     const label = document.createElement("span");
     label.className = "legend-label";
-    label.textContent = dualDom ? branchShortLabel(region) : region;
+    label.textContent = branchShortLabel(region);
     item.append(swatch, label);
     return item;
   }));
@@ -1063,7 +1063,7 @@ function branchShortLabel(value) {
   let text = String(value);
   const eq = text.lastIndexOf("=");
   if (eq >= 0) text = text.slice(eq + 1);
-  return text.length > 28 ? text.slice(0, 27) + "…" : text;
+  return text.length > 28 ? text.slice(0, 25) + "..." : text;
 }
 
 function regionBoundsM(region) {
@@ -2037,9 +2037,9 @@ function render() {
         .call(wrapText, String(d.label), Math.max(12, width - 10));
     }
   });
-  // SVG layer order (bottom → top):
-  //   originLayer → movementConnectorLayer → trailLayer → root/regions
-  //   → connectorLayer (label connectors) → labelLayer → branchBoundaryLayer
+  // SVG layer order (bottom -> top):
+  //   originLayer -> movementConnectorLayer -> trailLayer -> root/regions
+  //   -> connectorLayer (label connectors) -> labelLayer -> branchBoundaryLayer
   branchBoundaryLayer = null;
   if (branchTransition && bloomBoundaryOn) {
     branchBoundaryData = buildBranchBoundaryData();
