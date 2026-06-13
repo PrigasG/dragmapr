@@ -65,6 +65,7 @@ reference:
   - make_region_labels
   - as_drag_labels
   - as_drag_annotations
+  - select_label_ids
   - read_label_state
   - apply_label_state
 
@@ -75,6 +76,8 @@ reference:
   contents:
   - render_dragged_map
   - render_dragmapr_project
+  - read_dragmapr_project
+  - write_dragmapr_project
 
 - title: Built-in examples
   desc: Self-contained fixtures for testing and demonstrations.
@@ -87,13 +90,23 @@ reference:
     Detect parent-child grouping columns, prepare branch-bloom helper data,
     and explain CRS meaning for uploaded spatial files.
   contents:
+  - make_hierarchy_key
+  - inherit_layout
+  - create_layout_snapshot
+  - restore_layout_snapshot
   - detect_hierarchy_columns
   - recommend_dragmapr_hierarchy
   - validate_bloom_hierarchy
   - build_branch_transition_data
   - make_branch_bloom_labels
+  - transition_options
+  - build_elastic_transition
+  - make_group_boundaries
+  - layout_metrics
   - summarise_spatial_crs
   - profile_spatial_upload
+  - suggest_offsets
+  - dragmapr_diagnostics
 
 - title: Spatial I/O helpers
   desc: >

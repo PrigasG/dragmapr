@@ -10,6 +10,9 @@
 * New `inst/examples/branch-bloom-tester.R` Shiny example isolates the
   branch-bloom helper so clean bloom and leaf-flip behavior can be tested
   without the full Spatial Studio shell.
+* New packaged cheatsheet in `inst/cheatsheets/` covers the core workflow,
+  labels, static rendering, Spatial Studio, hierarchy/bloom helpers, CRS
+  diagnostics, layout snapshots, and transition utilities.
 * New upload intelligence helpers: `detect_hierarchy_columns()`,
   `recommend_dragmapr_hierarchy()`, `validate_bloom_hierarchy()`,
   `build_branch_transition_data()`, `make_branch_bloom_labels()`,
@@ -34,6 +37,10 @@
   when collapsed" (on by default), child-level uploads display as clean
   dissolved parent outlines until a parent blooms, which both sharpens the
   reveal and reduces the number of drawn shapes.
+* Spatial Studio: the Bloom panel now includes an animation selector so users
+  can switch between the leaf-flip proxy animation and the clean branch-bloom
+  animation. The selected mode is sent to the live helper without rebuilding
+  the iframe.
 * Spatial Studio: one unified full-app busy veil replaces the previous mix of
   map overlay, sidebar freeze, and full veil. Two modes share the same
   blocker - "Loading spatial data" (uploads, project opens) and "Processing

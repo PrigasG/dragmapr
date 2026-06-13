@@ -1,4 +1,4 @@
-# CRAN submission comments - dragmapr 0.1.0
+# CRAN submission comments - dragmapr 0.2.0
 
 ## Test environments
 
@@ -10,7 +10,7 @@
 
 0 errors | 0 warnings | 1 note
 
-Local `R CMD check --as-cran --no-manual` reports:
+Local `R CMD check --as-cran` reports:
 
 - `checking CRAN incoming feasibility ... NOTE`
 - `New submission`
@@ -22,18 +22,16 @@ Local `R CMD check --as-cran --no-manual` reports:
 to make the generated drag-map HTML files self-contained and usable offline.
 The file is the standard unmodified D3 v7 distribution from <https://d3js.org>.
 
-## Notes on \dontrun{} examples
+## Notes on interactive examples
 
-- `drag_map_prototype(..., open = TRUE)` - opens a file in the default browser;
-  skipped in examples to avoid browser interaction during `R CMD check`.
-- `read_dragmapr_sf_url()` - requires a network connection; skipped to avoid
-  check failures on machines without internet access.
-- `read_dragmapr_sf_upload()` - requires a live Shiny session; skipped because
-  it depends on the `shiny::fileInput()` reactive environment.
-- `dragmapr_addin()` - launches an interactive Shiny gadget; the function body
-  is not exercised during `R CMD check`. The addin registration is verified via
-  a `testthat` test that reads `inst/rstudio/addins.dcf`.
+- Browser-opening examples use `if(interactive())` so users can see the intended
+  workflow without launching a browser during `R CMD check`.
+- Shiny examples and the RStudio addin are also guarded with
+  `if(interactive())`; non-interactive package checks exercise the reusable
+  helper functions and addin registration instead.
+- Network examples are guarded with `if(interactive())` to avoid failures on
+  machines without internet access.
 
 ## Downstream dependencies
 
-None (first submission).
+None.
