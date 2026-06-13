@@ -580,6 +580,11 @@ note &lt;- <span class="fn">as_drag_annotations</span>(
         </div>
 
         <div class="fn">
+          <span class="fn-name">read_dragmapr_project(<em>zip</em>)</span>
+          <div class="fn-desc">Inspect a saved project bundle: source geometry, offsets, labels, palette, and metadata.</div>
+        </div>
+
+        <div class="fn">
           <span class="fn-name">write_dragmapr_project(<em>x, …, file</em>)</span>
           <div class="fn-desc">Bundle source geometry + offsets + metadata into a ZIP for sharing.</div>
         </div>
@@ -666,6 +671,11 @@ server &lt;- function(input, output, session) {
         </div>
 
         <div class="fn">
+          <span class="fn-name">make_hierarchy_key(<em>x, cols</em>)</span>
+          <div class="fn-desc">Build stable composite keys when child names repeat across parents.</div>
+        </div>
+
+        <div class="fn">
           <span class="fn-name">build_branch_transition_data(<em>x, parent_col, child_col</em>)</span>
           <div class="fn-desc">Build the <code>transition</code> list to pass to <code>drag_map_prototype()</code>, including dissolved parent shells and bloom group mappings.</div>
         </div>
@@ -678,6 +688,16 @@ server &lt;- function(input, output, session) {
         <div class="fn">
           <span class="fn-name">inherit_layout(<em>offsets, x, from_col, to_col</em>)</span>
           <div class="fn-desc">Carry drag offsets from one grouping column to another (e.g. parent → child positions on first visit).</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">transition_options() / build_elastic_transition()</span>
+          <div class="fn-desc">Create static transition frames and dotted group boundaries for package-level transition testing.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">make_group_boundaries(<em>x, group_col</em>)</span>
+          <div class="fn-desc">Return the padded dotted boundary geometry used as a group-drag frame.</div>
         </div>
 
         <div class="code"><span class="cm"># Typical bloom setup</span>
@@ -705,6 +725,16 @@ td &lt;- <span class="fn">build_branch_transition_data</span>(
           <div class="fn">
             <span class="fn-name">summarise_spatial_crs(<em>x</em>)</span>
             <div class="fn-desc">Human-readable description of the CRS and whether reprojection is needed.</div>
+          </div>
+
+          <div class="fn">
+            <span class="fn-name">create_layout_snapshot() / restore_layout_snapshot()</span>
+            <div class="fn-desc">Capture and restore offsets for a grouping while switching columns or sessions.</div>
+          </div>
+
+          <div class="fn">
+            <span class="fn-name">layout_metrics(<em>before, after, id_col</em>)</span>
+            <div class="fn-desc">Measure drift and stability between two map layouts.</div>
           </div>
 
           <div class="fn">

@@ -135,6 +135,10 @@ BLOOM_DURATION_MS <- 400
 BLOOM_OVERSHOOT   <- 0
 BLOOM_EASING      <- "cubic-out"
 BLOOM_ANIMATION   <- "leaf_flip"
+BLOOM_ANIMATION_CHOICES <- c(
+  "Leaf flip" = "leaf_flip",
+  "Clean branch bloom" = "branch_bloom"
+)
 BLOOM_DRAG_THRESHOLD_PX <- 8
 
 default_palette <- c(
@@ -2163,6 +2167,15 @@ server <- function(input, output, session) {
   INTERNAL_REGION_COL <- "..dragmapr_region_key.."
   BLOOM_MAX_PARENTS   <- 2L  # keep the page readable: at most two expanded parents
 
+  bloom_animation_mode <- function(value = input$bloom_animation) {
+    value <- as.character(value %||% BLOOM_ANIMATION)
+    if (!length(value) || is.na(value[1]) ||
+        !value[1] %in% unname(BLOOM_ANIMATION_CHOICES)) {
+      return(BLOOM_ANIMATION)
+    }
+    value[1]
+  }
+
   clean_group_value <- function(x) {
     x <- trimws(as.character(x))
     x[is.na(x) | !nzchar(x)] <- "(missing)"
@@ -2444,6 +2457,7 @@ server <- function(input, output, session) {
         boundaryBehavior      = "drag",
         boundaryLabel         = "Drag to",
         boundaryDragThreshold = 8,
+        animation             = bloom_animation_mode(),
         regionOffsets         = rows_for_message(bloom_offset_df())
       ))
     }
@@ -3631,6 +3645,12 @@ server <- function(input, output, session) {
         selected = intersect(state$bloom_parents, parents),
         placeholder = "Click the map or choose groups"
       ),
+      radioButtons(
+        "bloom_animation", "Animation",
+        choices = BLOOM_ANIMATION_CHOICES,
+        selected = bloom_animation_mode(isolate(input$bloom_animation)),
+        inline = TRUE
+      ),
       checkboxInput(
         "bloom_boundary", "Show dotted drag handle",
         value = isTRUE(isolate(input$bloom_boundary) %||% TRUE)
@@ -3697,8 +3717,34 @@ server <- function(input, output, session) {
       boundaryBehavior      = "drag",
       boundaryLabel         = "Drag to",
       boundaryDragThreshold = 8,
+      animation             = bloom_animation_mode(),
       regionOffsets         = rows_for_message(bloom_offset_df())
     ))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$bloom_animation, {
+    if (is.null(state$bloom_child_col_active) ||
+        !nzchar(state$bloom_child_col_active %||% "")) {
+      return()
+    }
+    mode <- bloom_animation_mode()
+    session$sendCustomMessage("dragmapr-bloom", list(
+      expanded              = as.list(state$bloom_parents),
+      boundary              = isTRUE(input$bloom_boundary %||% TRUE),
+      boundaryBehavior      = "drag",
+      boundaryLabel         = "Drag to",
+      boundaryDragThreshold = 8,
+      animation             = mode,
+      regionOffsets         = rows_for_message(bloom_offset_df())
+    ))
+    set_status(
+      paste0(
+        "Bloom animation set to ",
+        names(BLOOM_ANIMATION_CHOICES)[match(mode, unname(BLOOM_ANIMATION_CHOICES))],
+        "."
+      ),
+      "info"
+    )
   }, ignoreInit = TRUE)
 
   # Debounced so the transient NULL emitted while the picker re-renders does
@@ -4330,7 +4376,7 @@ server <- function(input, output, session) {
             child_col = bloom_col,
             expanded = state$bloom_parents,
             dissolve = TRUE,
-            animation = BLOOM_ANIMATION,
+            animation = bloom_animation_mode(),
             duration_ms = BLOOM_DURATION_MS,
             easing = BLOOM_EASING,
             show_parent_ghost = FALSE,

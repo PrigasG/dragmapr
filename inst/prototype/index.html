@@ -1767,11 +1767,36 @@ function unbloomBranch(p) {
   runBranchAnimation(p, "collapse");
 }
 
+function applyBranchMessageOptions(message) {
+  if (!branchTransition || !message) return;
+  if (message.animation != null || message.animationMode != null || message.animation_mode != null) {
+    const raw = String(message.animation || message.animationMode || message.animation_mode || "")
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_");
+    branchTransition.animation = (raw === "leaf" || raw === "leafflip" || raw === "leaf_flip")
+      ? "leaf_flip"
+      : "branch_bloom";
+  }
+  if (message.boundaryBehavior != null) {
+    branchTransition.boundaryBehavior = String(message.boundaryBehavior);
+  }
+  if (message.boundaryLabel != null) {
+    branchTransition.boundaryLabel = String(message.boundaryLabel);
+  }
+  if (message.boundaryDragThreshold != null) {
+    const threshold = Number(message.boundaryDragThreshold);
+    if (Number.isFinite(threshold) && threshold >= 0) {
+      branchTransition.boundaryDragThreshold = threshold;
+    }
+  }
+}
+
 // Apply a bloom state pushed by the host page: regroup features in place
 // (no iframe rebuild), take the host's authoritative offsets, re-render,
 // then animate the newly expanded parents. Collapsing parents play the same
 // branch motion in reverse, returning children to their parent-local pose.
 function applyBloom(message) {
+  applyBranchMessageOptions(message);
   if (dualDom) {
     // Dual-DOM path: no re-render at all. Offsets first (animations read
     // them when computing targets), then per-branch state transitions.
