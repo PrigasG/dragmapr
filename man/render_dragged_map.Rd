@@ -2,7 +2,7 @@
 % Please edit documentation in R/render.R
 \name{render_dragged_map}
 \alias{render_dragged_map}
-\title{Render an adjusted draggable plot with labels}
+\title{Save the dragged layout as a static image}
 \usage{
 render_dragged_map(
   x,
@@ -187,7 +187,11 @@ saves the plot.}
 A \code{ggplot} object.
 }
 \description{
-Render an adjusted draggable plot with labels
+Takes the offset CSVs you downloaded from \code{\link[=drag_map_prototype]{drag_map_prototype()}} and
+produces a \code{ggplot2} image with regions and labels in the positions you
+dragged them to. If you used Spatial Studio, use
+\code{\link[=render_dragmapr_project]{render_dragmapr_project()}} instead - it reads everything from the project
+ZIP in one call.
 }
 \examples{
 # render_dragged_map() is an optional static-export step.

@@ -2,7 +2,7 @@
 % Please edit documentation in R/prototype.R
 \name{drag_map_prototype}
 \alias{drag_map_prototype}
-\title{Write a draggable plot prototype HTML file}
+\title{Write a draggable map in your browser}
 \usage{
 drag_map_prototype(
   x,
@@ -50,7 +50,8 @@ drag_map_prototype(
 )
 }
 \arguments{
-\item{x}{An \code{sf} object in a projected CRS.}
+\item{x}{An \code{sf} object. Run \code{\link[=prepare_dragmapr_sf]{prepare_dragmapr_sf()}} first if your data is
+in longitude/latitude.}
 
 \item{region_col}{Column defining draggable groups.}
 
@@ -192,7 +193,11 @@ created. Pass an explicit path to save the helper somewhere durable.}
 Invisibly returns \code{file}.
 }
 \description{
-Write a draggable plot prototype HTML file
+Opens an interactive HTML page where you can drag map regions and labels
+into any layout you like. When you are happy with the result, click the
+copy or download buttons to save two small CSV files (one for regions, one
+for labels). Pass those CSVs to \code{\link[=render_dragged_map]{render_dragged_map()}} to reproduce the
+layout as a static image.
 }
 \examples{
 poly <- sf::st_sf(

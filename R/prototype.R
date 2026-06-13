@@ -1,6 +1,13 @@
-#' Write a draggable plot prototype HTML file
+#' Write a draggable map in your browser
 #'
-#' @param x An `sf` object in a projected CRS.
+#' Opens an interactive HTML page where you can drag map regions and labels
+#' into any layout you like. When you are happy with the result, click the
+#' copy or download buttons to save two small CSV files (one for regions, one
+#' for labels). Pass those CSVs to [render_dragged_map()] to reproduce the
+#' layout as a static image.
+#'
+#' @param x An `sf` object. Run [prepare_dragmapr_sf()] first if your data is
+#'   in longitude/latitude.
 #' @param region_col Column defining draggable groups.
 #' @param label_col Column used for default region-label text. Defaults to
 #'   `region_col`.

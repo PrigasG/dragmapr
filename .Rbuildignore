@@ -1,5 +1,5 @@
 ^.*\.Rproj$
-^\.git$
+^\.git
 ^\.Rproj\.user$
 ^_pkgdown\.yml$
 ^\.github$

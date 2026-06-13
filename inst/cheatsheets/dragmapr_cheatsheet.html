@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>dragmapr Cheatsheet</title>
+<style>
+  /* ── Page setup ─────────────────────────────────────────────────── */
+  @page {
+    size: 11in 8.5in landscape;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 8px;
+    color: #1e293b;
+    background: #fff;
+    width: 22in;          /* two pages side-by-side for HTML view */
+  }
+
+  /* ── Two-page wrapper ───────────────────────────────────────────── */
+  .pages { display: flex; }
+
+  .page {
+    width: 11in;
+    height: 8.5in;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    page-break-after: always;
+    border-right: 1px solid #cbd5e1;
+  }
+
+  @media print {
+    body {
+      width: auto;
+    }
+    .pages {
+      display: block;
+    }
+    .page {
+      width: 11in;
+      height: 8.5in;
+      border-right: none;
+      break-after: page;
+      page-break-after: always;
+    }
+    .page:last-child {
+      break-after: auto;
+      page-break-after: auto;
+    }
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────── */
+  .page-header {
+    background: #0f4c81;
+    color: #fff;
+    padding: 10px 18px 8px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+
+  .page-header .pkg-name {
+    font-size: 26px;
+    font-weight: 900;
+    letter-spacing: -0.5px;
+    color: #fff;
+  }
+
+  .page-header .pkg-tag {
+    font-size: 10px;
+    color: #93c5fd;
+    margin-top: 1px;
+  }
+
+  .page-header .hex {
+    width: 54px;
+    height: 62px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .page-header .hex-inner {
+    width: 100%;
+    height: 100%;
+    background: #1d6fbe;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+  }
+
+  /* ── Column layout ───────────────────────────────────────────────── */
+  .page-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    overflow: hidden;
+    background: #f8fafc;
+  }
+
+  .col {
+    padding: 10px 10px 8px;
+    border-right: 1px solid #e2e8f0;
+    overflow: hidden;
+  }
+  .col:last-child { border-right: none; }
+
+  /* ── Section card ───────────────────────────────────────────────── */
+  .section {
+    margin-bottom: 9px;
+  }
+
+  .section-title {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    padding: 3px 6px;
+    border-radius: 3px;
+    margin-bottom: 5px;
+    color: #fff;
+  }
+
+  /* Colour palette per section */
+  .s-setup    .section-title { background: #0f4c81; }
+  .s-interact .section-title { background: #0369a1; }
+  .s-labels   .section-title { background: #0e7490; }
+  .s-offsets  .section-title { background: #047857; }
+  .s-export   .section-title { background: #15803d; }
+  .s-shiny    .section-title { background: #7c3aed; }
+  .s-hier     .section-title { background: #b45309; }
+  .s-utils    .section-title { background: #64748b; }
+
+  /* ── Function entry ─────────────────────────────────────────────── */
+  .fn { margin-bottom: 5px; }
+
+  .fn-name {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 8.5px;
+    font-weight: 700;
+    color: #0f4c81;
+    display: inline-block;
+    margin-bottom: 1px;
+  }
+
+  .fn-desc {
+    font-size: 7.5px;
+    color: #334155;
+    line-height: 1.35;
+    margin-bottom: 2px;
+  }
+
+  /* ── Code block ─────────────────────────────────────────────────── */
+  .code {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-radius: 3px;
+    padding: 4px 6px;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 7px;
+    line-height: 1.5;
+    margin-top: 2px;
+    white-space: pre;
+    overflow: hidden;
+  }
+
+  .code .cm  { color: #94a3b8; }   /* comment  */
+  .code .fn  { color: #7dd3fc; }   /* function */
+  .code .st  { color: #86efac; }   /* string   */
+  .code .kw  { color: #f9a8d4; }   /* keyword / arg */
+  .code .nu  { color: #fcd34d; }   /* number   */
+
+  /* ── Workflow diagram ────────────────────────────────────────────── */
+  .workflow {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin: 5px 0;
+    flex-wrap: nowrap;
+  }
+
+  .wf-step {
+    background: #dbeafe;
+    border: 1px solid #93c5fd;
+    border-radius: 4px;
+    padding: 4px 5px;
+    font-size: 7px;
+    color: #1e3a5f;
+    text-align: center;
+    flex: 1 1 0;
+    min-width: 0;
+    line-height: 1.35;
+  }
+
+  .wf-step strong {
+    display: block;
+    font-size: 7.5px;
+    color: #0f4c81;
+    margin-bottom: 1px;
+  }
+
+  .wf-arrow {
+    color: #0f4c81;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+
+  /* ── Param table ─────────────────────────────────────────────────── */
+  .params {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 3px;
+    font-size: 7px;
+  }
+
+  .params th {
+    background: #e0f2fe;
+    color: #0369a1;
+    text-align: left;
+    padding: 2px 4px;
+    font-size: 7px;
+    font-weight: 700;
+  }
+
+  .params td {
+    padding: 2px 4px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+    line-height: 1.35;
+  }
+
+  .params td:first-child {
+    font-family: "Courier New", Courier, monospace;
+    color: #0f4c81;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  /* ── Small tip box ───────────────────────────────────────────────── */
+  .tip {
+    background: #fef9c3;
+    border-left: 3px solid #eab308;
+    padding: 3px 6px;
+    font-size: 7px;
+    color: #713f12;
+    border-radius: 0 3px 3px 0;
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  .note {
+    background: #f0fdf4;
+    border-left: 3px solid #22c55e;
+    padding: 3px 6px;
+    font-size: 7px;
+    color: #14532d;
+    border-radius: 0 3px 3px 0;
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  /* ── Footer ──────────────────────────────────────────────────────── */
+  .page-footer {
+    background: #0f4c81;
+    color: #93c5fd;
+    font-size: 7px;
+    padding: 3px 14px;
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .page-footer a { color: #bfdbfe; }
+
+  /* ── Divider ─────────────────────────────────────────────────────── */
+  hr.div {
+    border: none;
+    border-top: 1px solid #e2e8f0;
+    margin: 5px 0;
+  }
+
+  .badge {
+    display: inline-block;
+    background: #e0f2fe;
+    color: #0369a1;
+    font-size: 6.5px;
+    font-weight: 700;
+    border-radius: 2px;
+    padding: 0 3px;
+    vertical-align: middle;
+    margin-left: 3px;
+    letter-spacing: 0.3px;
+  }
+
+  .badge.opt { background: #f0fdf4; color: #15803d; }
+  .badge.adv { background: #fef3c7; color: #b45309; }
+</style>
+</head>
+<body>
+<div class="pages">
+
+<!-- ════════════════════════════════════════════════════════
+     PAGE 1
+═════════════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div>
+      <div class="pkg-name">dragmapr</div>
+      <div class="pkg-tag">Drag map regions into any layout · export offsets · render a static image</div>
+    </div>
+    <div class="hex"><div class="hex-inner">🗺️</div></div>
+  </div>
+
+  <div class="page-body">
+
+    <!-- COL 1 -->
+    <div class="col">
+
+      <!-- SETUP -->
+      <div class="section s-setup">
+        <div class="section-title">1 · Setup</div>
+
+        <div class="fn">
+          <span class="fn-name">pak::pak("PrigasG/dragmapr")</span>
+          <div class="fn-desc">Install from GitHub (CRAN release coming).</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">library(dragmapr)</span>
+        </div>
+
+        <hr class="div"/>
+
+        <div class="fn">
+          <span class="fn-name">prepare_dragmapr_sf(<em>x</em>)</span>
+          <div class="fn-desc">Converts lon/lat data to a projected CRS (EPSG:3857 by default), repairs invalid geometry, and keeps only polygon features. <strong>Run this first</strong> if your data uses degrees.</div>
+          <div class="code"><span class="fn">prepare_dragmapr_sf</span>(my_sf)
+<span class="fn">prepare_dragmapr_sf</span>(my_sf, <span class="kw">target_crs</span> = <span class="nu">32632</span>)</div>
+        </div>
+      </div>
+
+      <!-- WORKFLOW -->
+      <div class="section s-setup">
+        <div class="section-title">Core Workflow</div>
+        <div class="workflow">
+          <div class="wf-step"><strong>① Prepare</strong>prepare_dragmapr_sf()</div>
+          <div class="wf-arrow">→</div>
+          <div class="wf-step"><strong>② Drag</strong>drag_map_prototype()</div>
+          <div class="wf-arrow">→</div>
+          <div class="wf-step"><strong>③ Download</strong>offset CSVs from browser</div>
+          <div class="wf-arrow">→</div>
+          <div class="wf-step"><strong>④ Render</strong>static image</div>
+        </div>
+        <div class="tip">💡 Using Spatial Studio? Skip ③–④ and call <code>render_dragmapr_project("project.zip")</code> instead.</div>
+      </div>
+
+      <!-- READING OFFSETS -->
+      <div class="section s-offsets">
+        <div class="section-title">Read &amp; Apply Offsets</div>
+
+        <div class="fn">
+          <span class="fn-name">read_offsets(<em>file</em>)</span>
+          <div class="fn-desc">Load a region offset CSV downloaded from the browser.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">apply_offsets(<em>x, offsets</em>)</span>
+          <div class="fn-desc">Shift an <code>sf</code> object's geometry by the saved region offsets.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">read_label_state(<em>file</em>)</span>
+          <div class="fn-desc">Load a label offset CSV.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">apply_label_state(<em>labels, file</em>)</span>
+          <div class="fn-desc">Apply saved label positions to a label table.</div>
+        </div>
+
+        <div class="code"><span class="cm"># Typical round-trip</span>
+reg  &lt;- <span class="fn">read_offsets</span>(<span class="st">"drag_region_offsets.csv"</span>)
+labs &lt;- <span class="fn">read_label_state</span>(<span class="st">"drag_label_offsets.csv"</span>)
+<span class="fn">render_dragged_map</span>(my_sf, <span class="kw">region_col</span> = <span class="st">"region"</span>,
+  <span class="kw">region_offsets</span> = reg, <span class="kw">label_offsets</span> = labs)</div>
+      </div>
+
+    </div><!-- /col 1 -->
+
+    <!-- COL 2 -->
+    <div class="col">
+
+      <!-- INTERACTIVE MAP -->
+      <div class="section s-interact">
+        <div class="section-title">2 · Open the Interactive Map</div>
+
+        <div class="fn">
+          <span class="fn-name">drag_map_prototype(<em>x, region_col, …</em>)</span>
+          <div class="fn-desc">Writes a self-contained HTML file and (optionally) opens it in your browser. Drag regions and labels, then download the two offset CSVs from the side panel.</div>
+        </div>
+
+        <table class="params">
+          <tr><th>Argument</th><th>What it does</th></tr>
+          <tr><td>x</td><td>Your projected <code>sf</code> object</td></tr>
+          <tr><td>region_col</td><td>Column that groups regions (required)</td></tr>
+          <tr><td>label_col</td><td>Column to use as label text (default = region_col)</td></tr>
+          <tr><td>labels</td><td><code>TRUE</code> auto-labels · <code>FALSE</code> no labels · data frame for custom</td></tr>
+          <tr><td>open</td><td><code>TRUE</code> opens browser immediately</td></tr>
+          <tr><td>show_legend</td><td><code>TRUE</code> adds a region colour legend</td></tr>
+          <tr><td>map_background</td><td>"white" · "light_grid" · "dark" · "transparent"</td></tr>
+          <tr><td>region_palette</td><td>Named vector of hex colours per region</td></tr>
+          <tr><td>file</td><td>Where to save the HTML (temp file if NULL)</td></tr>
+          <tr><td>side_panel</td><td><code>FALSE</code> hides panel (use in Shiny apps)</td></tr>
+          <tr><td>transition</td><td>Bloom config for parent/child groupings <span class="badge adv">adv</span></td></tr>
+        </table>
+
+        <div class="code"><span class="cm"># Minimal — opens browser</span>
+<span class="fn">drag_map_prototype</span>(my_sf, <span class="kw">region_col</span> = <span class="st">"region"</span>, <span class="kw">open</span> = <span class="kw">TRUE</span>)
+
+<span class="cm"># With legend and dark background</span>
+<span class="fn">drag_map_prototype</span>(my_sf, <span class="st">"region"</span>,
+  <span class="kw">show_legend</span> = <span class="kw">TRUE</span>, <span class="kw">map_background</span> = <span class="st">"dark"</span>, <span class="kw">open</span> = <span class="kw">TRUE</span>)</div>
+      </div>
+
+      <!-- RSTUDIO ADDIN -->
+      <div class="section s-interact">
+        <div class="section-title">RStudio Addin</div>
+
+        <div class="fn">
+          <span class="fn-name">dragmapr_addin()</span>
+          <div class="fn-desc">Or use <strong>Addins › Launch dragmapr</strong> in the RStudio toolbar. Point-and-click column selection, drag the map, click <em>Done</em> — saves <code>region_offsets</code> and <code>label_offsets</code> to <code>.GlobalEnv</code>.</div>
+        </div>
+
+        <div class="code"><span class="cm"># Load your sf first, then launch</span>
+regions &lt;- <span class="fn">prepare_dragmapr_sf</span>(sf::<span class="fn">st_read</span>(<span class="st">"map.shp"</span>))
+<span class="fn">dragmapr_addin</span>()
+
+<span class="cm"># After clicking Done:</span>
+<span class="fn">render_dragged_map</span>(regions, <span class="kw">region_col</span> = <span class="st">"name"</span>,
+  <span class="kw">region_offsets</span> = region_offsets,
+  <span class="kw">label_offsets</span>  = label_offsets,
+  <span class="kw">file</span> = <span class="st">"map.png"</span>)</div>
+      </div>
+
+    </div><!-- /col 2 -->
+
+    <!-- COL 3 -->
+    <div class="col">
+
+      <!-- LABELS -->
+      <div class="section s-labels">
+        <div class="section-title">3 · Labels</div>
+
+        <div class="fn">
+          <span class="fn-name">make_region_labels(<em>x, region_col, label_col</em>)</span>
+          <div class="fn-desc">Derive one label per region from your data — the easiest starting point.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">as_drag_labels(<em>df</em>)</span>
+          <div class="fn-desc">Validate and wrap a custom label data frame. Needs columns: <code>label_id</code>, <code>region</code>, <code>label</code>, <code>x</code>, <code>y</code>.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">as_drag_annotations(<em>df, connector, connector_type</em>)</span>
+          <div class="fn-desc">Turns label rows into draggable callout boxes with optional connector lines. Types: <code>"straight"</code> · <code>"elbow"</code> · <code>"curve"</code> · <code>"squiggle"</code>.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">select_label_ids(<em>labels, ids</em>)</span>
+          <div class="fn-desc">Show only the listed label IDs (e.g. for Shiny filter controls).</div>
+        </div>
+
+        <div class="code"><span class="cm"># Auto labels</span>
+lbs &lt;- <span class="fn">make_region_labels</span>(my_sf, <span class="kw">region_col</span> = <span class="st">"region"</span>)
+
+<span class="cm"># Custom callout box with a curved connector</span>
+note &lt;- <span class="fn">as_drag_annotations</span>(
+  data.frame(<span class="kw">label_id</span>=<span class="st">"n1"</span>, <span class="kw">region</span>=<span class="st">"North"</span>,
+             <span class="kw">label</span>=<span class="st">"Key area"</span>, <span class="kw">x</span>=<span class="nu">5e4</span>, <span class="kw">y</span>=<span class="nu">1.5e5</span>),
+  <span class="kw">connector</span>=<span class="kw">TRUE</span>, <span class="kw">connector_type</span>=<span class="st">"curve"</span>)</div>
+
+        <div class="note">🔁 Save and restore label positions across sessions with <code>read_label_state()</code> / <code>apply_label_state()</code>.</div>
+      </div>
+
+      <!-- BUILT-IN EXAMPLES -->
+      <div class="section s-utils">
+        <div class="section-title">Built-in Examples</div>
+        <div class="fn-desc" style="line-height:1.6">
+          <code>basic_draggable_map.R</code> — four regions, zero setup<br/>
+          <code>shiny_draggable_export.R</code> — live preview + PNG export<br/>
+          <code>shiny_spatial_studio.R</code> — full Spatial Studio app<br/>
+          <code>branch-bloom-tester.R</code> — parent/child bloom demo<br/>
+          <code>explodemap_hhs_labels.R</code> — HHS-style exploded layout
+        </div>
+        <div class="code"><span class="fn">source</span>(system.<span class="fn">file</span>(
+  <span class="st">"examples"</span>, <span class="st">"basic_draggable_map.R"</span>,
+  <span class="kw">package</span> = <span class="st">"dragmapr"</span>))</div>
+      </div>
+
+    </div><!-- /col 3 -->
+
+  </div><!-- /page-body -->
+
+  <div class="page-footer">
+    <span>dragmapr · v0.2.0</span>
+    <span>prigasg.github.io/dragmapr</span>
+    <span>Page 1 / 2</span>
+  </div>
+
+</div><!-- /page 1 -->
+
+
+<!-- ════════════════════════════════════════════════════════
+     PAGE 2
+═════════════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div>
+      <div class="pkg-name">dragmapr</div>
+      <div class="pkg-tag">Static export · Spatial Studio · Hierarchy / Bloom · Utilities</div>
+    </div>
+    <div class="hex"><div class="hex-inner">🗺️</div></div>
+  </div>
+
+  <div class="page-body">
+
+    <!-- COL 1 -->
+    <div class="col">
+
+      <!-- STATIC EXPORT -->
+      <div class="section s-export">
+        <div class="section-title">4 · Static Export</div>
+
+        <div class="fn">
+          <span class="fn-name">render_dragged_map(<em>x, region_col, …</em>)</span>
+          <div class="fn-desc">Applies saved offsets and renders a <code>ggplot2</code> image. Returns the ggplot object; saves to disk when <code>file</code> is set.</div>
+        </div>
+
+        <table class="params">
+          <tr><th>Argument</th><th>What it does</th></tr>
+          <tr><td>region_offsets</td><td>Data frame or CSV path from browser download</td></tr>
+          <tr><td>label_offsets</td><td>Label CSV or data frame</td></tr>
+          <tr><td>labels</td><td>Label table · <code>FALSE</code> to skip labels</td></tr>
+          <tr><td>show_legend</td><td>Show region fill legend</td></tr>
+          <tr><td>legend_title</td><td>Legend heading text</td></tr>
+          <tr><td>map_background</td><td>"white" · "light_grid" · "dark"</td></tr>
+          <tr><td>connector_endpoint</td><td>"none" or "arrow" on label connectors</td></tr>
+          <tr><td>show_origin_outlines</td><td>Ghost outlines of original positions</td></tr>
+          <tr><td>show_movement_connectors</td><td>Lines from original → dragged position</td></tr>
+          <tr><td>file</td><td>Output path (.png / .pdf / .svg)</td></tr>
+          <tr><td>width, height, dpi</td><td>Output dimensions (inches &amp; resolution)</td></tr>
+        </table>
+
+        <div class="code"><span class="fn">render_dragged_map</span>(my_sf,
+  <span class="kw">region_col</span>     = <span class="st">"region"</span>,
+  <span class="kw">region_offsets</span> = <span class="st">"drag_region_offsets.csv"</span>,
+  <span class="kw">label_offsets</span>  = <span class="st">"drag_label_offsets.csv"</span>,
+  <span class="kw">show_legend</span>    = <span class="kw">TRUE</span>,
+  <span class="kw">file</span>           = <span class="st">"map.png"</span>,
+  <span class="kw">width</span>=<span class="nu">10</span>, <span class="kw">height</span>=<span class="nu">8</span>, <span class="kw">dpi</span>=<span class="nu">300</span>)</div>
+
+        <hr class="div"/>
+
+        <div class="fn">
+          <span class="fn-name">render_dragmapr_project(<em>zip, …</em>)</span>
+          <div class="fn-desc">Reads a Spatial Studio project ZIP and renders the final image in one call. No separate CSVs needed.</div>
+          <div class="code"><span class="fn">render_dragmapr_project</span>(<span class="st">"project.zip"</span>,
+  <span class="kw">file</span>=<span class="st">"map.png"</span>, <span class="kw">width</span>=<span class="nu">10</span>, <span class="kw">height</span>=<span class="nu">8</span>)</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">write_dragmapr_project(<em>x, …, file</em>)</span>
+          <div class="fn-desc">Bundle source geometry + offsets + metadata into a ZIP for sharing.</div>
+        </div>
+      </div>
+
+    </div><!-- /col 1 -->
+
+    <!-- COL 2 -->
+    <div class="col">
+
+      <!-- SPATIAL STUDIO / SHINY -->
+      <div class="section s-shiny">
+        <div class="section-title">Spatial Studio &amp; Shiny</div>
+
+        <div class="fn">
+          <span class="fn-name">shiny_spatial_studio.R</span> <span class="badge">example</span>
+          <div class="fn-desc">Full-featured Shiny app: upload shapefiles/GeoJSON/GPKG, pick grouping and label columns, drag the map, switch columns while keeping layout, export PNG/PDF/ZIP.</div>
+          <div class="code"><span class="fn">source</span>(system.<span class="fn">file</span>(<span class="st">"examples"</span>,
+  <span class="st">"shiny_spatial_studio.R"</span>,
+  <span class="kw">package</span>=<span class="st">"dragmapr"</span>))</div>
+        </div>
+
+        <hr class="div"/>
+
+        <div class="fn">
+          <span class="fn-name">read_dragmapr_sf_upload(<em>input$file</em>)</span>
+          <div class="fn-desc">Read a user-uploaded spatial file (ZIP shapefile, GeoJSON, GPKG) inside a Shiny server function.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">read_dragmapr_sf_url(<em>url</em>)</span>
+          <div class="fn-desc">Download and read a spatial file from a URL.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">dragmapr_iframe_bridge()</span>
+          <div class="fn-desc">JavaScript bridge that relays drag state from the helper <code>&lt;iframe&gt;</code> to Shiny input values. Add to your UI once.</div>
+        </div>
+
+        <div class="code"><span class="cm"># Minimal Shiny integration</span>
+ui &lt;- <span class="fn">fluidPage</span>(
+  <span class="fn">dragmapr_iframe_bridge</span>(),
+  <span class="fn">uiOutput</span>(<span class="st">"map_iframe"</span>))
+
+server &lt;- function(input, output, session) {
+  sf_data &lt;- <span class="fn">reactive</span>({
+    <span class="fn">read_dragmapr_sf_upload</span>(input$file)
+  })
+}</div>
+
+        <hr class="div"/>
+
+        <div class="fn">
+          <span class="fn-name">suggest_offsets(<em>x, region_col, method</em>)</span>
+          <div class="fn-desc">Generate automatic starting offsets — useful as a Spatial Studio default before any dragging. Methods: <code>"radial"</code> · <code>"grid"</code> · <code>"directional"</code>.</div>
+        </div>
+
+      </div>
+
+    </div><!-- /col 2 -->
+
+    <!-- COL 3 -->
+    <div class="col">
+
+      <!-- HIERARCHY / BLOOM -->
+      <div class="section s-hier">
+        <div class="section-title">Hierarchy &amp; Bloom <span class="badge adv">advanced</span></div>
+
+        <div class="fn-desc" style="margin-bottom:5px">Parent/child bloom lets you drill into sub-regions with a leaf-flip animation while keeping the rest of the map at parent level.</div>
+
+        <div class="fn">
+          <span class="fn-name">detect_hierarchy_columns(<em>x</em>)</span>
+          <div class="fn-desc">Scan all columns and return candidate parent/child pairs based on nesting structure.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">recommend_dragmapr_hierarchy(<em>x</em>)</span>
+          <div class="fn-desc">Recommend the best grouping column and its child column, with a data-driven reason.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">validate_bloom_hierarchy(<em>x, parent_col, child_col</em>)</span>
+          <div class="fn-desc">Check that the child column genuinely nests inside the parent — required before arming a bloom transition.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">build_branch_transition_data(<em>x, parent_col, child_col</em>)</span>
+          <div class="fn-desc">Build the <code>transition</code> list to pass to <code>drag_map_prototype()</code>, including dissolved parent shells and bloom group mappings.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">make_branch_bloom_labels(<em>x, …</em>)</span>
+          <div class="fn-desc">Build a combined label table covering both parent and child levels for a bloom helper.</div>
+        </div>
+
+        <div class="fn">
+          <span class="fn-name">inherit_layout(<em>offsets, x, from_col, to_col</em>)</span>
+          <div class="fn-desc">Carry drag offsets from one grouping column to another (e.g. parent → child positions on first visit).</div>
+        </div>
+
+        <div class="code"><span class="cm"># Typical bloom setup</span>
+td &lt;- <span class="fn">build_branch_transition_data</span>(
+  my_sf, <span class="kw">parent_col</span>=<span class="st">"region"</span>, <span class="kw">child_col</span>=<span class="st">"state"</span>)
+<span class="fn">drag_map_prototype</span>(td$data, <span class="st">"region"</span>,
+  <span class="kw">transition</span>=td$transition, <span class="kw">open</span>=<span class="kw">TRUE</span>)</div>
+
+        <hr class="div"/>
+
+        <!-- UTILITIES -->
+        <div class="section s-utils" style="margin-bottom:0">
+          <div class="section-title">Utilities &amp; Diagnostics</div>
+
+          <div class="fn">
+            <span class="fn-name">dragmapr_diagnostics(<em>x</em>)</span>
+            <div class="fn-desc">Report CRS, geometry type, column types, and potential issues before you start dragging.</div>
+          </div>
+
+          <div class="fn">
+            <span class="fn-name">profile_spatial_upload(<em>x</em>)</span>
+            <div class="fn-desc">Summarise an uploaded file: row count, CRS, hierarchy candidates, recommended grouping.</div>
+          </div>
+
+          <div class="fn">
+            <span class="fn-name">summarise_spatial_crs(<em>x</em>)</span>
+            <div class="fn-desc">Human-readable description of the CRS and whether reprojection is needed.</div>
+          </div>
+
+          <div class="fn">
+            <span class="fn-name">example_hhs_layout() / example_panel_layout()</span>
+            <div class="fn-desc">Return small built-in layouts for testing and examples — no external data needed.</div>
+          </div>
+
+          <div class="tip">💡 Aliases <code>make_labels()</code>, <code>read_label_offsets()</code>, and <code>apply_label_offsets()</code> are kept for older scripts but emit deprecation warnings.</div>
+        </div>
+
+      </div>
+
+    </div><!-- /col 3 -->
+
+  </div><!-- /page-body -->
+
+  <div class="page-footer">
+    <span>dragmapr · MIT License · github.com/PrigasG/dragmapr</span>
+    <span>prigasg.github.io/dragmapr</span>
+    <span>Page 2 / 2</span>
+  </div>
+
+</div><!-- /page 2 -->
+
+</div><!-- /pages -->
+</body>
+</html>

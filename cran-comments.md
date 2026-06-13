@@ -15,10 +15,6 @@ Local `R CMD check --as-cran --no-manual` reports:
 - `checking CRAN incoming feasibility ... NOTE`
 - `New submission`
 
-This is expected for a first CRAN submission. GitHub Actions run the same check
-matrix on Ubuntu devel/release/oldrel-1, macOS release, and Windows release.
-On the local Windows machine, `R CMD check --as-cran --no-manual` can also
-report `unable to verify current time`; this is a local check-environment note.
 
 ## Notes on bundled files
 

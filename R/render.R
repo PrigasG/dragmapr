@@ -1,4 +1,10 @@
-#' Render an adjusted draggable plot with labels
+#' Save the dragged layout as a static image
+#'
+#' Takes the offset CSVs you downloaded from [drag_map_prototype()] and
+#' produces a `ggplot2` image with regions and labels in the positions you
+#' dragged them to. If you used Spatial Studio, use
+#' [render_dragmapr_project()] instead - it reads everything from the project
+#' ZIP in one call.
 #'
 #' @param x An `sf` object in a projected CRS.
 #' @param region_offsets Region offsets as a data frame, CSV path, or `NULL`.
