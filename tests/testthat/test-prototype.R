@@ -451,7 +451,7 @@ test_that("drag_map_prototype writes label colors", {
   expect_match(html, "function labelColor", fixed = TRUE)
 })
 
-test_that("drag_map_prototype embeds a validated elastic transition", {
+test_that("drag_map_prototype embeds a validated leaf-flip transition", {
   x <- sf::st_sf(
     region = c("A_1", "A_2"),
     geometry = sf::st_sfc(
@@ -466,24 +466,29 @@ test_that("drag_map_prototype embeds a validated elastic transition", {
     x,
     region_col = "region",
     transition = list(
-      anchors = data.frame(
-        region = c("A_1", "A_2"),
-        ax_m   = c(100, -100),
-        ay_m   = c(0, 0)
-      ),
-      groups      = list(A = c("A_1", "A_2")),
-      duration_ms = 700,
-      overshoot   = 1.2
+      groups               = list(A = c("A_1", "A_2")),
+      animation            = "leaf_flip",
+      duration_ms          = 700,
+      easing               = "cubic-in-out",
+      overshoot            = 1.2,
+      show_parent_ghost    = FALSE,
+      parent_ghost_opacity = 0,
+      leaf_flip_strength   = 0.22
     ),
     file = file
   )
 
   html <- paste(readLines(file, warn = FALSE), collapse = "\n")
-  expect_match(html, '"elasticTransition":', fixed = TRUE)
+  expect_match(html, '"branchTransition":', fixed = TRUE)
+  expect_match(html, '"animationMode":"leaf_flip"', fixed = TRUE)
   expect_match(html, '"durationMs":700', fixed = TRUE)
+  expect_match(html, '"easing":"cubic-in-out"', fixed = TRUE)
   expect_match(html, '"overshoot":1.2', fixed = TRUE)
+  expect_match(html, '"showParentGhost":false', fixed = TRUE)
+  expect_match(html, '"parentGhostOpacity":0', fixed = TRUE)
+  expect_match(html, '"leafFlipStrength":0.22', fixed = TRUE)
   expect_match(html, '"boundary":true', fixed = TRUE)
-  expect_match(html, '"region":"A_1","ax_m":100', fixed = TRUE)
+  expect_false(grepl('"anchors":[{', html, fixed = TRUE))
   expect_match(html, "dragmapr-collapse-branch", fixed = TRUE)
 })
 
@@ -498,14 +503,13 @@ test_that("drag_map_prototype omits the transition when NULL or empty", {
   file <- tempfile(fileext = ".html")
   drag_map_prototype(x, region_col = "region", file = file)
   html <- paste(readLines(file, warn = FALSE), collapse = "\n")
-  expect_match(html, '"elasticTransition":{}', fixed = TRUE)
+  expect_match(html, '"branchTransition":{}', fixed = TRUE)
 
-  empty <- list(anchors = data.frame(region = character(),
-                                     ax_m = numeric(), ay_m = numeric()))
+  empty <- list(groups = list())
   file2 <- tempfile(fileext = ".html")
   drag_map_prototype(x, region_col = "region", transition = empty, file = file2)
   html2 <- paste(readLines(file2, warn = FALSE), collapse = "\n")
-  expect_match(html2, '"elasticTransition":{}', fixed = TRUE)
+  expect_match(html2, '"branchTransition":{}', fixed = TRUE)
 })
 
 test_that("drag_map_prototype accepts a boundary-only (groups) transition", {
@@ -584,15 +588,10 @@ test_that("drag_map_prototype rejects malformed transitions", {
     "`transition` must be NULL or a named list"
   )
   expect_error(
-    drag_map_prototype(x, region_col = "region",
-                       transition = list(anchors = data.frame(region = "A"))),
-    "ax_m"
-  )
-  expect_error(
     drag_map_prototype(
       x, region_col = "region",
       transition = list(
-        anchors = data.frame(region = "A", ax_m = 1, ay_m = 1),
+        groups = list(A = "A"),
         duration_ms = -5
       )
     ),
@@ -602,7 +601,6 @@ test_that("drag_map_prototype rejects malformed transitions", {
     drag_map_prototype(
       x, region_col = "region",
       transition = list(
-        anchors = data.frame(region = "A", ax_m = 1, ay_m = 1),
         groups = list(c("A"))
       )
     ),

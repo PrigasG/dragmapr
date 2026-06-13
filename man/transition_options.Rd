@@ -6,23 +6,19 @@
 \usage{
 transition_options(
   mode = c("local_elastic", "local_insert"),
-  duration_ms = 550,
-  overshoot = 1.70158,
+  duration_ms = 400,
+  overshoot = 0,
   max_stretch = 0.35,
   n_frames = 30,
   preserve_skeleton = TRUE,
   global_relayout = FALSE,
   show_ghost = TRUE,
   show_trails = FALSE,
-  reset_boundary = TRUE,
-  group_drag_frame = reset_boundary,
-  boundary_behavior = c("drag", "reset", "none"),
+  reset_boundary = NULL,
+  group_drag_frame = TRUE,
+  boundary_behavior = c("drag", "none"),
   boundary_drag_threshold = 8,
   boundary_label = "Drag to",
-  collapse_duration_ms = 260,
-  collapse_visual_freeze_ms = 340,
-  collapse_scale = 0.16,
-  collapse_opacity = 0.04,
   boundary_padding = 0.025,
   drag_boundary_with_group = TRUE
 )
@@ -33,11 +29,11 @@ from the parent centroid with elastic overshoot; \code{"local_insert"} is an
 alias kept for forward compatibility and currently behaves identically.}
 
 \item{duration_ms}{Single positive number. Total animation duration in
-milliseconds. Defaults to \code{550}.}
+milliseconds. Defaults to \code{400}.}
 
 \item{overshoot}{Single non-negative number controlling the elastic
 "snap" of the ease-out-back curve. \code{0} disables overshoot entirely;
-the default \code{1.70158} gives the classic overshoot of about 10 percent.}
+the default \code{0} disables bounce for a cleaner map transition.}
 
 \item{max_stretch}{Single positive number. Upper cap on the per-feature
 stretch strength (movement distance relative to the layout diagonal).
@@ -60,38 +56,21 @@ behind its expanded children. Defaults to \code{TRUE}.}
 \item{show_trails}{Logical. Render dotted movement trails from the parent
 centroid to each child's final position. Defaults to \code{FALSE}.}
 
-\item{reset_boundary}{Logical. Legacy alias for \code{group_drag_frame}, kept
-for backwards compatibility. Defaults to \code{TRUE}.}
+\item{reset_boundary}{Deprecated logical alias for \code{group_drag_frame}.}
 
 \item{group_drag_frame}{Logical. Generate the dotted group-drag boundary
-around each expanded group. Defaults to the value of \code{reset_boundary}.}
+around each expanded group. Defaults to \code{TRUE}.}
 
-\item{boundary_behavior}{What a plain click on the dotted frame does in
-the interactive helper: \code{"drag"} (default; the frame is a group drag
-handle and a click compresses the branch), \code{"reset"} (legacy reset
-behaviour), or \code{"none"}. Forced to \code{"none"} when \code{group_drag_frame}
-is \code{FALSE}.}
+\item{boundary_behavior}{Boundary mode. Use \code{"drag"} to allow moving the
+expanded group from the dotted frame, or \code{"none"} to show no draggable
+frame.}
 
-\item{boundary_drag_threshold}{Single non-negative number. Pointer
-movement (in pixels) below which a frame gesture counts as a click
-rather than a drag. Defaults to \code{8}.}
+\item{boundary_drag_threshold}{Pixel threshold before a dotted-frame pointer
+movement counts as a drag instead of a click.}
 
 \item{boundary_label}{Single string used as the helper label for the
 dotted group frame. Defaults to \code{"Drag to"}, allowing the interactive
 helper to show labels such as \code{"Drag to Essex"}.}
-
-\item{collapse_duration_ms}{Single positive number. Browser-side reversible
-leaf-return animation duration in milliseconds. Defaults to \code{260}.}
-
-\item{collapse_visual_freeze_ms}{Single non-negative number. How long the
-Studio should defer label and legend refresh messages while collapsing.
-Defaults to \code{340}.}
-
-\item{collapse_scale}{Number from \code{0} to \code{1}. Final scale of children during
-a legacy collapse animation. Defaults to \code{0.16}.}
-
-\item{collapse_opacity}{Number from \code{0} to \code{1}. Final opacity of children
-during a legacy collapse animation. Defaults to \code{0.04}.}
 
 \item{boundary_padding}{Single positive number. Boundary padding as a
 fraction of the child layout's bounding-box diagonal. Defaults to
@@ -107,12 +86,12 @@ A named list of class \code{"dragmapr_transition_options"}.
 \description{
 Builds a validated list of animation and behaviour settings for
 \code{\link[=build_elastic_transition]{build_elastic_transition()}}. Defaults follow the user-tested values from
-the dragmapr transition prototype: a 550 ms ease-out-back bloom, a dotted
+the dragmapr transition prototype: a 400 ms branch bloom, a dotted
 group-drag boundary around the expanded group, and a stable parent
 skeleton.
 }
 \details{
-The transition model is always \emph{stable skeleton + local elastic insert}:
+The transition model is always \emph{stable skeleton + local branch bloom}:
 the parent layout is preserved and children expand locally from the parent
 centroid. \code{global_relayout} exists only as an explicit guard rail; setting
 it to \code{TRUE} is an error because recomputing the whole layout on every

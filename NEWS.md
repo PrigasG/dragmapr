@@ -1,25 +1,24 @@
 # dragmapr 0.2.0
 
-* New local elastic hierarchy transition engine (stable skeleton + local
-  elastic insert): `build_elastic_transition()` prepares anchored child data,
-  ease-out-back animation frames, and dotted local-return boundaries from any
-  parent/child `sf` hierarchy. `transition_options()` validates animation
-  settings and rejects `global_relayout = TRUE` to protect mental-map
-  stability. `make_group_boundaries()` returns the reset boundary as real
-  geometry so it can move with the dragged group, and `layout_metrics()`
-  reports mean/max drift and a 0-100 stability score between two layouts.
-* `inst/examples/transition-test-app.R` demonstrates the engine with a Shiny
-  expand/collapse playground driven entirely by the exported API.
 * `drag_map_prototype()` gains an optional `transition` argument: the browser
-  helper plays a local elastic bloom on first render and/or draws a dotted
-  local-return boundary per expanded group (`anchors` and `groups` may each be
-  supplied on their own). Clicking a boundary posts a
+  helper runs one client-side leaf-flip branch animation for parent-to-child
+  bloom and child-to-parent unbloom, and draws a dotted group-drag boundary per
+  expanded group. Clicking a boundary posts a
   `dragmapr-collapse-branch` message to the embedding page, or resets the
   branch when the helper runs standalone; a plain click on a region posts
   `dragmapr-region-click`.
+* New `inst/examples/branch-bloom-tester.R` Shiny example isolates the
+  branch-bloom helper so clean bloom and leaf-flip behavior can be tested
+  without the full Spatial Studio shell.
+* New upload intelligence helpers: `detect_hierarchy_columns()`,
+  `recommend_dragmapr_hierarchy()`, `validate_bloom_hierarchy()`,
+  `build_branch_transition_data()`, `make_branch_bloom_labels()`,
+  `summarise_spatial_crs()`, and `profile_spatial_upload()` move
+  parent/child detection, CRS meaning, branch-bloom data prep, and safe
+  parent-first label setup into reusable package functions.
 * Spatial Studio: new **Bloom** sidebar section. Pick a child column ("bloom
   into"), then click a parent region on the map (or choose parents in the
-  panel) to expand just that parent into its children with an elastic bloom -
+  panel) to expand just that parent into its children with a leaf flip -
   the rest of the map keeps the parent grouping. At most two parents can be
   expanded at a time (expanding another replaces the oldest), the dotted
   reset boundary can be toggled off, and clicking the boundary or the

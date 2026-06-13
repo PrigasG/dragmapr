@@ -34,4 +34,6 @@ server <- function(input, output, session) {
   })
 }
 
-shinyApp(ui, server)
+if (interactive()) {
+  shinyApp(ui, server)
+}

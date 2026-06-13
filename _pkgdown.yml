@@ -82,6 +82,19 @@ reference:
   - example_hhs_layout
   - example_panel_layout
 
+- title: Hierarchy and branch bloom
+  desc: >
+    Detect parent-child grouping columns, prepare branch-bloom helper data,
+    and explain CRS meaning for uploaded spatial files.
+  contents:
+  - detect_hierarchy_columns
+  - recommend_dragmapr_hierarchy
+  - validate_bloom_hierarchy
+  - build_branch_transition_data
+  - make_branch_bloom_labels
+  - summarise_spatial_crs
+  - profile_spatial_upload
+
 - title: Spatial I/O helpers
   desc: >
     Read spatial files from Shiny uploads or URLs, project and validate

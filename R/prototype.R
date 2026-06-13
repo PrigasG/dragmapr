@@ -41,6 +41,9 @@
 #' @param legend_title Title shown above the browser-helper legend.
 #' @param legend_values Optional character vector of region values to include
 #'   in the browser-helper legend. `NULL` includes all region values.
+#' @param legend_reflects_bloom When `TRUE`, an armed bloom helper lets the
+#'   browser legend switch between parent and child keys as branches expand.
+#'   The default `FALSE` keeps a parent-only legend during bloom animations.
 #' @param label_values Optional character vector of label IDs to display.
 #'   `NULL` displays all labels while preserving all label offsets.
 #' @param map_background Browser helper background. One of `"white"`,
@@ -74,29 +77,25 @@
 #' @param side_panel Show the built-in copy/download side panel in the helper
 #'   HTML. Defaults to `TRUE`; Shiny apps that provide their own controls can
 #'   set this to `FALSE`.
-#' @param transition Optional local elastic transition played on first render,
-#'   typically built from [build_elastic_transition()] output when switching
-#'   from a parent grouping to a child grouping. A named list with elements:
-#'   `anchors` (data frame with `region`, `ax_m`, `ay_m` columns,
-#'   where `ax_m`/`ay_m` is each region's bloom start point relative to its
-#'   final position, in map units; optional when `groups` is supplied, in
-#'   which case only the boundaries are drawn), `groups` (named list mapping each
+#' @param transition Optional branch-bloom transition for parent/child
+#'   grouping. A named list with elements: `groups` (named list mapping each
 #'   parent label to the character vector of child region values it contains;
 #'   used to draw a dotted group-drag boundary per expanded group),
 #'   `child_region_col` (column in `x` holding each feature's child-level
 #'   region key, enabling client-side expand/collapse), `shell_col` (column
 #'   flagging dissolved parent-shell features with `1`; while a parent is
 #'   collapsed only its shell is drawn and the child features stay hidden),
-#'   `expanded` (parent values to start expanded), `duration_ms`, `overshoot`,
-#'   and `boundary` (set `FALSE` to skip the dotted frame). The frame is now
+#'   `expanded` (parent values to start expanded), `mode`, `animation`,
+#'   `duration_ms`, `easing`, `overshoot` (retained for backward
+#'   compatibility), `show_parent_ghost`, and
+#'   `boundary` (set `FALSE` to skip the dotted frame). The frame is now
 #'   treated as a two-gesture group handle by default: dragging it moves all
 #'   bloomed children in the branch together, while a plain click compresses
 #'   the branch back to the parent.
-#'   Optional transition fields include `boundary_behavior` (`"drag"`,
-#'   `"reset"`, or `"none"`), `boundary_drag_threshold` in screen pixels
-#'   before a pointer gesture is treated as a drag, and `boundary_label` for
-#'   helper text. Use `"Drag to"` so the helper can label each frame as
-#'   `"Drag to <parent/location>"`.
+#'   Optional transition fields include `boundary_behavior` (`"drag"` or
+#'   `"none"`), `debug`, `stagger_ms`, `boundary_drag_threshold` in screen pixels before a pointer
+#'   gesture is treated as a drag, and `boundary_label` for helper text. Use
+#'   `"Drag to"` so the helper can label each frame as `"Drag to <parent/location>"`.
 #'   `NULL` (default) disables the animation.
 #' @param file Output HTML path. When `NULL`, a temporary `.html` file is
 #'   created. Pass an explicit path to save the helper somewhere durable.
@@ -151,6 +150,7 @@ drag_map_prototype <- function(x,
                                legend_title = "Region",
                                legend_values = NULL,
                                label_values = NULL,
+                               legend_reflects_bloom = FALSE,
                                map_background = c("white", "transparent", "light_grid", "dark"),
                                connector_linetype = c("solid", "dashed", "dotted"),
                                connector_endpoint = c("none", "arrow"),
@@ -251,6 +251,9 @@ drag_map_prototype <- function(x,
   }
   if (!is.null(legend_values) && !is.character(legend_values)) {
     stop("`legend_values` must be a character vector or NULL.", call. = FALSE)
+  }
+  if (!is.logical(legend_reflects_bloom) || length(legend_reflects_bloom) != 1L || is.na(legend_reflects_bloom)) {
+    stop("`legend_reflects_bloom` must be TRUE or FALSE.", call. = FALSE)
   }
   if (!is.null(label_values) && !is.character(label_values)) {
     stop("`label_values` must be a character vector or NULL.", call. = FALSE)
@@ -360,6 +363,7 @@ drag_map_prototype <- function(x,
     legendPosition = legend_position,
     legendTitle = unname(legend_title),
     legendValues = if (is.null(legend_values)) NULL else unname(legend_values),
+    legendReflectsBloom = isTRUE(legend_reflects_bloom),
     labelValues = if (is.null(label_values)) NULL else unname(label_values),
     mapBackground = map_background,
     connectorLinetype = connector_linetype,
@@ -375,7 +379,7 @@ drag_map_prototype <- function(x,
     movementConnectorEndpoint = movement_connector_endpoint,
     showDragTrail = isTRUE(show_drag_trail),
     sidePanel = isTRUE(side_panel),
-    elasticTransition = transition
+    branchTransition = transition
   )
 
   template <- system.file("prototype", "index.html", package = "dragmapr", mustWork = TRUE)
@@ -388,63 +392,6 @@ drag_map_prototype <- function(x,
   html <- sub("__LABEL_OFFSETS__", json_for_script(label_offset_data, dataframe = "rows"), html, fixed = TRUE)
   html <- sub("__OPTIONS__", json_for_script(options), html, fixed = TRUE)
   html <- sub("__HTML_CLASS__", if (isTRUE(side_panel)) "" else "no-side-panel", html, fixed = TRUE)
-
-  visual_freeze_script <- paste0(
-    "<script>
-",
-    "(function(){
-",
-    "  if (window.__dragmaprVisualFreezeInstalled) return;
-",
-    "  window.__dragmaprVisualFreezeInstalled = true;
-",
-    "  var timer = null;
-",
-    "  function setFrozen(active, durationMs){
-",
-    "    document.documentElement.classList.toggle('dragmapr-visual-freeze', !!active);
-",
-    "    document.body.classList.toggle('dragmapr-visual-freeze', !!active);
-",
-    "    window.clearTimeout(timer);
-",
-    "    if (active) {
-",
-    "      timer = window.setTimeout(function(){ setFrozen(false, 0); }, Math.max(0, Number(durationMs || 320)));
-",
-    "    }
-",
-    "  }
-",
-    "  var style = document.createElement('style');
-",
-    "  style.textContent = '.dragmapr-visual-freeze text, .dragmapr-visual-freeze .legend, .dragmapr-visual-freeze [class*=legend], .dragmapr-visual-freeze [class*=label] { transition: opacity 120ms ease; }';
-",
-    "  document.head.appendChild(style);
-",
-    "  window.addEventListener('message', function(event){
-",
-    "    var data = event.data || {};
-",
-    "    if (data.type === 'dragmapr-freeze-visuals') {
-",
-    "      setFrozen(!!data.active, data.durationMs);
-",
-    "    }
-",
-    "  }, true);
-",
-    "})();
-",
-    "</script>
-"
-  )
-  if (grepl("</body>", html, fixed = TRUE)) {
-    html <- sub("</body>", paste0(visual_freeze_script, "</body>"), html, fixed = TRUE)
-  } else {
-    html <- paste0(html, "
-", visual_freeze_script)
-  }
 
   writeLines(html, file, useBytes = TRUE)
   if (isTRUE(open)) {
@@ -461,49 +408,33 @@ normalize_prototype_transition <- function(transition) {
   }
   if (!is.list(transition)) {
     stop(
-      "`transition` must be NULL or a named list with an `anchors` data ",
-      "frame (columns: region, ax_m, ay_m) and/or a named `groups` list. ",
+      "`transition` must be NULL or a named list with `groups` and/or ",
+      "`child_region_col`. ",
       "See ?drag_map_prototype.",
       call. = FALSE
     )
   }
-  anchors <- transition$anchors
-  if (!is.null(anchors)) {
-    if (!is.data.frame(anchors) ||
-        !all(c("region", "ax_m", "ay_m") %in% names(anchors))) {
-      stop(
-        "`transition$anchors` must be a data frame with `region`, `ax_m`, ",
-        "and `ay_m` columns (bloom start point relative to each region's ",
-        "final position, in map units).",
-        call. = FALSE
-      )
-    }
-    anchors <- data.frame(
-      region = as.character(anchors$region),
-      ax_m   = suppressWarnings(as.numeric(anchors$ax_m)),
-      ay_m   = suppressWarnings(as.numeric(anchors$ay_m)),
-      stringsAsFactors = FALSE
-    )
-    anchors$ax_m[!is.finite(anchors$ax_m)] <- 0
-    anchors$ay_m[!is.finite(anchors$ay_m)] <- 0
-    anchors <- anchors[!is.na(anchors$region) & nzchar(anchors$region), , drop = FALSE]
-    if (nrow(anchors) == 0L) {
-      anchors <- NULL
-    }
-  }
 
   groups <- transition$groups
   if (!is.null(groups)) {
-    if (!is.list(groups) || is.null(names(groups)) || any(!nzchar(names(groups)))) {
+    if (!is.list(groups)) {
       stop(
         "`transition$groups` must be a named list mapping each parent ",
         "label to a character vector of child region values.",
         call. = FALSE
       )
     }
-    groups <- lapply(groups, function(g) as.character(g))
     if (length(groups) == 0L) {
       groups <- NULL
+    } else if (is.null(names(groups)) || any(!nzchar(names(groups)))) {
+      stop(
+        "`transition$groups` must be a named list mapping each parent ",
+        "label to a character vector of child region values.",
+        call. = FALSE
+      )
+    }
+    if (!is.null(groups)) {
+      groups <- lapply(groups, function(g) as.character(g))
     }
   }
 
@@ -534,12 +465,40 @@ normalize_prototype_transition <- function(transition) {
     if (length(expanded) == 0L) expanded <- NULL
   }
 
-  if (is.null(anchors) && is.null(groups) && is.null(child_region_col)) {
+  if (is.null(groups) && is.null(child_region_col)) {
     return(NULL)
   }
 
-  duration_ms <- transition$duration_ms %||% 550
-  overshoot   <- transition$overshoot %||% 1.70158
+  mode <- transition$mode %||% transition$transition_mode %||% "branch_bloom"
+  if (!is.character(mode) || length(mode) != 1L || is.na(mode) || !nzchar(mode)) {
+    stop("`transition$mode` must be a single string.", call. = FALSE)
+  }
+  mode <- match.arg(tolower(mode), choices = c("branch_bloom"))
+
+  animation <- transition$animation %||% transition$animation_mode %||%
+    transition$effect %||% "branch_bloom"
+  if (!is.character(animation) || length(animation) != 1L ||
+      is.na(animation) || !nzchar(animation)) {
+    stop(
+      "`transition$animation` must be either 'branch_bloom' or ",
+      "'leaf_flip'.",
+      call. = FALSE
+    )
+  }
+  animation <- tolower(gsub("[\\s-]+", "_", animation))
+  animation <- match.arg(
+    animation,
+    choices = c("branch_bloom", "leaf_flip")
+  )
+
+  easing <- transition$easing %||% transition$ease %||% "cubic-out"
+  if (!is.character(easing) || length(easing) != 1L || is.na(easing) || !nzchar(easing)) {
+    stop("`transition$easing` must be a single string.", call. = FALSE)
+  }
+  easing <- match.arg(tolower(easing), choices = c("cubic-out", "cubic-in-out", "linear"))
+
+  duration_ms <- transition$duration_ms %||% transition$durationMs %||% 400
+  overshoot   <- transition$overshoot %||% 0
   if (!is.numeric(duration_ms) || length(duration_ms) != 1L ||
       !is.finite(duration_ms) || duration_ms <= 0) {
     stop("`transition$duration_ms` must be a single positive number.", call. = FALSE)
@@ -549,27 +508,68 @@ normalize_prototype_transition <- function(transition) {
     stop("`transition$overshoot` must be a single non-negative number.", call. = FALSE)
   }
 
-  collapse_duration_ms <- transition$collapse_duration_ms %||%
-    transition$collapseDurationMs %||% 260
-  collapse_visual_freeze_ms <- transition$collapse_visual_freeze_ms %||%
-    transition$collapseVisualFreezeMs %||% 340
-  collapse_scale <- transition$collapse_scale %||% transition$collapseScale %||% 0.16
-  collapse_opacity <- transition$collapse_opacity %||% transition$collapseOpacity %||% 0.04
-  if (!is.numeric(collapse_duration_ms) || length(collapse_duration_ms) != 1L ||
-      !is.finite(collapse_duration_ms) || collapse_duration_ms <= 0) {
-    stop("`transition$collapse_duration_ms` must be a single positive number.", call. = FALSE)
+  stagger_ms <- transition$stagger_ms %||% transition$staggerMs %||% 0
+  if (!is.numeric(stagger_ms) || length(stagger_ms) != 1L ||
+      !is.finite(stagger_ms) || stagger_ms < 0) {
+    stop("`transition$stagger_ms` must be a single non-negative number.", call. = FALSE)
   }
-  if (!is.numeric(collapse_visual_freeze_ms) || length(collapse_visual_freeze_ms) != 1L ||
-      !is.finite(collapse_visual_freeze_ms) || collapse_visual_freeze_ms < 0) {
-    stop("`transition$collapse_visual_freeze_ms` must be a single non-negative number.", call. = FALSE)
+
+  debug <- transition$debug %||% FALSE
+  if (!is.logical(debug) || length(debug) != 1L || is.na(debug)) {
+    stop("`transition$debug` must be TRUE or FALSE.", call. = FALSE)
   }
-  if (!is.numeric(collapse_scale) || length(collapse_scale) != 1L ||
-      !is.finite(collapse_scale) || collapse_scale < 0 || collapse_scale > 1) {
-    stop("`transition$collapse_scale` must be a number between 0 and 1.", call. = FALSE)
+
+  show_parent_ghost <- transition$show_parent_ghost %||%
+    transition$showParentGhost %||% TRUE
+  if (!is.logical(show_parent_ghost) || length(show_parent_ghost) != 1L ||
+      is.na(show_parent_ghost)) {
+    stop("`transition$show_parent_ghost` must be TRUE or FALSE.", call. = FALSE)
   }
-  if (!is.numeric(collapse_opacity) || length(collapse_opacity) != 1L ||
-      !is.finite(collapse_opacity) || collapse_opacity < 0 || collapse_opacity > 1) {
-    stop("`transition$collapse_opacity` must be a number between 0 and 1.", call. = FALSE)
+
+  parent_ghost_opacity <- transition$parent_ghost_opacity %||%
+    transition$parentGhostOpacity %||% 0.28
+  if (!is.numeric(parent_ghost_opacity) ||
+      length(parent_ghost_opacity) != 1L ||
+      !is.finite(parent_ghost_opacity) ||
+      parent_ghost_opacity < 0 || parent_ghost_opacity > 1) {
+    stop(
+      "`transition$parent_ghost_opacity` must be a number between 0 and 1.",
+      call. = FALSE
+    )
+  }
+
+  leaf_flip_strength <- transition$leaf_flip_strength %||%
+    transition$leafFlipStrength %||% 0.16
+  if (!is.numeric(leaf_flip_strength) || length(leaf_flip_strength) != 1L ||
+      !is.finite(leaf_flip_strength) || leaf_flip_strength < 0 ||
+      leaf_flip_strength > 1) {
+    stop(
+      "`transition$leaf_flip_strength` must be a number between 0 and 1.",
+      call. = FALSE
+    )
+  }
+
+  leaf_child_scale <- transition$leaf_child_scale %||%
+    transition$leafChildScale %||% 0.90
+  if (!is.numeric(leaf_child_scale) || length(leaf_child_scale) != 1L ||
+      !is.finite(leaf_child_scale) || leaf_child_scale < 0.60 ||
+      leaf_child_scale > 1) {
+    stop(
+      "`transition$leaf_child_scale` must be a number between 0.60 and 1.",
+      call. = FALSE
+    )
+  }
+
+  leaf_expand_duration_factor <- transition$leaf_expand_duration_factor %||%
+    transition$leafExpandDurationFactor %||% 0.88
+  leaf_collapse_duration_factor <- transition$leaf_collapse_duration_factor %||%
+    transition$leafCollapseDurationFactor %||% 0.68
+  for (nm in c("leaf_expand_duration_factor", "leaf_collapse_duration_factor")) {
+    val <- get(nm)
+    if (!is.numeric(val) || length(val) != 1L || !is.finite(val) ||
+        val <= 0 || val > 1.25) {
+      stop("`transition$", nm, "` must be a positive number no greater than 1.25.", call. = FALSE)
+    }
   }
 
   boundary_behavior <- transition$boundary_behavior %||%
@@ -577,14 +577,14 @@ normalize_prototype_transition <- function(transition) {
   if (!is.character(boundary_behavior) || length(boundary_behavior) != 1L ||
       is.na(boundary_behavior) || !nzchar(boundary_behavior)) {
     stop(
-      "`transition$boundary_behavior` must be one of 'drag', 'reset', ",
-      "or 'none'.",
+      "`transition$boundary_behavior` must be either 'drag' or 'none'. ",
+      "Use 'drag' for the current dotted-frame handle.",
       call. = FALSE
     )
   }
   boundary_behavior <- match.arg(
     tolower(boundary_behavior),
-    choices = c("drag", "reset", "none")
+    choices = c("drag", "none")
   )
 
   boundary_drag_threshold <- transition$boundary_drag_threshold %||%
@@ -619,17 +619,26 @@ normalize_prototype_transition <- function(transition) {
   # truthy in JavaScript and breaks array handling in the helper. `I()` keeps
   # length-one vectors as JSON arrays.
   payload <- list(
-    anchors        = anchors,
+    mode           = mode,
+    animation      = animation,
+    animationMode  = animation,
+    effect         = animation,
+    controller     = "branch_animator",
     groups         = groups,
     childRegionCol = child_region_col,
     shellCol       = shell_col,
     expanded       = if (is.null(expanded)) NULL else I(expanded),
     durationMs            = unname(duration_ms),
+    easing                = easing,
     overshoot             = unname(overshoot),
-    collapseDurationMs    = unname(collapse_duration_ms),
-    collapseVisualFreezeMs = unname(collapse_visual_freeze_ms),
-    collapseScale         = unname(collapse_scale),
-    collapseOpacity       = unname(collapse_opacity),
+    staggerMs             = unname(stagger_ms),
+    showParentGhost       = isTRUE(show_parent_ghost),
+    parentGhostOpacity       = unname(parent_ghost_opacity),
+    leafFlipStrength         = unname(leaf_flip_strength),
+    leafChildScale           = unname(leaf_child_scale),
+    leafExpandDurationFactor = unname(leaf_expand_duration_factor),
+    leafCollapseDurationFactor = unname(leaf_collapse_duration_factor),
+    debug                    = isTRUE(debug),
     boundary              = !identical(transition$boundary, FALSE) &&
       !identical(boundary_behavior, "none"),
     boundaryBehavior      = boundary_behavior,

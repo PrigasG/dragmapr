@@ -43,6 +43,8 @@ svg {
   display: block;
   background: #fbfcfe;
   cursor: grab;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 aside { border-left: 1px solid #d8dee8; padding: 16px; }
 button { min-height: 34px; padding: 0 12px; border: 1px solid #d8dee8; background: #f7f8fb; border-radius: 6px; cursor: pointer; font-size: 13px; color: #172033; white-space: nowrap; transition: background .12s; }
@@ -57,6 +59,8 @@ textarea { width: 100%; height: 28vh; margin-top: 8px; font: 12px/1.35 ui-monosp
 h2 { font-size: 13px; margin: 16px 0 0; }
 .region path { stroke: white; stroke-width: 0.8; vector-effect: non-scaling-stroke; cursor: grab; }
 .region.is-active path { stroke: #111827; stroke-width: 1.8; }
+.leaf-proxy { stroke: white; stroke-width: 1.15; vector-effect: non-scaling-stroke; pointer-events: none; shape-rendering: geometricPrecision; }
+.leaf-proxy path { pointer-events: none; }
 .origin-outline path { fill: none; stroke: #64748b; stroke-width: 1.25; stroke-dasharray: 6 5; opacity: 0.58; vector-effect: non-scaling-stroke; pointer-events: none; }
 .movement-connector { fill: none; stroke-linecap: round; pointer-events: none; }
 .movement-band { stroke-linecap: round; pointer-events: none; }
@@ -65,12 +69,13 @@ h2 { font-size: 13px; margin: 16px 0 0; }
 .connector.dashed { stroke-dasharray: 9 6; }
 .connector.dotted { stroke-dasharray: 2 6; }
 .label rect, .label circle { fill: white; stroke: #111827; stroke-width: 1.1; }
-.label rect { filter: drop-shadow(0 2px 5px rgba(15, 23, 42, 0.16)); }
+.label rect { filter: none !important; }
+svg * { filter: none !important; }
 .label rect.drag-hit { fill: transparent; stroke: transparent; filter: none; }
 .label text { font-size: 11px; font-weight: 800; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .label.box text { font-weight: 650; text-anchor: start; dominant-baseline: hanging; }
-.elastic-return { cursor: pointer; }
-.elastic-return rect.frame {
+.branch-return { cursor: default; }
+.branch-return rect.frame {
   fill: rgba(124, 58, 237, 0.05);
   stroke: #7c3aed;
   stroke-width: 2;
@@ -78,10 +83,23 @@ h2 { font-size: 13px; margin: 16px 0 0; }
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
   transition: fill 160ms ease;
 }
-.elastic-return:hover rect.frame { fill: rgba(124, 58, 237, 0.1); }
-.elastic-return text {
+.branch-return rect.frame-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  vector-effect: non-scaling-stroke;
+  pointer-events: visibleStroke;
+}
+.branch-return.is-draggable { cursor: grab; }
+.branch-return.is-draggable:active { cursor: grabbing; }
+.branch-return.is-draggable:hover rect.frame { fill: rgba(124, 58, 237, 0.1); }
+.branch-return.is-locked rect.frame { fill: rgba(124, 58, 237, 0.028); stroke-opacity: 0.58; }
+.branch-return.is-dragging rect.frame { fill: rgba(124, 58, 237, 0.115); stroke-width: 2.35; }
+.branch-return.is-locked text { opacity: 0.62; }
+.branch-return text {
   fill: #6d28d9;
   font-size: 12px;
   font-weight: 800;
@@ -89,6 +107,7 @@ h2 { font-size: 13px; margin: 16px 0 0; }
   paint-order: stroke;
   stroke: rgba(255, 255, 255, 0.9);
   stroke-width: 4px;
+  pointer-events: none;
 }
 .identity-badge {
   position: absolute;
@@ -207,23 +226,23 @@ function naturalCompare(a, b) {
   }
   return 0;
 }
-// Local elastic transition / selective bloom. `{}` (serialized NULL) = off.
+// Branch-bloom transition / selective bloom. `{}` (serialized NULL) = off.
 // When the host arms bloom, features also carry `drag_child_region` and
 // expand/collapse happens fully client-side (no iframe rebuild).
-const elastic = (options.elasticTransition &&
-                 (options.elasticTransition.anchors ||
-                  options.elasticTransition.groups ||
-                  options.elasticTransition.childRegionCol))
-  ? options.elasticTransition
+const branchTransitionPayload = options.branchTransition;
+const branchTransition = (branchTransitionPayload &&
+                 (branchTransitionPayload.groups ||
+                  branchTransitionPayload.childRegionCol))
+  ? branchTransitionPayload
   : null;
 // jsonlite serializes NULL as `{}`, so any payload field that should be an
 // array must be coerced defensively before use.
 function asArray(v) {
   return Array.isArray(v) ? v : [];
 }
-let bloomBoundaryOn = !elastic || elastic.boundary !== false;
+let bloomBoundaryOn = !branchTransition || branchTransition.boundary !== false;
 let expandedParents = new Set(
-  asArray(elastic && elastic.expanded).map(String)
+  asArray(branchTransition && branchTransition.expanded).map(String)
 );
 
 function featureParentKey(f) {
@@ -264,9 +283,15 @@ function featureVisible(f) {
 // SVG and bloom/unbloom only animates visibility and transforms. Every user
 // action claims a version; stale callbacks may finish but cannot commit.
 // Logical truth lives in branchState; SVG attributes are outputs of it.
-const dualDom = !!(elastic && shellParents.size > 0);
-const branchState = new Map();    // parent key -> collapsed|blooming|expanded|unblooming
+const dualDom = !!(branchTransition && shellParents.size > 0);
+const branchState = new Map();    // parent key -> collapsed|expanding|expanded|collapsing
 const branchVersion = new Map();  // parent key -> claim counter
+const branchDebug = !!(branchTransition && branchTransition.debug);
+
+function logBranch(message, details) {
+  if (!branchDebug || !window.console) return;
+  console.debug(`[dragmapr branch] ${message}`, details || {});
+}
 
 // child key -> parent key (and the reverse) for the armed hierarchy.
 const childParentIndex = new Map();
@@ -284,13 +309,13 @@ for (const f of geojson.features) {
 
 function branchExpandedLike(p) {
   const st = branchState.get(String(p));
-  return st === "expanded" || st === "blooming";
+  return st === "expanded" || st === "expanding";
 }
 
 function syncExpandedFromBranches() {
   const next = new Set();
   for (const [p, st] of branchState) {
-    if (st === "expanded" || st === "blooming") next.add(p);
+    if (st === "expanded" || st === "expanding") next.add(p);
   }
   expandedParents = next;
 }
@@ -312,8 +337,10 @@ function branchNodes(p) {
       .filter(d => String(d) === String(p)) : null,
     children: root ? root.selectAll("g.region")
       .filter(d => kids.has(String(d))) : null,
-    boundary: elasticLayer ? elasticLayer.selectAll("g.elastic-return")
-      .filter(g => String(g.id) === String(p)) : null
+    boundary: branchBoundaryLayer ? branchBoundaryLayer.selectAll("g.branch-return")
+      .filter(g => String(g.id) === String(p)) : null,
+    leafProxy: leafProxyLayer ? leafProxyLayer.selectAll("path.leaf-proxy")
+      .filter(g => String(g.parent) === String(p)) : null
   };
 }
 
@@ -322,6 +349,7 @@ function interruptBranch(p) {
   if (n.shell) n.shell.interrupt();
   if (n.children) n.children.interrupt();
   if (n.boundary) n.boundary.interrupt();
+  if (n.leafProxy) n.leafProxy.interrupt().remove();
   if (typeof labelLayer !== "undefined" && labelLayer) {
     labelLayer.selectAll("g.label")
       .filter(d => d && d.label_level != null &&
@@ -350,7 +378,17 @@ function branchConnectorSel(p, level) {
 }
 
 function nodeLayoutLocked(node) {
-  return !!d3.active(node);
+  if (d3.active(node)) return true;
+  const d = node && node.__data__;
+  if (!d) return false;
+  if (d.label_level != null) {
+    const st = branchState.get(labelParentOf(d));
+    return st === "expanding" || st === "collapsing";
+  }
+  const key = String(d);
+  const parent = childParentIndex.get(key) || key;
+  const st = branchState.get(parent);
+  return st === "expanding" || st === "collapsing";
 }
 
 // Claim ownership of a branch: bump the version, stop every running
@@ -388,6 +426,13 @@ function regionVisibleNow(key) {
   if (shellParents.has(k)) return !branchExpandedLike(k);
   const p = childParentIndex.get(k);
   return p ? branchExpandedLike(p) : true;
+}
+
+function regionOpacityNow(key) {
+  if (!dualDom) return null;
+  const k = String(key);
+  if (shellParents.has(k) && branchExpandedLike(k)) return branchParentGhostOpacity();
+  return regionVisibleNow(k) ? 1 : 0;
 }
 
 function rebuildGrouping(preserveOffsets) {
@@ -434,7 +479,7 @@ for (const row of initialLabelOffsets || []) {
   }
 }
 const bounds = coordBounds(geojson);
-let projection, path, metricScale, originLayer, movementConnectorLayer, movementBandLayer, trailLayer, root, labelLayer;
+let projection, path, metricScale, originLayer, movementConnectorLayer, movementBandLayer, trailLayer, root, leafProxyLayer, labelLayer;
 let mapGroup = null;
 let panState = null;
 let panTranslate = {x: 0, y: 0};
@@ -444,19 +489,42 @@ let badgeTimer = null;
 let trailSnapshots = [];
 let trailLastScreenX = 0;
 let trailLastScreenY = 0;
-let elasticLayer = null;
-let elasticBoundaryData = null;
-let elasticPlayed = false;
+let branchBoundaryLayer = null;
+let branchBoundaryData = null;
 let dragMovedPx = 0;
 let bloomAnimUntil = 0;
 let deferredRenderTimer = null;
 let preserveViewOnce = false;
-let bloomApplyToken = 0;
 
 // Below this distance a frame/region gesture counts as a click, not a drag.
 function clickThresholdPx() {
-  const t = elastic ? Number(elastic.boundaryDragThreshold) : NaN;
+  const t = branchTransition ? Number(branchTransition.boundaryDragThreshold) : NaN;
   return Number.isFinite(t) && t > 0 ? t : 6;
+}
+
+function branchBoundaryBehavior() {
+  return String((branchTransition && branchTransition.boundaryBehavior) || "drag").toLowerCase();
+}
+
+function branchFrameVisible(id) {
+  if (!dualDom || !bloomBoundaryOn) return !dualDom && bloomBoundaryOn;
+  const st = branchState.get(String(id));
+  return st === "expanded" || st === "expanding" || st === "collapsing";
+}
+
+function branchFrameDraggable(id) {
+  if (!dualDom || !bloomBoundaryOn) {
+    return bloomBoundaryOn && branchBoundaryBehavior() === "drag";
+  }
+  return branchBoundaryBehavior() === "drag" && branchState.get(String(id)) === "expanded";
+}
+
+function syncBranchFrameInteractivity() {
+  if (!branchBoundaryLayer || !branchBoundaryData) return;
+  branchBoundaryLayer.selectAll("g.branch-return")
+    .classed("is-draggable", g => branchFrameDraggable(g.id))
+    .classed("is-locked", g => branchFrameVisible(g.id) && !branchFrameDraggable(g.id))
+    .attr("pointer-events", g => branchFrameDraggable(g.id) ? null : "none");
 }
 const allowedParentOrigin = parentOrigin();
 
@@ -623,6 +691,31 @@ function schedulePostState(regionText = regionCsv(), labelText = labelCsv()) {
   }, 150);
 }
 
+let animationStateTimer = null;
+let animationStateSeq = 0;
+function postAnimationState(active, mode, parent, durationMs) {
+  if (!window.parent || window.parent === window) return;
+  window.parent.postMessage({
+    type: "dragmapr-animation-state",
+    active: !!active,
+    mode: mode || null,
+    parent: parent == null ? null : String(parent),
+    durationMs: Number(durationMs) || 0,
+    at: Date.now()
+  }, messageTargetOrigin());
+}
+
+function beginBranchAnimationState(mode, parent, durationMs) {
+  const seq = ++animationStateSeq;
+  const wait = Math.max(0, Number(durationMs) || 0);
+  window.clearTimeout(animationStateTimer);
+  postAnimationState(true, mode, parent, wait);
+  animationStateTimer = window.setTimeout(function() {
+    if (seq !== animationStateSeq) return;
+    postAnimationState(false, mode, parent, 0);
+  }, wait + 80);
+}
+
 function syncLabelControls() {
   const hidden = !options.labels;
   document.querySelector("#copy-labels").hidden = hidden;
@@ -639,6 +732,17 @@ function syncLabelControls() {
   }
 
 function visibleLegendRegions() {
+  if (dualDom && options.legendReflectsBloom !== true) {
+    // Parent-only legend while bloom is armed: children are shades of the
+    // parent hue, so one swatch per parent carries them. The list is
+    // expansion-independent, so the legend never changes mid-animation.
+    const parents = Array.from(shellParents).sort(naturalCompare);
+    return selectedValues(options.legendValues, parents);
+  }
+  if (dualDom) {
+    const visible = mountedRegions.filter(regionVisibleNow);
+    return selectedValues(options.legendValues, visible);
+  }
   return selectedValues(options.legendValues, regions);
 }
 
@@ -673,7 +777,7 @@ function visibleLabelRows() {
   let rows = labelRows.filter(label => selected.has(String(label.label_id)));
   if (hasDualLabels()) {
     rows = rows.filter(labelStateVisible);
-  } else if (elastic && grouped) {
+  } else if (branchTransition && grouped) {
     // Legacy armed path: hide labels whose region is not currently
     // rendered (child labels right after a collapse, before the host
     // pushes the refreshed label table).
@@ -746,7 +850,7 @@ function syncLegend() {
     swatch.style.background = color(region);
     const label = document.createElement("span");
     label.className = "legend-label";
-    label.textContent = region;
+    label.textContent = dualDom ? branchShortLabel(region) : region;
     item.append(swatch, label);
     return item;
   }));
@@ -949,13 +1053,13 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-// ---- Local elastic hierarchy transition -------------------------------------
-// Children bloom from their parent's centre; each expanded group gets a
+// ---- Branch-bloom transition -----------------------------------------------
+// Children bloom from their parent's local pose; each expanded group gets a
 // dotted local-return boundary that moves with the group and compresses the
 // branch when clicked. All keys are the generic drag_region values, so this
 // is independent of source-file column names.
 
-function elasticShortLabel(value) {
+function branchShortLabel(value) {
   let text = String(value);
   const eq = text.lastIndexOf("=");
   if (eq >= 0) text = text.slice(eq + 1);
@@ -963,7 +1067,7 @@ function elasticShortLabel(value) {
 }
 
 function regionBoundsM(region) {
-  const feats = grouped.get(String(region)) || [];
+  const feats = mountGroupFeatures(region);
   let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
   for (const f of feats) {
     walkCoords(f.geometry.coordinates, ([x, y]) => {
@@ -979,8 +1083,8 @@ function regionBoundsM(region) {
 
 // Boundary groups: derived live from the expanded parents when bloom data is
 // embedded, otherwise taken from a static `groups` payload (standalone API).
-function elasticGroupMap() {
-  if (!elastic) return {};
+function branchGroupMap() {
+  if (!branchTransition) return {};
   if (dualDom) {
     // Dual-DOM: boundary geometry exists for every parent; visibility is
     // an output of branch state.
@@ -1002,13 +1106,13 @@ function elasticGroupMap() {
     Object.keys(out).forEach(function(id) { flat[id] = Array.from(out[id]); });
     return flat;
   }
-  return elastic.groups || {};
+  return branchTransition.groups || {};
 }
 
-function buildElasticBoundaryData() {
-  if (!elastic) return [];
+function buildBranchBoundaryData() {
+  if (!branchTransition) return [];
   if (!dualDom && !bloomBoundaryOn) return [];
-  const groupsMap = elasticGroupMap();
+  const groupsMap = branchGroupMap();
   const padM = 0.025 * Math.hypot(bounds.xmax - bounds.xmin, bounds.ymax - bounds.ymin);
   return Object.keys(groupsMap).map(function(id) {
     let rs = groupsMap[id];
@@ -1026,9 +1130,9 @@ function buildElasticBoundaryData() {
   }).filter(g => g.regions.length > 0);
 }
 
-function syncElasticBoundaries() {
-  if (!elasticLayer || !elasticBoundaryData) return;
-  elasticLayer.selectAll("g.elastic-return").each(function(g) {
+function syncBranchBoundaries() {
+  if (!branchBoundaryLayer || !branchBoundaryData) return;
+  branchBoundaryLayer.selectAll("g.branch-return").each(function(g) {
     let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
     for (const r of g.regions) {
       const b = g.cache[r];
@@ -1041,7 +1145,7 @@ function syncElasticBoundaries() {
     const p0 = projection([xmin - g.padM, ymax + g.padM]);
     const p1 = projection([xmax + g.padM, ymin - g.padM]);
     const sel = d3.select(this);
-    sel.select("rect.frame")
+    sel.selectAll("rect.frame, rect.frame-hit")
       .attr("x", p0[0])
       .attr("y", p0[1])
       .attr("width", Math.max(1, p1[0] - p0[0]))
@@ -1050,6 +1154,18 @@ function syncElasticBoundaries() {
       .attr("x", p0[0] + 12)
       .attr("y", p0[1] - 2);
   });
+}
+
+function meanBranchOffset(group) {
+  let sx = 0, sy = 0, n = 0;
+  for (const r of group.regions || []) {
+    const o = regionOffsets.get(String(r));
+    if (!o) continue;
+    sx += Number(o.dx_m) || 0;
+    sy += Number(o.dy_m) || 0;
+    n += 1;
+  }
+  return n > 0 ? {dx_m: sx / n, dy_m: sy / n} : {dx_m: 0, dy_m: 0};
 }
 
 function collapseBranch(groupId) {
@@ -1070,61 +1186,24 @@ function collapseBranch(groupId) {
     );
     return;
   }
-  // Standalone helper: compress the branch back to its starting offsets.
-  const group = (elasticBoundaryData || []).find(g => g.id === groupId);
+  // Standalone dual-DOM helper: fold the dragged children back into the
+  // parent at the branch's current location, instead of resetting to origin.
+  const group = (branchBoundaryData || []).find(g => g.id === groupId);
   if (!group) return;
+  if (dualDom && branchExpandedLike(groupId)) {
+    regionOffsets.set(String(groupId), meanBranchOffset(group));
+    unbloomBranch(String(groupId));
+    schedulePostState();
+    return;
+  }
+
+  // Legacy standalone grouped mode: compress back to starting child offsets.
   const init = new Map((initialRegionOffsets || []).map(r => [String(r.region), cleanOffset(r)]));
   for (const r of group.regions) {
     regionOffsets.set(r, init.get(r) || {dx_m: 0, dy_m: 0});
   }
   updateLayout();
   schedulePostState();
-}
-
-function animateBloom(anchorMap, fadeBoundaries) {
-  if (!root || anchorMap.size === 0) return;
-  const dur = (elastic && Number(elastic.durationMs) > 0) ? Number(elastic.durationMs) : 550;
-  const ovs = (elastic && Number.isFinite(Number(elastic.overshoot)))
-    ? Number(elastic.overshoot)
-    : 1.70158;
-  const ease = d3.easeBackOut.overshoot(ovs);
-  bloomAnimUntil = Date.now() + dur + 480 + 200;
-  let idx = 0;
-  root.selectAll("g.region").each(function(region) {
-    const a = anchorMap.get(String(region));
-    if (!a) return;
-    const o = regionOffsets.get(String(region)) || {dx_m: 0, dy_m: 0};
-    const ax = Number(a.ax_m) || 0;
-    const ay = Number(a.ay_m) || 0;
-    d3.select(this)
-      .interrupt()
-      .attr("transform",
-            `translate(${(o.dx_m + ax) * metricScale},${-(o.dy_m + ay) * metricScale})`)
-      .attr("opacity", 0.25)
-      .transition()
-      .delay(Math.min(idx++ * 24, 480))
-      .duration(dur)
-      .ease(ease)
-      .attr("transform", offsetTransform(String(region)))
-      .attr("opacity", 1);
-  });
-  if (fadeBoundaries && elasticLayer) {
-    elasticLayer.selectAll("g.elastic-return")
-      .attr("opacity", 0)
-      .transition()
-      .delay(dur * 0.6)
-      .duration(dur * 0.4)
-      .attr("opacity", 1);
-  }
-}
-
-function playElasticTransition() {
-  if (!elastic || elasticPlayed || !root) return;
-  elasticPlayed = true;
-  const anchors = new Map(
-    asArray(elastic.anchors).map(r => [String(r.region), r])
-  );
-  animateBloom(anchors, true);
 }
 
 // Mean of feature bounding-box centres, in map units.
@@ -1147,101 +1226,10 @@ function meterCentroid(features) {
   return n > 0 ? [sx / n, sy / n] : null;
 }
 
-// Bloom the children of the given (already expanded) parents out of each
-// parent's centroid. Anchors are computed client-side from geometry.
-function playBloomFor(parents) {
-  if (!root || !parents || parents.length === 0) return;
-  const anchorMap = new Map();
-  for (const p of parents.map(String)) {
-    if (!expandedParents.has(p)) continue;
-    const feats = geojson.features.filter(
-      f => featureParentKey(f) === p && !featureIsShell(f)
-    );
-    const pc = meterCentroid(feats);
-    if (!pc) continue;
-    const byChild = d3.group(feats, featureActiveKey);
-    for (const [k, fs] of byChild) {
-      const cc = meterCentroid(fs);
-      if (cc) {
-        anchorMap.set(String(k), {ax_m: pc[0] - cc[0], ay_m: pc[1] - cc[1]});
-      }
-    }
-  }
-  animateBloom(anchorMap, false);
-}
-
-// Fold the children of the given (still expanded) parents back into each
-// parent's centroid: the reverse of the bloom. Returns the wait in ms
-// before the regroup may run (0 when nothing animates).
-function playFoldFor(parents) {
-  if (!root || !parents || parents.length === 0) return 0;
-  const dur = (elastic && Number(elastic.durationMs) > 0) ? Number(elastic.durationMs) : 550;
-  const ovs = (elastic && Number.isFinite(Number(elastic.overshoot)))
-    ? Number(elastic.overshoot)
-    : 1.70158;
-  const foldDur = Math.round(dur * 0.8);
-  const ease = d3.easeBackIn.overshoot(Math.min(ovs, 1.2));
-  const anchorMap = new Map();
-  const childKeys = new Set();
-  for (const p of parents.map(String)) {
-    if (!expandedParents.has(p)) continue;
-    const feats = geojson.features.filter(
-      f => featureParentKey(f) === p && !featureIsShell(f)
-    );
-    const pc = meterCentroid(feats);
-    if (!pc) continue;
-    const byChild = d3.group(feats, featureActiveKey);
-    for (const [k, fs] of byChild) {
-      const cc = meterCentroid(fs);
-      if (cc) {
-        anchorMap.set(String(k), {ax_m: pc[0] - cc[0], ay_m: pc[1] - cc[1]});
-        childKeys.add(String(k));
-      }
-    }
-  }
-  if (anchorMap.size === 0) return 0;
-  bloomAnimUntil = Date.now() + foldDur + 240;
-  root.selectAll("g.region").each(function(region) {
-    const a = anchorMap.get(String(region));
-    if (!a) return;
-    const o = regionOffsets.get(String(region)) || {dx_m: 0, dy_m: 0};
-    const ax = Number(a.ax_m) || 0;
-    const ay = Number(a.ay_m) || 0;
-    d3.select(this)
-      .interrupt()
-      .transition()
-      .duration(foldDur)
-      .ease(ease)
-      .attr("transform",
-            `translate(${(o.dx_m + ax) * metricScale},${-(o.dy_m + ay) * metricScale})`)
-      .attr("opacity", 0.2);
-  });
-  if (elasticLayer) {
-    const removedSet = new Set(parents.map(String));
-    elasticLayer.selectAll("g.elastic-return")
-      .filter(g => removedSet.has(String(g.id)))
-      .interrupt()
-      .transition()
-      .duration(Math.round(foldDur * 0.5))
-      .attr("opacity", 0);
-  }
-  if (labelLayer) {
-    labelLayer.selectAll("g.label")
-      .filter(d => childKeys.has(String(d.region)))
-      .interrupt()
-      .transition()
-      .duration(Math.round(foldDur * 0.45))
-      .attr("opacity", 0);
-  }
-  return foldDur;
-}
-
 // ---- Dual-DOM branch animations ----------------------------------------
 // Visuals are outputs of branch state. Animations claim a version first;
 // superseded callbacks die quietly without committing state.
 
-// Geometry-only anchor deltas (parent centroid minus child centroid) for
-// one branch, in map units.
 // Optimistic expand: hand the parent's current offset to its children
 // locally, exactly as the server will. The later echo carries identical
 // authoritative values, so the running animation's targets stay valid.
@@ -1253,7 +1241,8 @@ function optimisticInheritOffsets(p) {
   }
 }
 
-function branchAnchorMap(p) {
+// Geometry-only parent-to-child deltas for one branch, in map units.
+function branchDeltaMap(p) {
   const feats = geojson.features.filter(
     f => featureParentKey(f) === String(p) && !featureIsShell(f)
   );
@@ -1263,9 +1252,49 @@ function branchAnchorMap(p) {
   const byChild = d3.group(feats, featureChildKey);
   for (const [k, fs] of byChild) {
     const cc = meterCentroid(fs);
-    if (cc) map.set(String(k), {ax: pc[0] - cc[0], ay: pc[1] - cc[1]});
+    if (cc) {
+      map.set(String(k), {
+        ax: pc[0] - cc[0], ay: pc[1] - cc[1],
+        cx: cc[0], cy: cc[1]
+      });
+    }
   }
   return map;
+}
+
+// Resume-from-current: read the live translate so a reversed animation
+// continues from wherever the node is, never jumping to a canonical start.
+function currentTranslate(node, fallbackX, fallbackY) {
+  const tr = (node && node.getAttribute("transform")) || "";
+  const m = /translate\(\s*(-?[0-9.eE+]+)[ ,]+(-?[0-9.eE+]+)/.exec(tr);
+  if (m) {
+    const x = Number(m[1]);
+    const y = Number(m[2]);
+    if (Number.isFinite(x) && Number.isFinite(y)) return [x, y];
+  }
+  return [fallbackX, fallbackY];
+}
+
+function currentOpacity(node, fallback) {
+  const v = node ? Number(node.getAttribute("opacity")) : NaN;
+  return Number.isFinite(v) ? v : fallback;
+}
+
+function clamp01(v) {
+  return Math.max(0, Math.min(1, Number(v) || 0));
+}
+
+function phase(t, start, end) {
+  if (end <= start) return t >= end ? 1 : 0;
+  return clamp01((t - start) / (end - start));
+}
+
+function mix(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function translateOnly(x, y) {
+  return `translate(${x},${y})`;
 }
 
 // Instantly set every attribute of a branch from its logical state.
@@ -1273,7 +1302,7 @@ function applyBranchVisual(p) {
   const n = branchNodes(p);
   const exp = branchExpandedLike(p);
   if (n.shell) n.shell
-    .attr("opacity", exp ? 0 : 1)
+    .attr("opacity", exp ? branchParentGhostOpacity() : 1)
     .attr("pointer-events", exp ? "none" : "all")
     .attr("transform", offsetTransform(String(p)));
   if (n.children) n.children.each(function(d) {
@@ -1283,218 +1312,465 @@ function applyBranchVisual(p) {
       .attr("transform", offsetTransform(String(d)));
   });
   if (n.boundary) n.boundary
-    .attr("opacity", exp && bloomBoundaryOn ? 1 : 0)
-    .attr("pointer-events", exp && bloomBoundaryOn ? "all" : "none");
-  syncElasticBoundaries();
+    .attr("opacity", branchFrameVisible(p) ? 1 : 0);
+  syncBranchBoundaries();
+  syncBranchFrameInteractivity();
   syncLabelVisibility();
 }
 
-function elasticDuration() {
-  return (elastic && Number(elastic.durationMs) > 0) ? Number(elastic.durationMs) : 550;
+function branchAnimationDuration() {
+  return (branchTransition && Number(branchTransition.durationMs) > 0) ? Number(branchTransition.durationMs) : 400;
 }
 
-function elasticOvershoot() {
-  return (elastic && Number.isFinite(Number(elastic.overshoot)))
-    ? Number(elastic.overshoot)
-    : 1.70158;
+function branchEasing(t) {
+  const easing = branchTransition && branchTransition.easing
+    ? String(branchTransition.easing).toLowerCase()
+    : "cubic-out";
+  if (easing === "linear") return t;
+  if (easing === "cubic-in-out") return d3.easeCubicInOut(t);
+  return d3.easeCubicOut(t);
+}
+
+function normalizeAnimationName(value) {
+  return String(value == null ? "" : value)
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function branchAnimationEffect() {
+  if (!branchTransition) return "branch_bloom";
+  const candidates = [
+    branchTransition.animation,
+    branchTransition.animationMode,
+    branchTransition.animation_mode,
+    branchTransition.effect,
+    branchTransition.animationEffect,
+    branchTransition.style
+  ];
+  for (const candidate of candidates) {
+    const value = normalizeAnimationName(candidate);
+    if (value === "leaf_flip" || value === "leafflip" || value === "leaf") {
+      return "leaf_flip";
+    }
+  }
+  return "branch_bloom";
+}
+
+function branchParentGhostOpacity() {
+  if (!branchTransition) return 0.28;
+  if (branchTransition.showParentGhost === false) return 0;
+  const v = Number(branchTransition.parentGhostOpacity);
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.28;
+}
+
+function branchLeafFlipStrength() {
+  if (!branchTransition) return 0.16;
+  const v = Number(branchTransition.leafFlipStrength);
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.16;
+}
+
+function branchLeafChildScale() {
+  if (!branchTransition) return 0.90;
+  const v = Number(branchTransition.leafChildScale || branchTransition.leaf_child_scale);
+  return Number.isFinite(v) ? Math.max(0.60, Math.min(1, v)) : 0.90;
+}
+
+function branchLeafDurationFactor(expanding) {
+  if (!branchTransition) return expanding ? 0.82 : 0.58;
+  const key = expanding ?
+    (branchTransition.leafExpandDurationFactor || branchTransition.leaf_expand_duration_factor) :
+    (branchTransition.leafCollapseDurationFactor || branchTransition.leaf_collapse_duration_factor);
+  const v = Number(key);
+  if (Number.isFinite(v) && v > 0) return Math.max(0.45, Math.min(1.25, v));
+  return expanding ? 0.82 : 0.58;
+}
+
+function leafFlipScale() {
+  const strength = branchLeafFlipStrength();
+  return strength <= 0 ? 0 : strength / 0.16;
+}
+
+function childMotionTransform(item, x, y, move, expanding) {
+  if (branchAnimationEffect() !== "leaf_flip") {
+    return translateOnly(x, y);
+  }
+  const factor = leafFlipScale();
+  if (factor <= 0) return translateOnly(x, y);
+
+  // D3 reference-inspired leaf fold: same single branch clock, no extra
+  // fly-in path, no stale transform fallback. The old demo used skew, lean,
+  // and a small pinch on rectangles. For arbitrary sf polygons, we apply the
+  // same visual idea as an SVG group transform around the child bbox center.
+  const wave = Math.sin(Math.PI * clamp01(move));
+  const dir = item.flipDir || 1;
+  const skew = dir * 16 * factor * wave * (expanding ? 1 : -1);
+  const lean = dir * 7 * factor * wave;
+  const lift = -Math.abs(3 * factor * wave);
+  const sx = Math.max(0.58, 1 - 0.20 * factor * wave);
+
+  return `translate(${x + lean},${y + lift}) translate(${item.cx},${item.cy}) scale(${sx},1) skewX(${skew}) translate(${-item.cx},${-item.cy})`;
+}
+
+function childLabelMotionTransform(item, x, y, move, expanding) {
+  if (branchAnimationEffect() !== "leaf_flip") {
+    return translateOnly(x, y);
+  }
+  const factor = leafFlipScale();
+  if (factor <= 0) return translateOnly(x, y);
+  const wave = Math.sin(Math.PI * clamp01(move));
+  const dir = item.flipDir || 1;
+  const lean = dir * 7 * factor * wave;
+  const lift = -Math.abs(3 * factor * wave);
+  const angle = dir * 8 * factor * wave * (expanding ? 1 : -1);
+  return `translate(${x + lean},${y + lift}) rotate(${angle})`;
+}
+
+function branchStaggerMs(effect) {
+  const configured = branchTransition ? Number(branchTransition.staggerMs) : NaN;
+  if (Number.isFinite(configured) && configured > 0) return configured;
+  return effect === "leaf_flip" ? 55 : 0;
+}
+
+function leafProxyLocalFallbackPath(item) {
+  const b = item.bbox || {x: 0, y: 0, width: 1, height: 1};
+  return `M${b.x},${b.y} L${b.x + b.width},${b.y} L${b.x + b.width},${b.y + b.height} L${b.x},${b.y + b.height} Z`;
+}
+
+function leafProxyTransform(item, x, y, move, expanding) {
+  const factor = leafFlipScale();
+  const wave = Math.sin(Math.PI * clamp01(move));
+  const dir = (item.flipDir || 1) * (expanding ? 1 : -1);
+  const baseScale = branchLeafChildScale();
+  const foldScale = Math.max(0.58, baseScale - 0.18 * factor * wave);
+  const skew = dir * 16 * factor * wave;
+  const lean = dir * 7 * factor * wave;
+  const lift = -Math.abs(3 * factor * wave);
+  const cx = item.cx || 0;
+  const cy = item.cy || 0;
+
+  // The proxy keeps the real child polygon path. Only the proxy group moves
+  // and folds, so leaf mode looks like the spatial shape itself is flipping,
+  // without reading stale hidden path bounds or flying in from a fallback point.
+  return `translate(${x + lean},${y + lift}) translate(${cx},${cy}) scale(${foldScale},1) skewX(${skew}) translate(${-cx},${-cy})`;
+}
+
+function createLeafProxyItems(parentKey, childItems, expanding) {
+  if (!leafProxyLayer || childItems.length === 0) return null;
+  const proxyItems = childItems.map(item => Object.assign({}, item, {
+    parent: String(parentKey),
+    pathD: item.pathD || leafProxyLocalFallbackPath(item)
+  }));
+
+  const proxies = leafProxyLayer.selectAll("path.leaf-proxy")
+    .data(proxyItems, d => d.key)
+    .join(
+      enter => enter.append("path").attr("class", "leaf-proxy"),
+      update => update,
+      exit => exit.remove()
+    )
+    .attr("fill", d => d.fill || "#94a3b8")
+    .attr("d", d => d.pathD || leafProxyLocalFallbackPath(d))
+    .attr("opacity", d => d.fromOpacity)
+    .style("opacity", d => d.fromOpacity)
+    .attr("transform", d => leafProxyTransform(d, d.fromX, d.fromY, 0, expanding));
+
+  return {items: proxyItems, selection: proxies};
+}
+
+function labelTranslate(node, label, fallback) {
+  const current = currentTranslate(node, fallback[0], fallback[1]);
+  return Number.isFinite(current[0]) && Number.isFinite(current[1])
+    ? current
+    : fallback;
+}
+
+function collectChildLabelItems(p, childItemMap, expanding, wasMoving, selected) {
+  const items = [];
+  if (!labelLayer || !hasDualLabels()) return items;
+  const childLabels = branchLabelSel(p, "child");
+  if (!childLabels) return items;
+  childLabels.each(function(d) {
+    const childKey = String(d.region);
+    const child = childItemMap.get(childKey);
+    if (!child) return;
+    const finalPos = labelPosition(d);
+    const parentPos = [
+      finalPos[0] + (child.parentX - child.finalX),
+      finalPos[1] + (child.parentY - child.finalY)
+    ];
+    const canonicalFrom = expanding ? parentPos : finalPos;
+    const canonicalTo = expanding ? finalPos : parentPos;
+    const from = wasMoving ? labelTranslate(this, d, canonicalFrom) : canonicalFrom;
+    const isSelected = selected.has(String(d.label_id));
+    items.push({
+      node: this,
+      datum: d,
+      fromX: from[0],
+      fromY: from[1],
+      toX: canonicalTo[0],
+      toY: canonicalTo[1],
+      fromOpacity: currentOpacity(this, expanding ? 0 : (isSelected ? 1 : 0)),
+      toOpacity: expanding && isSelected ? 1 : 0,
+      selected: isSelected,
+      flipDir: child.flipDir || 1,
+      delayMs: child.delayMs || 0
+    });
+    d3.select(this)
+      .interrupt()
+      .attr("pointer-events", "none");
+  });
+  return items;
+}
+
+function runBranchAnimation(p, direction) {
+  const expanding = direction === "expand";
+  const prevState = branchState.get(String(p));
+  const wasMoving = prevState === "expanding" || prevState === "collapsing";
+  const v = claimBranch(p, expanding ? "expanding" : "collapsing");
+  rebuildGrouping(true);
+  const deltas = branchDeltaMap(p);
+  const n = branchNodes(p);
+  const effect = branchAnimationEffect();
+  const useLeafProxy = effect === "leaf_flip";
+  const dur = useLeafProxy
+    ? Math.max(180, branchAnimationDuration() * branchLeafDurationFactor(expanding))
+    : branchAnimationDuration();
+  const staggerMs = branchStaggerMs(effect);
+  svg.attr("data-branch-animation", effect);
+  beginBranchAnimationState(expanding ? "bloom" : "unbloom", p, dur);
+  const selected = labelSelectionSet();
+  const childItems = [];
+  const childItemMap = new Map();
+
+  if (n.children) n.children.each(function(d) {
+    const key = String(d);
+    const a = deltas.get(key) || {ax: 0, ay: 0};
+    const o = regionOffsets.get(key) || {dx_m: 0, dy_m: 0};
+    const finalX = o.dx_m * metricScale;
+    const finalY = -o.dy_m * metricScale;
+    const parentX = finalX + a.ax * metricScale;
+    const parentY = finalY - a.ay * metricScale;
+    // Leaf mode deliberately uses canonical from/to positions. That avoids
+    // the old bottom-right/stale-bounds artifact from reading a hidden path's
+    // current transform. Clean branch bloom still resumes from current motion.
+    const current = (!useLeafProxy && wasMoving)
+      ? currentTranslate(this, expanding ? parentX : finalX, expanding ? parentY : finalY)
+      : [expanding ? parentX : finalX, expanding ? parentY : finalY];
+    let bbox = {x: 0, y: 0, width: 1, height: 1};
+    try { bbox = this.getBBox(); } catch (e) {}
+    bbox.width = Math.max(1, bbox.width || 1);
+    bbox.height = Math.max(1, bbox.height || 1);
+    const firstPath = this.querySelector("path");
+    const pathD = firstPath ? firstPath.getAttribute("d") : null;
+    const item = {
+      node: this,
+      key,
+      pathD,
+      fromX: current[0],
+      fromY: current[1],
+      toX: expanding ? finalX : parentX,
+      toY: expanding ? finalY : parentY,
+      finalX,
+      finalY,
+      parentX,
+      parentY,
+      bbox,
+      cx: bbox.x + bbox.width / 2,
+      cy: bbox.y + bbox.height / 2,
+      flipDir: (childItems.length % 2 === 0 ? 1 : -1),
+      delayMs: useLeafProxy ? childItems.length * staggerMs : 0,
+      fill: firstPath ? (firstPath.getAttribute("fill") || firstPath.style.fill) : "#94a3b8",
+      fromOpacity: currentOpacity(this, expanding ? 0 : 1),
+      toOpacity: expanding ? 1 : 0
+    };
+    childItems.push(item);
+    childItemMap.set(key, item);
+    d3.select(this)
+      .interrupt()
+      .attr("pointer-events", expanding ? "all" : "none");
+  });
+
+  const maxDelay = childItems.reduce((m, item) => Math.max(m, item.delayMs || 0), 0);
+  const totalDuration = dur + maxDelay;
+  bloomAnimUntil = Date.now() + totalDuration + 180;
+
+  if (n.shell) n.shell.interrupt().attr("pointer-events", expanding ? "none" : "all");
+  if (n.boundary) n.boundary.interrupt().attr("pointer-events", "none");
+
+  const parentLabels = branchLabelSel(p, "parent");
+  const childLabels = collectChildLabelItems(p, childItemMap, expanding, wasMoving && !useLeafProxy, selected);
+  const childConnectors = branchConnectorSel(p, "child");
+  const parentConnectors = branchConnectorSel(p, "parent");
+
+  if (parentLabels) parentLabels.interrupt().attr("pointer-events", "none");
+  if (childConnectors) childConnectors.interrupt();
+  if (parentConnectors) parentConnectors.interrupt();
+
+  let leafProxy = null;
+  if (useLeafProxy) {
+    leafProxy = createLeafProxyItems(p, childItems, expanding);
+    // During leaf flip, proxies are the animated shapes. Real polygons are
+    // hidden until the final snap, which keeps arbitrary shapefile geometry
+    // from distorting and prevents fallback fly-ins from hidden SVG paths.
+    for (const item of childItems) {
+      d3.select(item.node)
+        .attr("transform", translateOnly(item.toX, item.toY))
+        .attr("opacity", 0)
+        .attr("pointer-events", "none");
+    }
+  }
+
+  for (const item of childLabels) {
+    d3.select(item.node)
+      .attr("transform", translateOnly(item.fromX, item.fromY))
+      .attr("opacity", item.fromOpacity);
+  }
+
+  logBranch(expanding ? "expand" : "collapse", {
+    parent: String(p),
+    durationMs: dur,
+    totalDurationMs: totalDuration,
+    staggerMs,
+    animation: effect,
+    leafFlipStrength: branchLeafFlipStrength(),
+    leafProxy: useLeafProxy
+  });
+
+  const started = performance.now();
+  function frame(now) {
+    if (!isCurrentBranchVersion(p, v)) {
+      if (leafProxy && leafProxy.selection) leafProxy.selection.remove();
+      syncLabelVisibility();
+      return;
+    }
+
+    const elapsed = now - started;
+    const globalT = clamp01(elapsed / dur);
+    const overallT = clamp01(elapsed / totalDuration);
+
+    for (const item of childItems) {
+      const localRaw = clamp01((elapsed - (item.delayMs || 0)) / dur);
+      const move = branchEasing(phase(localRaw, 0, 0.72));
+      const opacityProgress = expanding
+        ? phase(localRaw, 0.18, 0.72)
+        : phase(localRaw, 0, 0.72);
+
+      if (!useLeafProxy) {
+        const x = mix(item.fromX, item.toX, move);
+        const y = mix(item.fromY, item.toY, move);
+        d3.select(item.node)
+          .attr("transform", childMotionTransform(item, x, y, move, expanding))
+          .attr("opacity", mix(item.fromOpacity, item.toOpacity, opacityProgress));
+      }
+    }
+
+    if (useLeafProxy && leafProxy && leafProxy.selection) {
+      leafProxy.selection
+        .attr("transform", d => {
+          const localRaw = clamp01((elapsed - (d.delayMs || 0)) / dur);
+          const move = branchEasing(phase(localRaw, 0, 0.72));
+          const x = mix(d.fromX, d.toX, move);
+          const y = mix(d.fromY, d.toY, move);
+          return leafProxyTransform(d, x, y, move, expanding);
+        })
+        .attr("opacity", d => {
+          const localRaw = clamp01((elapsed - (d.delayMs || 0)) / dur);
+          const opacityProgress = expanding
+            ? phase(localRaw, 0.18, 0.72)
+            : phase(localRaw, 0, 0.72);
+          return mix(d.fromOpacity, d.toOpacity, opacityProgress);
+        })
+        .style("opacity", d => {
+          const localRaw = clamp01((elapsed - (d.delayMs || 0)) / dur);
+          const opacityProgress = expanding
+            ? phase(localRaw, 0.18, 0.72)
+            : phase(localRaw, 0, 0.72);
+          return mix(d.fromOpacity, d.toOpacity, opacityProgress);
+        });
+    }
+
+    for (const item of childLabels) {
+      const localRaw = clamp01((elapsed - (item.delayMs || 0)) / dur);
+      const move = branchEasing(phase(localRaw, 0, 0.72));
+      const opacityProgress = expanding
+        ? phase(localRaw, 0.18, 0.72)
+        : phase(localRaw, 0, 0.72);
+      const lx = mix(item.fromX, item.toX, move);
+      const ly = mix(item.fromY, item.toY, move);
+      d3.select(item.node)
+        .attr("transform", childLabelMotionTransform(item, lx, ly, move, expanding))
+        .attr("opacity", mix(item.fromOpacity, item.toOpacity, opacityProgress));
+    }
+
+    if (n.shell) {
+      const ghost = branchParentGhostOpacity();
+      const parentReturn = useLeafProxy && !expanding
+        ? phase(overallT, 0.82, 0.98)
+        : phase(globalT, 0.55, 0.85);
+      n.shell.attr("opacity", expanding
+        ? mix(1, ghost, phase(globalT, 0, 0.2))
+        : mix(ghost, 1, parentReturn));
+    }
+    if (n.boundary) {
+      n.boundary.attr("opacity", expanding
+        ? (bloomBoundaryOn ? phase(overallT, 0.55, 0.82) : 0)
+        : 1 - phase(globalT, 0, 0.2));
+    }
+    if (childConnectors) {
+      childConnectors.attr("opacity", expanding
+        ? phase(overallT, 0.55, 0.82)
+        : 1 - phase(globalT, 0, 0.3));
+    }
+    if (parentLabels) {
+      const labelReturn = useLeafProxy && !expanding
+        ? phase(overallT, 0.82, 0.98)
+        : phase(globalT, 0.55, 0.85);
+      parentLabels.attr("opacity", expanding
+        ? 1 - phase(globalT, 0, 0.2)
+        : labelReturn);
+    }
+    if (parentConnectors) {
+      const connectorReturn = useLeafProxy && !expanding
+        ? phase(overallT, 0.82, 0.98)
+        : phase(globalT, 0.55, 0.85);
+      parentConnectors.attr("opacity", expanding
+        ? 1 - phase(globalT, 0, 0.2)
+        : connectorReturn);
+    }
+
+    if (elapsed < totalDuration) {
+      window.requestAnimationFrame(frame);
+      return;
+    }
+
+    if (!isCurrentBranchVersion(p, v)) {
+      if (leafProxy && leafProxy.selection) leafProxy.selection.remove();
+      syncLabelVisibility();
+      return;
+    }
+    if (leafProxy && leafProxy.selection) leafProxy.selection.remove();
+    branchState.set(String(p), expanding ? "expanded" : "collapsed");
+    syncExpandedFromBranches();
+    applyBranchVisual(p);
+    updateCsv();
+    postAnimationState(false, expanding ? "bloom" : "unbloom", p, 0);
+  }
+  window.requestAnimationFrame(frame);
 }
 
 function bloomBranch(p) {
-  const v = claimBranch(p, "blooming");
-  rebuildGrouping(true);
-  const anchors = branchAnchorMap(p);
-  const n = branchNodes(p);
-  const dur = elasticDuration();
-  bloomAnimUntil = Date.now() + dur + 240;
-  if (n.shell) n.shell
-    .attr("pointer-events", "none")
-    .transition()
-    .duration(dur)
-    .ease(d3.easeCubicInOut)
-    .attr("opacity", 0);
-  if (n.children) n.children.each(function(d) {
-    const a = anchors.get(String(d)) || {ax: 0, ay: 0};
-    const o = regionOffsets.get(String(d)) || {dx_m: 0, dy_m: 0};
-    d3.select(this)
-      .attr("transform",
-            `translate(${(o.dx_m + a.ax) * metricScale},${-(o.dy_m + a.ay) * metricScale})`)
-      .attr("opacity", 0.25)
-      .attr("pointer-events", "all")
-      .transition()
-      .duration(dur)
-      .ease(d3.easeBackOut.overshoot(elasticOvershoot()))
-      .attr("transform", offsetTransform(String(d)))
-      .attr("opacity", 1)
-      .on("end", function() {
-        if (!isCurrentBranchVersion(p, v)) return;
-        if (branchState.get(String(p)) === "blooming") {
-          branchState.set(String(p), "expanded");
-          syncExpandedFromBranches();
-          applyBranchVisual(p);
-        }
-      });
-  });
-  if (n.boundary) n.boundary
-    .attr("pointer-events", bloomBoundaryOn ? "all" : "none")
-    .attr("opacity", 0)
-    .transition()
-    .duration(dur)
-    .ease(d3.easeCubicInOut)
-    .attr("opacity", bloomBoundaryOn ? 1 : 0);
-  // Labels travel with the leaves: parent label gives way, child labels
-  // unfold from the parent centre alongside their polygons.
-  if (hasDualLabels()) {
-    const sel = labelSelectionSet();
-    const pl = branchLabelSel(p, "parent");
-    if (pl) pl
-      .attr("pointer-events", "none")
-      .transition()
-      .duration(dur)
-      .ease(d3.easeCubicInOut)
-      .attr("opacity", 0);
-    const pc = branchConnectorSel(p, "parent");
-    if (pc) pc
-      .transition()
-      .duration(dur)
-      .ease(d3.easeCubicInOut)
-      .attr("opacity", 0);
-    const cl = branchLabelSel(p, "child");
-    if (cl) cl.each(function(d) {
-      const a = anchors.get(String(d.region)) || {ax: 0, ay: 0};
-      const pos = labelPosition(d);
-      const show = labelVisibleNow(d, sel);
-      d3.select(this)
-        .attr("transform",
-              `translate(${pos[0] + a.ax * metricScale},${pos[1] - a.ay * metricScale})`)
-        .attr("opacity", 0)
-        .attr("pointer-events", "none")
-        .transition()
-        .duration(dur)
-        .ease(d3.easeBackOut.overshoot(Math.min(elasticOvershoot(), 1.2)))
-        .attr("transform", labelTransform(d))
-        .attr("opacity", show ? 1 : 0)
-        .on("end", function() {
-          if (!isCurrentBranchVersion(p, v)) return;
-          d3.select(this).attr("pointer-events", show ? "all" : "none");
-        });
-    });
-    const cc = branchConnectorSel(p, "child");
-    if (cc) cc.each(function(d) {
-      const show = labelVisibleNow(d, sel) && truthy(d.connector);
-      d3.select(this)
-        .attr("d", connectorPath)
-        .attr("opacity", 0)
-        .transition()
-        .duration(dur)
-        .ease(d3.easeCubicInOut)
-        .attr("opacity", show ? 1 : 0);
-    });
-  }
-  updateCsv();
+  runBranchAnimation(p, "expand");
 }
 
 function unbloomBranch(p) {
-  const v = claimBranch(p, "unblooming");
-  rebuildGrouping(true);  // active view flips to the parent immediately
-  const anchors = branchAnchorMap(p);
-  const n = branchNodes(p);
-  const foldDur = elasticDuration();
-  bloomAnimUntil = Date.now() + foldDur + 240;
-  const foldEase = d3.easeCubicInOut;
-  if (n.children) n.children.each(function(d) {
-    const a = anchors.get(String(d)) || {ax: 0, ay: 0};
-    const o = regionOffsets.get(String(d)) || {dx_m: 0, dy_m: 0};
-    d3.select(this)
-      .attr("pointer-events", "none")
-      .transition()
-      .duration(foldDur)
-      .ease(foldEase)
-      .attr("transform",
-            `translate(${(o.dx_m + a.ax) * metricScale},${-(o.dy_m + a.ay) * metricScale})`)
-      .attr("opacity", 0.04)
-      .on("end", function() {
-        if (!isCurrentBranchVersion(p, v)) return;
-        if (branchState.get(String(p)) === "unblooming") {
-          branchState.set(String(p), "collapsed");
-          syncExpandedFromBranches();
-          applyBranchVisual(p);
-        }
-      });
-  });
-  if (n.shell) n.shell
-    .attr("opacity", 0)
-    .attr("pointer-events", "none")
-    .transition()
-    .duration(foldDur)
-    .ease(foldEase)
-    .attr("opacity", 1)
-    .on("end", function() {
-      if (!isCurrentBranchVersion(p, v)) return;
-      d3.select(this).attr("pointer-events", "all");
-    });
-  if (n.boundary) n.boundary
-    .attr("pointer-events", "none")
-    .transition()
-    .duration(foldDur)
-    .ease(foldEase)
-    .attr("opacity", 0);
-  // Child labels fold home with their leaves (held bright until late),
-  // then the parent label returns.
-  if (hasDualLabels()) {
-    const sel = labelSelectionSet();
-    const cl = branchLabelSel(p, "child");
-    if (cl) cl.each(function(d) {
-      const a = anchors.get(String(d.region)) || {ax: 0, ay: 0};
-      const pos = labelPosition(d);
-      d3.select(this)
-        .attr("pointer-events", "none")
-        .transition()
-        .duration(foldDur)
-        .ease(foldEase)
-        .attr("transform",
-              `translate(${pos[0] + a.ax * metricScale},${pos[1] - a.ay * metricScale})`)
-        .attr("opacity", 0);
-    });
-    const cc = branchConnectorSel(p, "child");
-    if (cc) cc
-      .transition()
-      .duration(foldDur)
-      .ease(foldEase)
-      .attr("opacity", 0);
-    const pl = branchLabelSel(p, "parent");
-    if (pl) pl.each(function(d) {
-      const show = labelVisibleNow(d, sel);
-      d3.select(this)
-        .attr("opacity", 0)
-        .attr("pointer-events", "none")
-        .transition()
-        .duration(foldDur)
-        .ease(foldEase)
-        .attr("opacity", show ? 1 : 0)
-        .on("end", function() {
-          if (!isCurrentBranchVersion(p, v)) return;
-          d3.select(this).attr("pointer-events", show ? "all" : "none");
-        });
-    });
-    const pc = branchConnectorSel(p, "parent");
-    if (pc) pc.each(function(d) {
-      const show = labelVisibleNow(d, sel) && truthy(d.connector);
-      d3.select(this)
-        .attr("d", connectorPath)
-        .attr("opacity", 0)
-        .transition()
-        .duration(foldDur)
-        .ease(foldEase)
-        .attr("opacity", show ? 1 : 0);
-    });
-  }
-  updateCsv();
+  runBranchAnimation(p, "collapse");
 }
 
 // Apply a bloom state pushed by the host page: regroup features in place
 // (no iframe rebuild), take the host's authoritative offsets, re-render,
 // then animate the newly expanded parents. Collapsing parents play the same
-// leaf motion in reverse, returning children to the parent centroid.
+// branch motion in reverse, returning children to their parent-local pose.
 function applyBloom(message) {
   if (dualDom) {
     // Dual-DOM path: no re-render at all. Offsets first (animations read
@@ -1514,12 +1790,12 @@ function applyBloom(message) {
     for (const p of shellParents) {
       const want = target.has(String(p));
       const st = branchState.get(String(p));
-      if (st === "blooming" || st === "unblooming") {
+      if (st === "expanding" || st === "collapsing") {
         // In flight (usually an optimistic start we triggered ourselves).
         // If the server agrees with the direction, let the animation finish
         // and commit through its own version-guarded end callback. Only a
         // disagreement claims a new version and reverses.
-        const headingExpanded = (st === "blooming");
+        const headingExpanded = (st === "expanding");
         if (want !== headingExpanded) {
           if (want) {
             optimisticInheritOffsets(p);
@@ -1536,49 +1812,31 @@ function applyBloom(message) {
         applyBranchVisual(p);
       }
     }
-    syncElasticBoundaries();
+    syncBranchBoundaries();
+    syncBranchFrameInteractivity();
     syncLabelVisibility();
     schedulePostState();
     return;
   }
-  legacyApplyBloom(message);
-}
-
-function legacyApplyBloom(message) {
-  const token = ++bloomApplyToken;
   const target = new Set(asArray(message && message.expanded).map(String));
-  const removed = [...expandedParents].filter(p => !target.has(p));
-
-  const finish = function() {
-    if (token !== bloomApplyToken) return;  // superseded by a newer state
-    expandedParents = target;
-    if (message && message.boundary != null) {
-      bloomBoundaryOn = message.boundary !== false;
-    }
-    rebuildGrouping(true);
-    if (message && message.regionOffsets != null) {
-      for (const r of regions) regionOffsets.set(r, {dx_m: 0, dy_m: 0});
-      for (const row of asArray(message.regionOffsets)) {
-        const region = String(row.region);
-        if (regionOffsets.has(region)) {
-          regionOffsets.set(region, cleanOffset(row));
-        }
+  expandedParents = target;
+  if (message && message.boundary != null) {
+    bloomBoundaryOn = message.boundary !== false;
+  }
+  rebuildGrouping(true);
+  if (message && message.regionOffsets != null) {
+    for (const r of regions) regionOffsets.set(r, {dx_m: 0, dy_m: 0});
+    for (const row of asArray(message.regionOffsets)) {
+      const region = String(row.region);
+      if (regionOffsets.has(region)) {
+        regionOffsets.set(region, cleanOffset(row));
       }
     }
-    elasticPlayed = true;  // boundaries render at full opacity
-    trailSnapshots = [];
-    preserveViewOnce = true;
-    render();
-    playBloomFor(asArray(message && message.animate));
-    schedulePostState();
-  };
-
-  const wait = removed.length > 0 ? playFoldFor(removed) : 0;
-  if (wait > 0) {
-    window.setTimeout(finish, wait + 40);
-  } else {
-    finish();
   }
+  trailSnapshots = [];
+  preserveViewOnce = true;
+  render();
+  schedulePostState();
 }
 
 // Snapshot of non-zero offsets for the ACTIVE view, sent with click/collapse
@@ -1683,7 +1941,7 @@ function render() {
     .join("g")
     .attr("class", "region")
     .attr("transform", offsetTransform)
-    .attr("opacity", d => dualDom ? (regionVisibleNow(d) ? 1 : 0) : null)
+    .attr("opacity", d => regionOpacityNow(d))
     .attr("pointer-events", d => dualDom ? (regionVisibleNow(d) ? "all" : "none") : null);
 
   const regionPaths = groups.selectAll("path")
@@ -1693,6 +1951,14 @@ function render() {
     .attr("d", path);
   regionPaths.append("title")
     .text(d => String(d.properties.drag_region));
+
+  // Temporary proxy layer used only by the leaf-flip mode. The proxy uses
+  // each child feature's actual polygon path, then folds/moves that path with
+  // the D3 reference timing. Real child polygons stay mounted but hidden until
+  // the final snap.
+  leafProxyLayer = mapGroup.append("g")
+    .attr("class", "leaf-proxy-layer")
+    .attr("pointer-events", "none");
 
   const dualLabelsNow = hasDualLabels();
   const labelSelectedInit = dualLabelsNow ? labelSelectionSet() : null;
@@ -1773,40 +2039,57 @@ function render() {
   });
   // SVG layer order (bottom → top):
   //   originLayer → movementConnectorLayer → trailLayer → root/regions
-  //   → connectorLayer (label connectors) → labelLayer → elasticLayer
-  elasticLayer = null;
-  if (elastic && bloomBoundaryOn) {
-    elasticBoundaryData = buildElasticBoundaryData();
-    if (elasticBoundaryData.length > 0) {
-      elasticLayer = mapGroup.append("g").attr("class", "elastic-layer");
-      const returnGroups = elasticLayer.selectAll("g.elastic-return")
-        .data(elasticBoundaryData)
+  //   → connectorLayer (label connectors) → labelLayer → branchBoundaryLayer
+  branchBoundaryLayer = null;
+  if (branchTransition && bloomBoundaryOn) {
+    branchBoundaryData = buildBranchBoundaryData();
+    if (branchBoundaryData.length > 0) {
+      branchBoundaryLayer = mapGroup.append("g").attr("class", "branch-layer");
+      const returnGroups = branchBoundaryLayer.selectAll("g.branch-return")
+        .data(branchBoundaryData)
         .join("g")
-        .attr("class", "elastic-return")
-        .attr("opacity", g => dualDom
-          ? (branchExpandedLike(g.id) && bloomBoundaryOn ? 1 : 0)
-          : (elasticPlayed ? 1 : 0))
-        .attr("pointer-events", g => dualDom &&
-          !(branchExpandedLike(g.id) && bloomBoundaryOn) ? "none" : null);
+        .attr("class", "branch-return")
+        .classed("is-draggable", g => branchFrameDraggable(g.id))
+        .classed("is-locked", g => branchFrameVisible(g.id) && !branchFrameDraggable(g.id))
+        .attr("opacity", g => branchFrameVisible(g.id) ? 1 : 0)
+        .attr("pointer-events", g => branchFrameDraggable(g.id) ? null : "none");
       returnGroups.append("rect").attr("class", "frame").attr("rx", 14);
-      const frameLabelPrefix = (elastic && elastic.boundaryLabel)
-        ? String(elastic.boundaryLabel)
-        : "Reset to";
+      returnGroups.append("rect").attr("class", "frame-hit").attr("rx", 14);
+      const frameLabelPrefix = (branchTransition && branchTransition.boundaryLabel)
+        ? String(branchTransition.boundaryLabel)
+        : "Drag to";
       returnGroups.append("text")
-        .text(g => "↩ " + frameLabelPrefix + " " + elasticShortLabel(g.id));
-      // The dotted frame is the group's drag handle: dragging it moves all
-      // of the group's children (labels and the frame follow). A plain
-      // click (< 3px) compresses the branch back to its parent.
+        .text(g => frameLabelPrefix + " " + branchShortLabel(g.id));
+      // The dashed border is the group drag handle; the frame interior stays
+      // pass-through so individual children remain draggable.
+      // A plain click under the configured threshold compresses the branch
+      // back to its parent.
+      let activeBoundaryDrag = null;
       returnGroups.call(d3.drag()
         .on("start", function(event, g) {
+          activeBoundaryDrag = null;
           dragMovedPx = 0;
-          d3.select(this).interrupt();
+          if (!branchFrameDraggable(g.id)) {
+            return;
+          }
+          activeBoundaryDrag = String(g.id);
+          d3.select(this)
+            .interrupt()
+            .classed("is-dragging", true);
           const members = new Set(g.regions);
           root.selectAll("g.region")
             .filter(d => members.has(String(d)))
             .interrupt();
+          if (labelLayer && hasDualLabels()) {
+            labelLayer.selectAll("g.label")
+              .filter(d => d && labelParentOf(d) === String(g.id) && labelLevelOf(d) === "child")
+              .interrupt();
+          }
         })
         .on("drag", function(event, g) {
+          if (activeBoundaryDrag !== String(g.id) || !branchFrameDraggable(g.id)) {
+            return;
+          }
           dragMovedPx += Math.hypot(event.dx, event.dy);
           for (const r of g.regions) {
             const o = regionOffsets.get(r);
@@ -1817,11 +2100,19 @@ function render() {
           scheduleLayoutUpdate();
         })
         .on("end", function(event, g) {
+          const wasActive = activeBoundaryDrag === String(g.id);
+          activeBoundaryDrag = null;
+          d3.select(this).classed("is-dragging", false);
+          if (!wasActive) {
+            syncBranchFrameInteractivity();
+            return;
+          }
           if (dragMovedPx < clickThresholdPx()) {
             collapseBranch(g.id);
             return;
           }
           updateLayout();
+          syncBranchFrameInteractivity();
           schedulePostState();
           // Real group drag: report the moved offsets right away so the
           // host never collapses or re-blooms from stale positions.
@@ -1833,15 +2124,14 @@ function render() {
             );
           }
         }));
-      syncElasticBoundaries();
+      syncBranchBoundaries();
     }
   }
   syncLegend();
-  playElasticTransition();
 
   const regionDrag = d3.drag()
     .on("start", function(event, region) {
-      // Stop a running elastic bloom so the drag owns the transform.
+      // Stop a running branch animation so the drag owns the transform.
       d3.select(this).interrupt();
       dragMovedPx = 0;
       activeDragRegion = String(region);
@@ -1883,7 +2173,7 @@ function render() {
           const k = String(region);
           if (shellParents.has(k)) {
             const st = branchState.get(k);
-            if (st === "collapsed" || st === "unblooming") {
+            if (st === "collapsed" || st === "collapsing") {
               optimisticInheritOffsets(k);
               bloomBranch(k);
             }
@@ -1957,7 +2247,7 @@ function updateLayout() {
   syncOriginOutlines();
   syncMovementConnectors();
   syncMovementBand();
-  syncElasticBoundaries();
+  syncBranchBoundaries();
   svg.selectAll("path.connector").each(function(d) {
     if (!nodeLayoutLocked(this)) {
       d3.select(this).attr("d", connectorPath);

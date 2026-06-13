@@ -1,8 +1,8 @@
-# Local elastic hierarchy transitions ------------------------------------------
+# Branch-bloom hierarchy transitions ------------------------------------------
 #
-# Strategy: "stable skeleton + local elastic insert".
+# Strategy: "stable skeleton + local branch bloom".
 # The parent layout stays put; children bloom from the clicked parent's
-# centroid, overshoot slightly (easeOutBack), and settle into place. A dotted
+# centroid and settle into place with a calm cubic easing by default. A dotted
 # group-drag boundary belongs to the expanded group and moves the branch.
 # Global relayout is deliberately unsupported: it destroys mental-map stability.
 
@@ -10,12 +10,12 @@
 #'
 #' Builds a validated list of animation and behaviour settings for
 #' [build_elastic_transition()]. Defaults follow the user-tested values from
-#' the dragmapr transition prototype: a 550 ms ease-out-back bloom, a dotted
+#' the dragmapr transition prototype: a 400 ms branch bloom, a dotted
 #' group-drag boundary around the expanded group, and a stable parent
 #' skeleton.
 #'
 #' @details
-#' The transition model is always *stable skeleton + local elastic insert*:
+#' The transition model is always *stable skeleton + local branch bloom*:
 #' the parent layout is preserved and children expand locally from the parent
 #' centroid. `global_relayout` exists only as an explicit guard rail; setting
 #' it to `TRUE` is an error because recomputing the whole layout on every
@@ -25,10 +25,10 @@
 #'   from the parent centroid with elastic overshoot; `"local_insert"` is an
 #'   alias kept for forward compatibility and currently behaves identically.
 #' @param duration_ms Single positive number. Total animation duration in
-#'   milliseconds. Defaults to `550`.
+#'   milliseconds. Defaults to `400`.
 #' @param overshoot Single non-negative number controlling the elastic
 #'   "snap" of the ease-out-back curve. `0` disables overshoot entirely;
-#'   the default `1.70158` gives the classic overshoot of about 10 percent.
+#'   the default `0` disables bounce for a cleaner map transition.
 #' @param max_stretch Single positive number. Upper cap on the per-feature
 #'   stretch strength (movement distance relative to the layout diagonal).
 #'   Defaults to `0.35`.
@@ -44,30 +44,17 @@
 #'   behind its expanded children. Defaults to `TRUE`.
 #' @param show_trails Logical. Render dotted movement trails from the parent
 #'   centroid to each child's final position. Defaults to `FALSE`.
-#' @param reset_boundary Logical. Legacy alias for `group_drag_frame`, kept
-#'   for backwards compatibility. Defaults to `TRUE`.
+#' @param reset_boundary Deprecated logical alias for `group_drag_frame`.
 #' @param group_drag_frame Logical. Generate the dotted group-drag boundary
-#'   around each expanded group. Defaults to the value of `reset_boundary`.
-#' @param boundary_behavior What a plain click on the dotted frame does in
-#'   the interactive helper: `"drag"` (default; the frame is a group drag
-#'   handle and a click compresses the branch), `"reset"` (legacy reset
-#'   behaviour), or `"none"`. Forced to `"none"` when `group_drag_frame`
-#'   is `FALSE`.
-#' @param boundary_drag_threshold Single non-negative number. Pointer
-#'   movement (in pixels) below which a frame gesture counts as a click
-#'   rather than a drag. Defaults to `8`.
+#'   around each expanded group. Defaults to `TRUE`.
+#' @param boundary_behavior Boundary mode. Use `"drag"` to allow moving the
+#'   expanded group from the dotted frame, or `"none"` to show no draggable
+#'   frame.
+#' @param boundary_drag_threshold Pixel threshold before a dotted-frame pointer
+#'   movement counts as a drag instead of a click.
 #' @param boundary_label Single string used as the helper label for the
 #'   dotted group frame. Defaults to `"Drag to"`, allowing the interactive
 #'   helper to show labels such as `"Drag to Essex"`.
-#' @param collapse_duration_ms Single positive number. Browser-side reversible
-#'   leaf-return animation duration in milliseconds. Defaults to `260`.
-#' @param collapse_visual_freeze_ms Single non-negative number. How long the
-#'   Studio should defer label and legend refresh messages while collapsing.
-#'   Defaults to `340`.
-#' @param collapse_scale Number from `0` to `1`. Final scale of children during
-#'   a legacy collapse animation. Defaults to `0.16`.
-#' @param collapse_opacity Number from `0` to `1`. Final opacity of children
-#'   during a legacy collapse animation. Defaults to `0.04`.
 #' @param boundary_padding Single positive number. Boundary padding as a
 #'   fraction of the child layout's bounding-box diagonal. Defaults to
 #'   `0.025` (2.5 percent).
@@ -83,27 +70,29 @@
 #' transition_options(duration_ms = 800, overshoot = 0)
 #' try(transition_options(global_relayout = TRUE))
 transition_options <- function(mode = c("local_elastic", "local_insert"),
-                               duration_ms = 550,
-                               overshoot = 1.70158,
+                               duration_ms = 400,
+                               overshoot = 0,
                                max_stretch = 0.35,
                                n_frames = 30,
                                preserve_skeleton = TRUE,
                                global_relayout = FALSE,
                                show_ghost = TRUE,
                                show_trails = FALSE,
-                               reset_boundary = TRUE,
-                               group_drag_frame = reset_boundary,
-                               boundary_behavior = c("drag", "reset", "none"),
+                               reset_boundary = NULL,
+                               group_drag_frame = TRUE,
+                               boundary_behavior = c("drag", "none"),
                                boundary_drag_threshold = 8,
                                boundary_label = "Drag to",
-                               collapse_duration_ms = 260,
-                               collapse_visual_freeze_ms = 340,
-                               collapse_scale = 0.16,
-                               collapse_opacity = 0.04,
                                boundary_padding = 0.025,
                                drag_boundary_with_group = TRUE) {
   mode <- match.arg(mode)
   boundary_behavior <- match.arg(boundary_behavior)
+  if (!is.null(reset_boundary)) {
+    if (!is.logical(reset_boundary) || length(reset_boundary) != 1L || is.na(reset_boundary)) {
+      stop("`reset_boundary` must be TRUE, FALSE, or NULL.", call. = FALSE)
+    }
+    group_drag_frame <- isTRUE(reset_boundary)
+  }
 
   if (isTRUE(global_relayout)) {
     stop(
@@ -137,20 +126,10 @@ transition_options <- function(mode = c("local_elastic", "local_insert"),
       is.na(boundary_label)) {
     stop("`boundary_label` must be a single string.", call. = FALSE)
   }
-  .check_number(collapse_duration_ms, "collapse_duration_ms", min = 1)
-  .check_number(collapse_visual_freeze_ms, "collapse_visual_freeze_ms", min = 0)
-  .check_number(collapse_scale, "collapse_scale", min = 0)
-  .check_number(collapse_opacity, "collapse_opacity", min = 0)
-  if (collapse_scale > 1) {
-    stop("`collapse_scale` must be between 0 and 1.", call. = FALSE)
-  }
-  if (collapse_opacity > 1) {
-    stop("`collapse_opacity` must be between 0 and 1.", call. = FALSE)
-  }
   .check_number(boundary_padding, "boundary_padding", positive = TRUE)
 
   for (flag in c(
-    "show_ghost", "show_trails", "reset_boundary",
+    "show_ghost", "show_trails",
     "group_drag_frame", "drag_boundary_with_group"
   )) {
     val <- get(flag, inherits = FALSE)
@@ -175,18 +154,11 @@ transition_options <- function(mode = c("local_elastic", "local_insert"),
       show_ghost               = show_ghost,
       show_trails              = show_trails,
 
-      # Legacy name retained for older code.
       reset_boundary           = isTRUE(group_drag_frame),
-
-      # New name and behavior.
       group_drag_frame         = isTRUE(group_drag_frame),
       boundary_behavior        = boundary_behavior,
       boundary_drag_threshold  = boundary_drag_threshold,
       boundary_label           = unname(boundary_label),
-      collapse_duration_ms     = collapse_duration_ms,
-      collapse_visual_freeze_ms = collapse_visual_freeze_ms,
-      collapse_scale           = collapse_scale,
-      collapse_opacity         = collapse_opacity,
 
       boundary_padding         = boundary_padding,
       drag_boundary_with_group = drag_boundary_with_group
@@ -460,11 +432,20 @@ layout_metrics <- function(before, after, id_col) {
 
 # ---- Internal helpers --------------------------------------------------------
 
-# Ease-out-back: settles at 1 with a slight elastic overshoot on the way.
+# Calm cubic easing. `overshoot` is retained for backward compatibility;
+# when it is greater than zero this falls back to the older back easing.
 #' @noRd
-.ease_out_back <- function(t, overshoot = 1.70158) {
-  t <- t - 1
-  1 + t * t * ((overshoot + 1) * t + overshoot)
+.ease_branch <- function(t, overshoot = 0) {
+  if (is.finite(overshoot) && overshoot > 0) {
+    u <- t - 1
+    return(1 + u * u * ((overshoot + 1) * u + overshoot))
+  }
+  1 - (1 - t)^3
+}
+
+#' @noRd
+.ease_size <- function(t) {
+  1 - (1 - t)^3
 }
 
 # Diagonal of the bounding box, used as the scale-free size reference.
@@ -532,8 +513,8 @@ layout_metrics <- function(before, after, id_col) {
   anchored
 }
 
-# Stacked animation frames: children grow from a small seed at the parent
-# centroid (frame 1) to their exact final geometry (last frame).
+# Stacked animation frames: children move from parent-local pose to their
+# exact final geometry (last frame) with a calm size ramp.
 #' @noRd
 .transition_frames <- function(anchored, n_frames, overshoot,
                                start_scale = 0.15) {
@@ -544,8 +525,8 @@ layout_metrics <- function(before, after, id_col) {
   frames <- vector("list", n_frames)
   for (i in seq_len(n_frames)) {
     t <- progress[i]
-    eased  <- .ease_out_back(t, overshoot)
-    growth <- start_scale + (1 - start_scale) * min(t * 1.08, 1)
+    eased  <- .ease_branch(t, overshoot)
+    growth <- start_scale + (1 - start_scale) * .ease_size(t)
 
     frame_sf <- anchored
     frame_sf$frame_id       <- i

@@ -11,8 +11,9 @@ Description: Creates interactive draggable plots from grouped projected
     automatically with make_region_labels(), supplied directly with
     as_drag_labels(), and their moved positions saved and restored with
     read_label_state() and apply_label_state(). Hierarchical spatial
-    datasets are supported via make_hierarchy_key() and inherit_layout(),
-    which propagate parent-level drag offsets to finer child groupings.
+    datasets are supported via hierarchy detection, upload profiling,
+    make_hierarchy_key(), and inherit_layout(), which recommend parent-child
+    groupings and propagate parent-level drag offsets to finer child groupings.
     Automatic starting layouts are provided by suggest_offsets() using
     radial, grid, or directional algorithms. Spatial file diagnostics are
     available through dragmapr_diagnostics(). When a reproducible static

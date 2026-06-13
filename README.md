@@ -284,6 +284,7 @@ Replace `"region_name"` with the column that identifies each region in your shap
 The exported `example_hhs_layout()` and `example_panel_layout()` helpers return small self-contained layouts used by these examples and tests.
 
 -   `basic_draggable_map.R`: four synthetic map regions.
+-   `branch-bloom-tester.R`: standalone Shiny tester for clean branch-bloom and leaf-flip animation modes.
 -   `explodemap_hhs_labels.R`: bundled HHS-style layout with explodemap colors and offsets.
 -   `label_nudging.R`: independent text-marker nudges after region movement.
 -   `non_map_panels.R`: dashboard/diagram rectangles, useful for non-map geometry checks.

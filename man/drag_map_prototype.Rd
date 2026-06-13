@@ -29,6 +29,7 @@ drag_map_prototype(
   legend_title = "Region",
   legend_values = NULL,
   label_values = NULL,
+  legend_reflects_bloom = FALSE,
   map_background = c("white", "transparent", "light_grid", "dark"),
   connector_linetype = c("solid", "dashed", "dotted"),
   connector_endpoint = c("none", "arrow"),
@@ -114,6 +115,10 @@ in the browser-helper legend. \code{NULL} includes all region values.}
 \item{label_values}{Optional character vector of label IDs to display.
 \code{NULL} displays all labels while preserving all label offsets.}
 
+\item{legend_reflects_bloom}{When \code{TRUE}, an armed bloom helper lets the
+browser legend switch between parent and child keys as branches expand.
+The default \code{FALSE} keeps a parent-only legend during bloom animations.}
+
 \item{map_background}{Browser helper background. One of \code{"white"},
 \code{"transparent"}, \code{"light_grid"}, or \code{"dark"}.}
 
@@ -156,29 +161,25 @@ Defaults to \code{FALSE}.}
 HTML. Defaults to \code{TRUE}; Shiny apps that provide their own controls can
 set this to \code{FALSE}.}
 
-\item{transition}{Optional local elastic transition played on first render,
-typically built from \code{\link[=build_elastic_transition]{build_elastic_transition()}} output when switching
-from a parent grouping to a child grouping. A named list with elements:
-\code{anchors} (data frame with \code{region}, \code{ax_m}, \code{ay_m} columns,
-where \code{ax_m}/\code{ay_m} is each region's bloom start point relative to its
-final position, in map units; optional when \code{groups} is supplied, in
-which case only the boundaries are drawn), \code{groups} (named list mapping each
+\item{transition}{Optional branch-bloom transition for parent/child
+grouping. A named list with elements: \code{groups} (named list mapping each
 parent label to the character vector of child region values it contains;
 used to draw a dotted group-drag boundary per expanded group),
 \code{child_region_col} (column in \code{x} holding each feature's child-level
 region key, enabling client-side expand/collapse), \code{shell_col} (column
 flagging dissolved parent-shell features with \code{1}; while a parent is
 collapsed only its shell is drawn and the child features stay hidden),
-\code{expanded} (parent values to start expanded), \code{duration_ms}, \code{overshoot},
-and \code{boundary} (set \code{FALSE} to skip the dotted frame). The frame is now
+\code{expanded} (parent values to start expanded), \code{mode}, \code{animation},
+\code{duration_ms}, \code{easing}, \code{overshoot} (retained for backward
+compatibility), \code{show_parent_ghost}, and
+\code{boundary} (set \code{FALSE} to skip the dotted frame). The frame is now
 treated as a two-gesture group handle by default: dragging it moves all
 bloomed children in the branch together, while a plain click compresses
 the branch back to the parent.
-Optional transition fields include \code{boundary_behavior} (\code{"drag"},
-\code{"reset"}, or \code{"none"}), \code{boundary_drag_threshold} in screen pixels
-before a pointer gesture is treated as a drag, and \code{boundary_label} for
-helper text. Use \code{"Drag to"} so the helper can label each frame as
-\code{"Drag to <parent/location>"}.
+Optional transition fields include \code{boundary_behavior} (\code{"drag"} or
+\code{"none"}), \code{debug}, \code{stagger_ms}, \code{boundary_drag_threshold} in screen pixels before a pointer
+gesture is treated as a drag, and \code{boundary_label} for helper text. Use
+\code{"Drag to"} so the helper can label each frame as \code{"Drag to <parent/location>"}.
 \code{NULL} (default) disables the animation.}
 
 \item{file}{Output HTML path. When \code{NULL}, a temporary \code{.html} file is
