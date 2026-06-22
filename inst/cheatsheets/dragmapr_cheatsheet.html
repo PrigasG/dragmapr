@@ -78,22 +78,12 @@
     margin-top: 1px;
   }
 
-  .page-header .hex {
-    width: 54px;
+  .page-header .app-logo {
+    width: 62px;
     height: 62px;
     margin-left: auto;
     flex-shrink: 0;
-  }
-
-  .page-header .hex-inner {
-    width: 100%;
-    height: 100%;
-    background: #1d6fbe;
-    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 26px;
+    object-fit: contain;
   }
 
   /* ── Column layout ───────────────────────────────────────────────── */
@@ -317,7 +307,7 @@
       <div class="pkg-name">dragmapr</div>
       <div class="pkg-tag">Drag map regions into any layout · export offsets · render a static image</div>
     </div>
-    <div class="hex"><div class="hex-inner">🗺️</div></div>
+    <img class="app-logo" src="../../man/figures/logo.png" alt="dragmapr logo"/>
   </div>
 
   <div class="page-body">
@@ -330,8 +320,8 @@
         <div class="section-title">1 · Setup</div>
 
         <div class="fn">
-          <span class="fn-name">pak::pak("PrigasG/dragmapr")</span>
-          <div class="fn-desc">Install from GitHub (CRAN release coming).</div>
+          <span class="fn-name">install.packages("dragmapr")</span>
+          <div class="fn-desc">Install the released package from CRAN.</div>
         </div>
 
         <div class="fn">
@@ -530,7 +520,7 @@ note &lt;- <span class="fn">as_drag_annotations</span>(
       <div class="pkg-name">dragmapr</div>
       <div class="pkg-tag">Static export · Spatial Studio · Hierarchy / Bloom · Utilities</div>
     </div>
-    <div class="hex"><div class="hex-inner">🗺️</div></div>
+    <img class="app-logo" src="../../man/figures/logo.png" alt="dragmapr logo"/>
   </div>
 
   <div class="page-body">

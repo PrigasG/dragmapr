@@ -17,11 +17,20 @@ pinned: false
 
 Watch a short walkthrough in the [dragmap demo vignette](https://prigasg.github.io/dragmapr/articles/dragmap-demo.html), or see the [HHS placeholder shapes demo](https://prigasg.github.io/dragmapr/articles/hhs-placeholder-shapes-demo.html) for a complete Spatial Studio workflow.
 
+## Links
+
+- [HHS placeholder shapes demo](https://prigasg.github.io/dragmapr/articles/hhs-placeholder-shapes-demo.html)
+- [CRAN package page](https://CRAN.R-project.org/package=dragmapr)
+- [GitHub repository](https://github.com/PrigasG/dragmapr)
+
 ## Install
 
 ``` r
+install.packages("dragmapr")
+
+# Development version
 # install.packages("pak")
-pak::pak("PrigasG/dragmapr")
+# pak::pak("PrigasG/dragmapr")
 ```
 
 ## Quick Start
@@ -150,3 +159,7 @@ Need an export format not available in Spatial Studio? Download the GeoJSON or G
 - Offsets are stored in projected coordinate units. Use `prepare_dragmapr_sf()` to convert longitude/latitude data before dragging.
 - Dragged geometry is for display and communication, not geographic analysis.
 - Very large datasets can be slow in the browser. Simplify or group geometry first when working at large scale.
+
+## Thank You
+
+Thank you for trying `dragmapr`, sharing feedback, and helping make clearer map workflows easier to build.
