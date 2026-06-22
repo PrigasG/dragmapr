@@ -7,4 +7,7 @@
 *.ico  filter=lfs diff=lfs merge=lfs -text
 *.svg  filter=lfs diff=lfs merge=lfs -text
 *.pdf  filter=lfs diff=lfs merge=lfs -text
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+pkgdown/assets/dragmap-demo.mp4 filter=lfs diff=lfs merge=lfs -text
+pkgdown/assets/hhs-placeholder-shapes-demo.mp4 filter=lfs diff=lfs merge=lfs -text
 pkgdown/assets/*.mp4 filter=lfs diff=lfs merge=lfs -text
