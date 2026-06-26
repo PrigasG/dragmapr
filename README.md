@@ -57,6 +57,47 @@ If your data is in longitude/latitude, run `prepare_dragmapr_sf()` first:
 my_sf <- prepare_dragmapr_sf(my_sf)
 ```
 
+## State-first workflow (recommended)
+
+The cleanest way to use dragmapr is to treat the **layout** (the computed
+geometry) and the **state** (your editorial composition over it) as separate
+things, and carry one `dragmapr_state` through the whole pipeline. `explodemap`
+and `dragmapr` share this exact workflow — the five lines below are identical in
+both packages' READMEs:
+
+``` r
+# layout = the computed geometry;  state = your editorial composition over it
+library(explodemap)
+library(dragmapr)
+
+layout <- explode_grouped(my_sf, region_col = "region")   # 1. compute
+state  <- as_dragmapr_state(layout)                        # 2. hand off as state
+
+dragmapr_edit(layout, state = state)                       # 3. compose (edit)
+
+focus_map(layout, state = state)                           # 4a. render — interactive
+render_dragged_map(layout$sf_grouped,                      # 4b. render — static
+                   region_col = "region", state = state)
+```
+
+`dragmapr_edit()` is the friendly front door (it accepts a projected `sf`, an
+explodemap layout, or a `dragmapr_layout`). In Shiny, capture each edit back
+into a state with `dragmapr_widget_state()`, and persist it with
+`write_dragmapr_state()`. The `state` object is plain, reproducible data: region
+and label offsets, the projected `crs`, a `geometry_id`, the selected feature,
+and a monotonically increasing `version`. Offset CSVs and `as_dragmapr()` still
+work, but they are now the low-level escape hatch rather than the main road. See
+`inst/examples/full_state_roundtrip.R` for the full loop.
+
+For a stronger cross-package example that starts with
+`explodemap::optimize_grouped_layout()` and finishes with a persisted
+`dragmapr_state`, `focus_map()`, and `render_dragged_map()`:
+
+``` r
+source(system.file("examples/explodemap_dragmapr_pipeline.R",
+                   package = "dragmapr"))
+```
+
 ## How It Works
 
 1. Start with a polygon `sf` object and pick a column that groups your regions.

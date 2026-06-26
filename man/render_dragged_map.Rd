@@ -10,6 +10,7 @@ render_dragged_map(
   region_col,
   label_col = region_col,
   label_offsets = NULL,
+  state = NULL,
   labels = NULL,
   label_values = NULL,
   max_labels = Inf,
@@ -68,6 +69,10 @@ render_dragged_map(
 \code{region_col}.}
 
 \item{label_offsets}{Label state as a data frame, CSV path, or \code{NULL}.}
+
+\item{state}{Optional \code{dragmapr_state}. When supplied, its region and label
+offsets seed the static render. Explicit \code{region_offsets} or
+\code{label_offsets} arguments override the corresponding state table.}
 
 \item{labels}{Optional label table from \code{make_region_labels()} or
 \code{as_drag_labels()}. Use \code{FALSE} to omit labels from the static render.}

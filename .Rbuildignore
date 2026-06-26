@@ -1,5 +1,6 @@
 ^.*\.Rproj$
 ^\.git
+^\.git/
 ^\.Rproj\.user$
 ^_pkgdown\.yml$
 ^\.github$
@@ -18,3 +19,7 @@
 ^drag-map\.html$
 ^CRAN-SUBMISSION$
 ^test_parent_child\.geojson$
+^inst/notes/office-demo-beamer.*$
+^inst/notes/office-demo-beamer.*\.md$
+^Rplots\.pdf$
+^tests/testthat/Rplots\.pdf$

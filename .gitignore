@@ -16,3 +16,6 @@ drag-map.html
 dev/
 # Temporary test files — not shipped
 test_parent_child.geojson
+Rplots.pdf
+tests/testthat/Rplots.pdf
+inst/notes/office-demo-beamer*

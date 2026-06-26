@@ -32,9 +32,7 @@ read_offsets <- function(path) {
 #' offsets <- data.frame(region = "A", dx_m = 5000, dy_m = -2000)
 #' apply_offsets(regions, offsets, region_col = "region")
 apply_offsets <- function(x, offsets, region_col) {
-  if (!inherits(x, "sf")) {
-    stop("`x` must be an sf object.", call. = FALSE)
-  }
+  validate_dragmapr_sf(x)
   if (!region_col %in% names(x)) {
     stop("region_col '", region_col, "' not found.", call. = FALSE)
   }

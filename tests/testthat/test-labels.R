@@ -175,6 +175,24 @@ test_that("render_dragged_map returns a ggplot with labels", {
   expect_s3_class(plot, "ggplot")
 })
 
+test_that("render_dragged_map accepts dragmapr_state", {
+  x <- sf::st_sf(
+    region = c("A", "B"),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0, 0)))),
+      sf::st_polygon(list(rbind(c(3, 0), c(4, 0), c(4, 1), c(3, 1), c(3, 0)))),
+      crs = 3857
+    )
+  )
+  state <- dragmapr_state(
+    region_offsets = data.frame(region = "B", dx_m = 10, dy_m = 0)
+  )
+
+  plot <- render_dragged_map(x, region_col = "region", state = state, labels = FALSE)
+
+  expect_s3_class(plot, "ggplot")
+})
+
 test_that("render_dragged_map can omit labels", {
   x <- sf::st_sf(
     region = "North",

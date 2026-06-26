@@ -12,6 +12,9 @@
 #' @param label_col Column used for default region-label text. Defaults to
 #'   `region_col`.
 #' @param label_offsets Label state as a data frame, CSV path, or `NULL`.
+#' @param state Optional `dragmapr_state`. When supplied, its region and label
+#'   offsets seed the static render. Explicit `region_offsets` or
+#'   `label_offsets` arguments override the corresponding state table.
 #' @param labels Optional label table from `make_region_labels()` or
 #'   `as_drag_labels()`. Use `FALSE` to omit labels from the static render.
 #' @param label_values Optional character vector of label IDs to render.
@@ -128,6 +131,7 @@ render_dragged_map <- function(x,
                                region_col,
                                label_col = region_col,
                                label_offsets = NULL,
+                               state = NULL,
                                labels = NULL,
                                label_values = NULL,
                                max_labels = Inf,
@@ -219,6 +223,31 @@ render_dragged_map <- function(x,
   }
   if (!isTRUE(show_label_marker)) {
     label_marker_shape <- "none"
+  }
+  if (!is.null(state)) {
+    state <- validate_dragmapr_state(state)
+    if (!is.null(region_offsets) || !is.null(label_offsets)) {
+      message(
+        "dragmapr: explicit offset arguments override matching tables in `state`."
+      )
+    }
+    if (is.null(region_offsets)) {
+      region_offsets <- state$region_offsets
+    }
+    if (is.null(label_offsets)) {
+      label_offsets <- state$label_offsets
+    }
+    if (!is.null(state$crs) && inherits(x, "sf")) {
+      target <- sf::st_crs(x)
+      authored <- tryCatch(sf::st_crs(state$crs), error = function(e) NA)
+      if (!is.na(authored) && !is.na(target) && authored != target) {
+        warning(
+          "State was composed in a different CRS than `x`. ",
+          "Metre offsets may be misplaced; reproject `x` to the state CRS first.",
+          call. = FALSE
+        )
+      }
+    }
   }
   if (is.null(region_offsets)) {
     region_offsets <- data.frame(

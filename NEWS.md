@@ -1,3 +1,69 @@
+# dragmapr 0.3.0
+
+* New `inst/shiny/pipeline-studio` Shiny app (shipped with both dragmapr and
+  explodemap) demonstrates the full cross-package workflow on real US geography:
+  an explodemap national HHS map and county drill-down, the draggable editor
+  with `dragmapr_state` round-trip, and a combined compute -> compose -> render
+  -> persist studio. Run with
+  `shiny::runApp(system.file("shiny/pipeline-studio", package = "dragmapr"))`.
+* Added `inst/examples/explodemap_dragmapr_pipeline.R`, a complete
+  cross-package example covering `explodemap` layout optimization and
+  diagnostics, editable `dragmapr_state`, JSON persistence, `focus_map()`, and
+  `render_dragged_map()`.
+* `dragmapr_state` carries a `view` (viewport) field that round-trips through
+  JSON and the widget snapshot. It is preserved as composition metadata;
+  restoring the browser to a saved viewport on load is intentionally left for a
+  future release (selection restoration is the clean first cut).
+* Every public entry point that accepts `sf` geometry (`dragmapr_widget()`,
+  `dragmapr_edit()`, `apply_offsets()`, `apply_dragmapr_state()`,
+  `render_dragged_map()`) now validates the active sf geometry column up front
+  via a shared check, so a malformed `sf` fails with one clear message instead
+  of a deep, cryptic error.
+* New `dragmapr_edit()` is a friendly front-door to the interactive editor and
+  the composition step of the state-first workflow. It accepts a projected
+  `sf`, an explodemap `grouped_exploded_map`, or a `dragmapr_layout` (plus an
+  optional `dragmapr_state`) and returns a configured `dragmapr_widget()`.
+  Capture edits back into a state with `dragmapr_widget_state()`.
+
+* `dragmapr_state()` gains three optional, back-compatible fields that make a
+  saved composition durable across sessions: `crs` (the projected CRS the
+  metre offsets are expressed in, stored as an EPSG integer or WKT string so it
+  round-trips through JSON), `geometry_id` (a provenance tag identifying the
+  geometry the state was composed against), and `selected_feature` (the feature
+  focused in an editor or dashboard). The fields are threaded through
+  `validate_`, `merge_`, `snapshot_`/`restore_`, `inherit_drag_offsets()` and
+  `collapse_drag_offsets()`; `selected_feature` is dropped on a level change.
+  `apply_dragmapr_state()` now warns when a state's `crs` differs from the
+  target geometry. Older state JSON written before these fields still restores.
+* `explodemap::as_dragmapr_state()` is the matching producer: it converts a
+  grouped layout's absolute anchors into `dx_m`/`dy_m` deltas and emits a
+  `dragmapr_state`, keeping the computed layout and the editorial state as
+  separate objects.
+* The native widget bridge now carries `crs`, `geometry_id` and
+  `selected_feature`. They are surfaced at the top of the widget payload, the
+  browser highlights the selected region (`.is-selected`), a region click
+  updates the selection and reports it back to Shiny, and the round-trip state
+  snapshot includes all three fields. `updateDragmapr()` gains live
+  `selected_feature` updates (pass `NULL` or `""` to clear).
+* New `dragmapr_widget_state()` is the inbound half of the bridge: it
+  reconstructs a `dragmapr_state` from the `paste0(outputId, "_state")` Shiny
+  input the widget emits, so server code can persist, merge, or re-render a
+  live composition. The browser's `revision` is preserved as the state
+  `version` (the client owns the live counter).
+* New `inst/examples/full_state_roundtrip.R` Shiny app walks the whole state
+  contract: an upstream layout state is edited in the native widget, every edit
+  is rebuilt server-side with `dragmapr_widget_state()`, a selection is pushed
+  back from R with `updateDragmapr()`, and the live `dragmapr_state` drives both
+  a saved JSON file and a static `render_dragged_map()` re-render.
+* `render_dragged_map()` now accepts `state =` a `dragmapr_state`, using its
+  region and label offsets for static output while preserving the existing
+  `region_offsets` / `label_offsets` table arguments as explicit overrides.
+* Revision semantics are now monotonic: `merge_dragmapr_state()`,
+  `inherit_drag_offsets()` and `collapse_drag_offsets()` bump `version` to one
+  past the highest input revision (via the internal `bump_revision()`), so a
+  state produced by an accepted edit always sorts after its inputs. Previously
+  `merge_dragmapr_state()` took the maximum of the two revisions unchanged.
+
 # dragmapr 0.2.0
 
 * `drag_map_prototype()` gains an optional `transition` argument: the browser

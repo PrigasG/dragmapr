@@ -24,6 +24,8 @@ navbar:
     examples:
       text: Examples
       menu:
+      - text: State-first workflow
+        href: articles/state-first-workflow.html
       - text: Basic draggable map
         href: articles/getting-started.html
       - text: Dragmap demo video
@@ -44,6 +46,36 @@ navbar:
       aria-label: GitHub
 
 reference:
+- title: State-first composition
+  desc: >
+    The recommended workflow. Treat the layout as an editable composition
+    object — a dragmapr_state — and carry it through compute, compose, render.
+    Includes the friendly editor front door and the full state lifecycle
+    (validate, merge, inherit/collapse across levels, apply, snapshot/restore,
+    and JSON read/write).
+  contents:
+  - dragmapr_edit
+  - dragmapr_state
+  - validate_dragmapr_state
+  - merge_dragmapr_state
+  - inherit_drag_offsets
+  - collapse_drag_offsets
+  - apply_dragmapr_state
+  - snapshot_dragmapr_state
+  - write_dragmapr_state
+
+- title: Native widget (htmlwidget and Shiny)
+  desc: >
+    The browser-native draggable editor and its Shiny bridge: build the widget,
+    bind and render it in Shiny, push live display and selection updates, and
+    rebuild a dragmapr_state from the edits the browser reports back.
+  contents:
+  - dragmapr_widget
+  - dragmapr_widget_state
+  - dragmaprOutput
+  - updateDragmapr
+  - dragmapr_geometry_options
+
 - title: Interactive prototype
   desc: >
     Create the browser-based D3 helper. This is the primary deliverable:
@@ -136,9 +168,10 @@ articles:
 - title: Workflows
   navbar: ~
   contents:
+  - state-first-workflow
+  - getting-started
   - dragmap-demo
   - hhs-placeholder-shapes-demo
-  - getting-started
   - labels-and-static-output
   - example-gallery
   - shiny-workflows
