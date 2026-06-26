@@ -22,6 +22,7 @@ Watch a short walkthrough in the [dragmap demo vignette](https://prigasg.github.
 - [HHS placeholder shapes demo](https://prigasg.github.io/dragmapr/articles/hhs-placeholder-shapes-demo.html)
 - [CRAN package page](https://CRAN.R-project.org/package=dragmapr)
 - [GitHub repository](https://github.com/PrigasG/dragmapr)
+- [Cross-package roadmap](ROADMAP.md)
 
 ## Install
 

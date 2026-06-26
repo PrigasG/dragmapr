@@ -56,6 +56,9 @@ reference:
   contents:
   - dragmapr_edit
   - dragmapr_state
+  - dragmapr_state_diff
+  - dragmapr_state_equal
+  - summary.dragmapr_state
   - validate_dragmapr_state
   - merge_dragmapr_state
   - inherit_drag_offsets

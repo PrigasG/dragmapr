@@ -1,0 +1,5 @@
+dependencies:
+  - name: dragmapr-widget
+    version: 0.2.0
+    src: htmlwidgets
+    stylesheet: dragmapr.css

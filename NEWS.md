@@ -1,5 +1,14 @@
 # dragmapr 0.3.0
 
+* Release A of the Pipeline Studio extraction adds state comparison helpers:
+  `dragmapr_state_diff()` reports changed regions, labels, and interaction
+  fields, while `dragmapr_state_equal()` provides the matching predicate with
+  composition/interaction/all comparison modes. `summary.dragmapr_state()` now
+  reports moved region and label counts, selected feature, CRS, geometry ID,
+  and revision.
+* `dragmapr_widget()` now accepts a direct `region_palette =` argument, matching
+  `render_dragged_map()` and `updateDragmapr(region_palette = )` while keeping
+  the existing `dragmapr_display_options(region_palette = )` route intact.
 * New `inst/shiny/pipeline-studio` Shiny app (shipped with both dragmapr and
   explodemap) demonstrates the full cross-package workflow on real US geography:
   an explodemap national HHS map and county drill-down, the draggable editor
