@@ -1,6 +1,8 @@
 # dragmapr <img src="man/figures/logo.png" alt="dragmapr logo" align="right" height="150"/>
 
 [![R-CMD-check](https://github.com/PrigasG/dragmapr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/PrigasG/dragmapr/actions/workflows/R-CMD-check.yaml)
+[![Spatial Studio](https://img.shields.io/badge/Hugging%20Face-Spatial%20Studio-ffcc4d)](https://Prigas89-dragmapr-spatial-studio.hf.space)
+[![Pipeline Studio](https://img.shields.io/badge/Hugging%20Face-Pipeline%20Studio-2b7fff)](https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio)
 
 `dragmapr` lets you move map regions and labels by hand, then save the edited
 layout as reproducible data.
@@ -25,6 +27,7 @@ install.packages("dragmapr")
 ## Try It
 
 - Live Spatial Studio: <https://Prigas89-dragmapr-spatial-studio.hf.space>
+- Shared Pipeline Studio: <https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio>
 - Package site: <https://prigasg.github.io/dragmapr/>
 - Cross-package roadmap: [ROADMAP.md](ROADMAP.md)
 - Pipeline Studio:

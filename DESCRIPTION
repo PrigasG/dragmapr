@@ -25,7 +25,9 @@ Description: Creates interactive draggable plots from grouped projected
     <doi:10.1109/TVCG.2011.185>. Spatial data handling uses the 'sf'
     package: Pebesma (2018) <doi:10.32614/RJ-2018-009>.
 License: MIT + file LICENSE
-URL: https://prigasg.github.io/dragmapr/
+URL: https://prigasg.github.io/dragmapr/,
+    https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio,
+    https://Prigas89-dragmapr-spatial-studio.hf.space
 BugReports: https://github.com/PrigasG/dragmapr/issues
 Imports:
     ggplot2,

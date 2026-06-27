@@ -6,6 +6,8 @@ template:
 
 home:
   links:
+  - text: "Try Pipeline Studio"
+    href: https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio
   - text: "Try the Spatial Studio"
     href: https://Prigas89-dragmapr-spatial-studio.hf.space
   - text: Report a bug
@@ -16,10 +18,13 @@ home:
 navbar:
   structure:
     left: [intro, reference, articles, examples, news]
-    right: [demo, github]
+    right: [pipeline, demo, github]
   components:
+    pipeline:
+      text: "Pipeline Studio"
+      href: https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio
     demo:
-      text: "Live Demo"
+      text: "Spatial Studio"
       href: https://Prigas89-dragmapr-spatial-studio.hf.space
     examples:
       text: Examples
@@ -40,6 +45,8 @@ navbar:
         href: articles/shiny-workflows.html
       - text: "Spatial studio (live app)"
         href: https://Prigas89-dragmapr-spatial-studio.hf.space
+      - text: "Pipeline Studio (explodemap bridge)"
+        href: https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio
     github:
       icon: fa-github
       href: https://github.com/PrigasG/dragmapr
@@ -49,7 +56,7 @@ reference:
 - title: State-first composition
   desc: >
     The recommended workflow. Treat the layout as an editable composition
-    object — a dragmapr_state — and carry it through compute, compose, render.
+    object - a dragmapr_state - and carry it through compute, compose, render.
     Includes the friendly editor front door and the full state lifecycle
     (validate, merge, inherit/collapse across levels, apply, snapshot/restore,
     and JSON read/write).
