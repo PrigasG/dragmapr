@@ -1738,6 +1738,28 @@ function preShowHelperBusy() {
         ),
 
         studio_sidebar_panel(
+          "Geography editing",
+          "Inspect or remove unneeded polygons",
+          open = TRUE,
+          tags$p(
+            "Choose a geography from the current map, or click one in the helper.",
+            class = "studio-help"
+          ),
+          uiOutput("geography_edit_ui"),
+          tableOutput("selected_geography_table"),
+          tags$div(
+            class = "studio-action-row",
+            actionButton("remove_selected_geography", "Remove selected geography",
+                         class = "btn-sm btn-danger"),
+            actionButton("clear_selected_geography", "Clear", class = "btn-sm btn-default")
+          ),
+          tags$p(
+            "Undo restores removed geography together with the drag state.",
+            class = "studio-help"
+          )
+        ),
+
+        studio_sidebar_panel(
           "Labels & text boxes",
           "Short names on the map, or callout notes",
           open = TRUE,
@@ -1914,7 +1936,6 @@ function preShowHelperBusy() {
           tags$div("Context layers", class = "studio-subgroup-title"),
           checkboxInput("show_origin_outlines", "Show origin outlines", value = FALSE),
           checkboxInput("show_movement_connectors", "Show movement connectors", value = FALSE),
-          checkboxInput("show_movement_band", "Show swept movement shadow", value = FALSE),
           checkboxInput("show_drag_trail", "Show drag preview trail", value = FALSE),
           tags$div(class = "studio-divider"),
           tags$div("Movement connector style", class = "studio-subgroup-title"),
@@ -2036,6 +2057,7 @@ server <- function(input, output, session) {
     static_title = "dragmapr spatial studio",
     pending_region_col = NULL,
     pending_label_col  = NULL,
+    selected_region = NULL,
     legend_filter_selection = NULL,
     label_filter_selection = NULL,
     column_select_signature = NULL,
@@ -2110,6 +2132,7 @@ server <- function(input, output, session) {
     state$label_palette_override <- NULL
     state$pending_region_col <- NULL
     state$pending_label_col <- NULL
+    state$selected_region <- NULL
     state$legend_filter_selection <- NULL
     state$label_filter_selection <- NULL
     state$column_select_signature <- NULL
@@ -2471,25 +2494,34 @@ server <- function(input, output, session) {
     )
   }
 
-  state_snapshot <- function() {
-    list(region_offsets = region_state(), label_offsets = label_state())
+  state_snapshot <- function(include_source = FALSE) {
+    snapshot <- list(region_offsets = region_state(), label_offsets = label_state())
+    if (isTRUE(include_source)) {
+      snapshot$source <- state$source
+      snapshot$source_version <- state$source_version
+    }
+    snapshot
   }
 
   same_snapshot <- function(a, b) {
     if (is.null(a) || is.null(b)) return(FALSE)
+    a_has_source <- !is.null(a$source)
+    b_has_source <- !is.null(b$source)
+    if (!identical(a_has_source, b_has_source)) return(FALSE)
+    if (a_has_source && !identical(a$source, b$source)) return(FALSE)
     identical(csv_text(a$region_offsets), csv_text(b$region_offsets)) &&
       identical(csv_text(a$label_offsets), csv_text(b$label_offsets))
   }
 
-  push_history <- function(snapshot) {
+  push_history <- function(snapshot, force = FALSE) {
     if (isTRUE(state$restoring_history)) return()
     ignore_until <- state$history_ignore_until
-    if (!is.null(ignore_until) && Sys.time() < ignore_until) {
+    if (!isTRUE(force) && !is.null(ignore_until) && Sys.time() < ignore_until) {
       state$undo_stack <- list(snapshot)
       state$redo_stack <- list()
       return()
     }
-    if (!isTRUE(state$history_armed)) {
+    if (!isTRUE(force) && !isTRUE(state$history_armed)) {
       state$undo_stack <- list(snapshot)
       state$redo_stack <- list()
       return()
@@ -2511,6 +2543,13 @@ server <- function(input, output, session) {
     on.exit({
       state$restoring_history <- FALSE
     }, add = TRUE)
+    if (!is.null(snapshot$source) && inherits(snapshot$source, "sf")) {
+      set_source(snapshot$source)
+      state$selected_region <- NULL
+      state$bloom_parents <- character()
+      state$bloom_child_col_active <- NULL
+      state$bloom_version <- state$bloom_version + 1L
+    }
     state$region_csv_cache <- csv_text(snapshot$region_offsets)
     state$label_csv_cache <- csv_text(snapshot$label_offsets)
     session$sendCustomMessage("dragmapr-state", list(
@@ -2638,11 +2677,6 @@ server <- function(input, output, session) {
         session,
         "show_movement_connectors",
         value = isTRUE(metadata$show_movement_connectors %||% FALSE)
-      )
-      updateCheckboxInput(
-        session,
-        "show_movement_band",
-        value = isTRUE(metadata$show_movement_band %||% FALSE)
       )
       updateCheckboxInput(
         session,
@@ -3274,7 +3308,7 @@ server <- function(input, output, session) {
       connector_endpoint  = input$connector_endpoint %||% "none",
       show_origin_outlines = isTRUE(input$show_origin_outlines),
       show_movement_connectors = isTRUE(input$show_movement_connectors),
-      show_movement_band   = isTRUE(input$show_movement_band),
+      show_movement_band   = FALSE,
       movement_connector_color = studio_color_value(input$movement_connector_color, "#64748b"),
       movement_connector_opacity = input$movement_connector_opacity %||% 0.72,
       movement_connector_linewidth = input$movement_connector_linewidth %||% 0.45,
@@ -3356,7 +3390,7 @@ server <- function(input, output, session) {
          input$connector_color, input$connector_linewidth, input$legend_show_all,
          input$legend_reflect_bloom, input$legend_filter,
          input$legend_position, input$legend_title, input$connector_linetype, input$connector_endpoint,
-         input$connector_smart, input$show_origin_outlines, input$show_movement_connectors, input$show_movement_band,
+         input$connector_smart, input$show_origin_outlines, input$show_movement_connectors,
          input$movement_connector_color, input$movement_connector_opacity,
          input$movement_connector_linewidth, input$movement_connector_linetype,
          input$movement_connector_endpoint,
@@ -3443,6 +3477,58 @@ server <- function(input, output, session) {
       actionButton("reset_view", "Reset view", class = "btn-sm btn-default", title = "Re-centre the map (Esc)")
     )
   })
+
+  output$geography_edit_ui <- renderUI({
+    groups <- region_groups()
+    if (length(groups) == 0L) {
+      return(tags$p("Load spatial data to edit geography.", class = "studio-help"))
+    }
+    choices <- clean_region_choices(groups)
+    selected <- isolate(state$selected_region)
+    if (is.null(selected) || !selected %in% unname(choices)) {
+      selected <- unname(choices)[1]
+    }
+    studio_select(
+      "selected_geography",
+      "Selected geography",
+      choices = choices,
+      selected = selected,
+      placeholder = "Choose geography"
+    )
+  })
+
+  selected_geography_key <- reactive({
+    key <- state$selected_region %||% input$selected_geography
+    if (is.null(key) || !nzchar(key)) return(NULL)
+    groups <- region_groups()
+    if (!key %in% groups) return(NULL)
+    key
+  })
+
+  selected_geography_rows <- reactive({
+    key <- selected_geography_key()
+    if (is.null(key)) return(NULL)
+    x <- map_sf()
+    col <- effective_region_col()
+    if (is.null(x) || is.null(col) || !col %in% names(x)) return(NULL)
+    rows <- x[as.character(x[[col]]) == as.character(key), , drop = FALSE]
+    if (!nrow(rows)) return(NULL)
+    rows
+  })
+
+  output$selected_geography_table <- renderTable({
+    key <- selected_geography_key()
+    rows <- selected_geography_rows()
+    if (is.null(key) || is.null(rows)) {
+      return(data.frame(Message = "No geography selected."))
+    }
+
+    tbl <- spatial_feature_table(rows, key_col = effective_region_col())
+    drop_cols <- grep("^\\.", names(tbl), value = TRUE)
+    show <- tbl[, setdiff(names(tbl), drop_cols), drop = FALSE]
+    show$features <- nrow(rows)
+    utils::head(show, 6L)
+  }, striped = TRUE, bordered = TRUE, spacing = "xs", width = "100%")
 
   # First nesting child column for a given parent column, or NULL. Used for
   # the "Detected" summary and the recommended-grouping action.
@@ -3759,6 +3845,10 @@ server <- function(input, output, session) {
   observeEvent(input$helper_region_click, {
     key <- as.character(input$helper_region_click$region %||% "")
     if (!nzchar(key)) return()
+    if (key %in% region_groups()) {
+      state$selected_region <- key
+      updateSelectInput(session, "selected_geography", selected = key)
+    }
     child_col <- state$bloom_child_col_active
     if (is.null(child_col) || !nzchar(child_col %||% "")) return()
     apply_helper_offset_rows(input$helper_region_click$regionOffsets)
@@ -3980,6 +4070,115 @@ server <- function(input, output, session) {
       list(values = as.list(ids))
     )
     set_status(paste0("Showing all ", length(ids), " labels."), "info")
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$selected_geography, {
+    key <- input$selected_geography
+    if (is.null(key) || !nzchar(key)) return()
+    if (!key %in% region_groups()) return()
+    state$selected_region <- key
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$clear_selected_geography, {
+    state$selected_region <- NULL
+    updateSelectInput(session, "selected_geography", selected = character())
+    set_status("Cleared the selected geography.", "info")
+  }, ignoreInit = TRUE)
+
+  prune_offset_cache <- function(csv_cache, id_col, remove_ids) {
+    remove_ids <- unique(as.character(remove_ids %||% character()))
+    remove_ids <- remove_ids[nzchar(remove_ids)]
+    df <- read_csv_text(csv_cache)
+    if (is.null(df) || !id_col %in% names(df) || length(remove_ids) == 0L) {
+      return(csv_cache)
+    }
+    df <- df[!as.character(df[[id_col]]) %in% remove_ids, , drop = FALSE]
+    if (nrow(df) == 0L) NULL else csv_text(df)
+  }
+
+  prune_selection <- function(selection, remove_ids) {
+    if (is.null(selection)) return(NULL)
+    setdiff(as.character(selection), as.character(remove_ids %||% character()))
+  }
+
+  remove_selected_geography_now <- function(key) {
+    key <- as.character(key %||% "")
+    if (!nzchar(key)) {
+      set_status("Choose a geography before removing it.", "info")
+      return(invisible(FALSE))
+    }
+
+    x_view <- map_sf()
+    col <- effective_region_col()
+    if (is.null(x_view) || !inherits(x_view, "sf") || !col %in% names(x_view)) {
+      set_status("The current geography view is not ready yet.", "error")
+      return(invisible(FALSE))
+    }
+
+    remove_idx <- as.character(x_view[[col]]) == key
+    remove_idx[is.na(remove_idx)] <- FALSE
+    if (!any(remove_idx)) {
+      set_status(paste0("Could not find '", key, "' in the current map."), "error")
+      return(invisible(FALSE))
+    }
+    if (all(remove_idx)) {
+      set_status("Cannot remove the only geography in the current source.", "error")
+      return(invisible(FALSE))
+    }
+
+    pre_delete <- state_snapshot(include_source = TRUE)
+    labels_before <- tryCatch(all_label_table(), error = function(e) NULL)
+    label_ids <- character()
+    if (is.data.frame(labels_before) && all(c("region", "label_id") %in% names(labels_before))) {
+      label_ids <- as.character(labels_before$label_id[as.character(labels_before$region) == key])
+    }
+
+    state$region_csv_cache <- prune_offset_cache(state$region_csv_cache, "region", key)
+    state$region_base_csv_cache <- prune_offset_cache(state$region_base_csv_cache, "region", key)
+    state$label_csv_cache <- prune_offset_cache(state$label_csv_cache, "label_id", label_ids)
+    state$legend_filter_selection <- prune_selection(state$legend_filter_selection, key)
+    state$label_filter_selection <- prune_selection(state$label_filter_selection, label_ids)
+    state$bloom_parents <- setdiff(as.character(state$bloom_parents %||% character()), key)
+    state$selected_region <- NULL
+
+    set_source(state$source[!remove_idx, , drop = FALSE])
+    state$bloom_version <- state$bloom_version + 1L
+    state$helper_signature <- NULL
+
+    push_history(pre_delete, force = TRUE)
+    push_history(state_snapshot(include_source = TRUE), force = TRUE)
+    do_refresh()
+    set_status(
+      paste0("Removed '", key, "'. Use Undo to restore it."),
+      "ok"
+    )
+    invisible(TRUE)
+  }
+
+  observeEvent(input$remove_selected_geography, {
+    key <- selected_geography_key()
+    if (is.null(key)) {
+      set_status("Choose a geography before removing it.", "info")
+      return()
+    }
+    showModal(modalDialog(
+      title = "Remove selected geography?",
+      tags$p(sprintf(
+        "This removes '%s' from the working spatial file and rebuilds the helper without it.",
+        key
+      )),
+      tags$p("Undo restores the removed geography if this was not intended."),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("confirm_remove_selected_geography", "Remove", class = "btn btn-danger")
+      ),
+      easyClose = TRUE
+    ))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$confirm_remove_selected_geography, {
+    removeModal()
+    remove_selected_geography_now(selected_geography_key())
   }, ignoreInit = TRUE)
 
   output$label_editor_ui <- renderUI({
@@ -4485,7 +4684,7 @@ server <- function(input, output, session) {
           connector_smart     = isTRUE(input$connector_smart),
           show_origin_outlines = isTRUE(input$show_origin_outlines),
           show_movement_connectors = isTRUE(input$show_movement_connectors),
-          show_movement_band   = isTRUE(input$show_movement_band),
+          show_movement_band   = FALSE,
           movement_connector_color = studio_color_value(input$movement_connector_color, "#64748b"),
           movement_connector_opacity = input$movement_connector_opacity %||% 0.72,
           movement_connector_linewidth = (input$movement_connector_linewidth %||% 0.45) * 3,
@@ -4591,7 +4790,7 @@ server <- function(input, output, session) {
          input$connector_linetype, input$connector_endpoint, input$connector_smart,
          input$show_legend, input$legend_show_all, input$legend_reflect_bloom,
          input$legend_filter,
-         input$legend_position, input$legend_title, input$show_origin_outlines, input$show_movement_connectors, input$show_movement_band,
+         input$legend_position, input$legend_title, input$show_origin_outlines, input$show_movement_connectors,
          input$movement_connector_color, input$movement_connector_opacity,
          input$movement_connector_linewidth, input$movement_connector_linetype,
          input$movement_connector_endpoint,
@@ -4613,7 +4812,7 @@ server <- function(input, output, session) {
         connectorSmart = isTRUE(input$connector_smart),
         showOriginOutlines = isTRUE(input$show_origin_outlines),
         showMovementConnectors = isTRUE(input$show_movement_connectors),
-        showMovementBand = isTRUE(input$show_movement_band),
+        showMovementBand = FALSE,
         movementConnectorColor = studio_color_value(input$movement_connector_color, "#64748b"),
         movementConnectorOpacity = input$movement_connector_opacity %||% 0.72,
         movementConnectorLinewidth = (input$movement_connector_linewidth %||% 0.45) * 3,
@@ -4777,7 +4976,7 @@ server <- function(input, output, session) {
       connector_smart     = isTRUE(input$connector_smart),
       show_origin_outlines = isTRUE(input$show_origin_outlines),
       show_movement_connectors = isTRUE(input$show_movement_connectors),
-      show_movement_band   = isTRUE(input$show_movement_band),
+      show_movement_band   = FALSE,
       movement_connector_color = studio_color_value(input$movement_connector_color, "#64748b"),
       movement_connector_opacity = input$movement_connector_opacity %||% 0.72,
       movement_connector_linewidth = input$movement_connector_linewidth %||% 0.45,
