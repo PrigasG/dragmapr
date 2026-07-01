@@ -37,7 +37,8 @@ shiny::runApp(system.file("shiny/pipeline-studio", package = "dragmapr"))
 ```
 
 Pipeline Studio is the bridge app for `explodemap` and `dragmapr`: compute a
-layout, refine it by dragging, apply the edits, and export the final map.
+layout, refine it by dragging, remove unneeded geography with Undo available,
+apply the edits, and export the final map.
 
 ## Quick Start
 
@@ -146,6 +147,38 @@ summary(draft)
 
 Use `compare = "composition"` when selection or viewport changes should not
 count as dirty edits.
+
+## Edit Spatial Features
+
+Some workflows need to remove unneeded geography before or during layout
+editing. Use `spatial_feature_table()` to show a review table in Shiny, then
+filter the source `sf` with stable feature ids:
+
+```r
+features <- spatial_feature_table(my_sf, key_col = "region")
+
+my_sf <- remove_spatial_features(my_sf, "North", key_col = "region")
+my_sf <- keep_spatial_features(my_sf, c("South", "West"), key_col = "region")
+```
+
+To add or replace geography after drawing or importing a new shape:
+
+```r
+my_sf <- add_spatial_features(my_sf, new_shape_sf)
+my_sf <- replace_spatial_features(my_sf, "Old region", new_shape_sf, key_col = "region")
+```
+
+In Shiny, the native widget can remove the selected feature from the live view
+and emit `input$map_feature_delete` so the server can apply the same edit to the
+source `sf`:
+
+```r
+updateDragmapr(session, "map", delete_selected = TRUE)
+updateDragmapr(session, "map", remove_features = c("North", "East"))
+```
+
+Pipeline Studio exposes this in the Refine tab: select a geography, review its
+source rows, remove it, and use Undo if the deletion was wrong.
 
 ## Labels And Notes
 

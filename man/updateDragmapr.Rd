@@ -14,7 +14,9 @@ updateDragmapr(session, outputId, ...)
 \item{...}{Live updates to apply. Display options use the R API, for example
 \code{show_origin_outlines} or \code{map_background}. The composition field
 \code{selected_feature} can also be updated; pass \code{NULL} or \code{""} to clear the
-current selection.}
+current selection. Use \code{remove_features = c(...)} to remove one or more
+feature ids from the live widget, or \code{delete_selected = TRUE} to remove
+the current selection.}
 }
 \value{
 Invisibly returns the sent message.

@@ -708,6 +708,17 @@ ui <- page_navbar(
         )),
         h6("Selection"),
         selectInput("sel_region", "Focus a region", choices = NULL),
+        tableOutput("selected_feature_table"),
+        div(
+          class = "d-grid gap-2 mb-3",
+          actionButton("delete_selected_region", "Remove selected geography",
+                       class = "btn-outline-danger"),
+          div(
+            class = "btn-group w-100",
+            actionButton("undo_geometry_edit", "Undo", class = "btn-outline-secondary"),
+            actionButton("redo_geometry_edit", "Redo", class = "btn-outline-secondary")
+          )
+        ),
         h6("Display"),
         checkboxInput("editor_labels", "Show labels", TRUE),
         checkboxInput("show_origin", "Origin outlines", FALSE),
@@ -829,7 +840,8 @@ server <- function(input, output, session) {
   rv <- reactiveValues(layout = NULL, state = NULL, draft = NULL,
                        source = MAP_SOURCES[[1]], level = "county",
                        key = NULL, saved = list(), fallback = NULL,
-                       palette = NULL, egen = 0L)
+                       palette = NULL, egen = 0L,
+                       undo_stack = list(), redo_stack = list())
 
   upload_source <- reactiveValues(path = NULL, name = NULL, size = NULL,
                                   type = NULL, layers = character(),
@@ -889,6 +901,8 @@ server <- function(input, output, session) {
     rv$source <- source
     rv$level <- level
     rv$key <- key
+    rv$undo_stack <- list()
+    rv$redo_stack <- list()
     rv$egen <- rv$egen + 1L
     regions <- sort(unique(as.character(rv$state$region_offsets$region)))
     updateSelectInput(session, "sel_region", choices = regions)
@@ -902,6 +916,101 @@ server <- function(input, output, session) {
       rv$saved[[rv$key]] <- list(canonical = rv$state, draft = rv$draft,
                                  palette = rv$palette)
     }
+  }
+
+  app_snapshot <- function(label = "edit") {
+    list(
+      label = label,
+      layout = rv$layout,
+      state = rv$state,
+      draft = rv$draft,
+      palette = rv$palette,
+      source = rv$source,
+      level = rv$level,
+      key = rv$key,
+      fallback = rv$fallback,
+      timestamp = Sys.time()
+    )
+  }
+
+  restore_app_snapshot <- function(snapshot) {
+    rv$layout <- snapshot$layout
+    rv$state <- snapshot$state
+    rv$draft <- snapshot$draft
+    rv$palette <- snapshot$palette
+    rv$source <- snapshot$source
+    rv$level <- snapshot$level
+    rv$key <- snapshot$key
+    rv$fallback <- snapshot$fallback
+    rv$egen <- rv$egen + 1L
+    regions <- sort(unique(as.character(rv$draft$region_offsets$region)))
+    selected <- rv$draft$selected_feature %||%
+      if (length(regions)) regions[[1L]] else ""
+    updateSelectInput(session, "sel_region", choices = regions, selected = selected)
+    remember_current()
+  }
+
+  push_app_history <- function(label = "edit") {
+    rv$undo_stack <- c(rv$undo_stack, list(app_snapshot(label)))
+    rv$redo_stack <- list()
+  }
+
+  prune_state_regions <- function(state, regions) {
+    state <- validate_dragmapr_state(state)
+    keep_regions <- !as.character(state$region_offsets$region) %in% regions
+    keep_labels <- !as.character(state$label_offsets$region) %in% regions
+    dragmapr_state(
+      level = state$level,
+      region_offsets = state$region_offsets[keep_regions, , drop = FALSE],
+      label_offsets = state$label_offsets[keep_labels, , drop = FALSE],
+      expanded_groups = setdiff(state$expanded_groups, regions),
+      view = state$view,
+      version = state$version + 1L,
+      crs = state$crs,
+      geometry_id = state$geometry_id,
+      selected_feature = NULL
+    )
+  }
+
+  delete_regions_from_layout <- function(regions) {
+    req(rv$layout, rv$draft)
+    regions <- as.character(regions)
+    regions <- regions[!is.na(regions) & nzchar(regions)]
+    if (!length(regions)) return(invisible(FALSE))
+    existing <- sort(unique(as.character(rv$layout$sf_grouped$region)))
+    regions <- intersect(regions, existing)
+    if (!length(regions)) return(invisible(FALSE))
+    if (length(setdiff(existing, regions)) < 1L) {
+      showNotification("At least one geography must remain in the layout.",
+                       type = "warning")
+      return(invisible(FALSE))
+    }
+
+    push_app_history(paste("remove", paste(regions, collapse = ", ")))
+    rv$layout$sf_grouped <- remove_spatial_features(
+      rv$layout$sf_grouped,
+      ids = regions,
+      key_col = "region"
+    )
+    rv$state <- prune_state_regions(rv$state, regions)
+    rv$draft <- prune_state_regions(rv$draft, regions)
+    if (!is.null(rv$palette)) {
+      rv$palette <- rv$palette[!names(rv$palette) %in% regions]
+    }
+    rv$egen <- rv$egen + 1L
+    remaining <- sort(unique(as.character(rv$draft$region_offsets$region)))
+    updateSelectInput(
+      session,
+      "sel_region",
+      choices = remaining,
+      selected = if (length(remaining)) remaining[[1L]] else ""
+    )
+    remember_current()
+    showNotification(
+      sprintf("Removed %s. Use Undo to restore it.", paste(regions, collapse = ", ")),
+      type = "message"
+    )
+    invisible(TRUE)
   }
 
   active_palette <- reactive({
@@ -1486,6 +1595,85 @@ server <- function(input, output, session) {
   observeEvent(input$sel_region, {
     req(input$sel_region)
     updateDragmapr(session, "editor", selected_feature = input$sel_region)
+  }, ignoreInit = TRUE)
+
+  output$selected_feature_table <- renderTable({
+    req(rv$layout)
+    selected <- input$sel_region %||% rv$draft$selected_feature
+    if (is.null(selected) || !nzchar(selected)) {
+      return(data.frame(Message = "Select a geography to inspect."))
+    }
+    tbl <- spatial_feature_table(rv$layout$sf_grouped, key_col = "region")
+    tbl <- tbl[as.character(tbl$.feature_id) == as.character(selected), , drop = FALSE]
+    if (nrow(tbl) == 0L) {
+      return(data.frame(Message = "No matching geography."))
+    }
+    drop_cols <- grep("^\\.", names(tbl), value = TRUE)
+    show <- tbl[, setdiff(names(tbl), drop_cols), drop = FALSE]
+    utils::head(show, 6L)
+  }, striped = TRUE, bordered = TRUE, spacing = "xs", width = "100%")
+
+  observeEvent(input$delete_selected_region, {
+    selected <- input$sel_region %||% rv$draft$selected_feature
+    if (is.null(selected) || !nzchar(selected)) {
+      showNotification("Select a geography before removing it.", type = "warning")
+      return()
+    }
+    showModal(modalDialog(
+      title = "Remove selected geography?",
+      tags$p(sprintf(
+        "This removes '%s' from the draft source geometry and the live editor.",
+        selected
+      )),
+      tags$p("Undo will restore it if this was the wrong deletion."),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("confirm_delete_selected_region", "Remove", class = "btn-danger")
+      ),
+      easyClose = TRUE
+    ))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$confirm_delete_selected_region, {
+    removeModal()
+    selected <- input$sel_region %||% rv$draft$selected_feature
+    updateDragmapr(session, "editor", remove_features = selected)
+    delete_regions_from_layout(selected)
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$editor_feature_delete, {
+    deleted <- input$editor_feature_delete$removed_features %||% character()
+    if (length(deleted)) {
+      delete_regions_from_layout(deleted)
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$undo_geometry_edit, {
+    stack <- rv$undo_stack
+    if (!length(stack)) {
+      showNotification("Nothing to undo yet.", type = "message")
+      return()
+    }
+    current <- app_snapshot("redo")
+    snapshot <- stack[[length(stack)]]
+    rv$undo_stack <- stack[-length(stack)]
+    rv$redo_stack <- c(rv$redo_stack, list(current))
+    restore_app_snapshot(snapshot)
+    showNotification("Restored the previous geography edit.", type = "message")
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$redo_geometry_edit, {
+    stack <- rv$redo_stack
+    if (!length(stack)) {
+      showNotification("Nothing to redo yet.", type = "message")
+      return()
+    }
+    current <- app_snapshot("undo")
+    snapshot <- stack[[length(stack)]]
+    rv$redo_stack <- stack[-length(stack)]
+    rv$undo_stack <- c(rv$undo_stack, list(current))
+    restore_app_snapshot(snapshot)
+    showNotification("Reapplied the geography edit.", type = "message")
   }, ignoreInit = TRUE)
 
   # Push the draft back: it becomes the new canonical face of explodemap.

@@ -162,6 +162,16 @@ reference:
   - prepare_dragmapr_sf
   - dragmapr_iframe_bridge
 
+- title: Editable spatial features
+  desc: >
+    Inspect, remove, keep, add, or replace source geography before or during a
+    dragmapr editing workflow. These helpers support Shiny review tables and
+    reversible geography edits in Pipeline Studio.
+  contents:
+  - spatial_feature_table
+  - remove_spatial_features
+  - add_spatial_features
+
 - title: RStudio addin
   desc: Launch the interactive prototype from the RStudio Addins menu.
   contents:

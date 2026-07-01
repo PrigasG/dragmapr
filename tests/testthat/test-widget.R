@@ -106,6 +106,14 @@ test_that("updateDragmapr routes selected_feature as a composition update", {
 
   cleared <- updateDragmapr(session, "map", selected_feature = NULL)
   expect_equal(cleared$selectedFeature, "")
+
+  removed <- updateDragmapr(session, "map", remove_features = c("North", "South"))
+  expect_equal(removed$removeFeatures, c("North", "South"))
+
+  deleted <- updateDragmapr(session, "map", delete_selected = TRUE)
+  expect_true(deleted$deleteSelected)
+
+  expect_error(updateDragmapr(session, "map", delete_selected = NA), "TRUE or FALSE")
 })
 
 test_that("dragmapr_edit accepts sf and layout-shaped inputs", {

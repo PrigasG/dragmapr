@@ -6,6 +6,17 @@
   composition/interaction/all comparison modes. `summary.dragmapr_state()` now
   reports moved region and label counts, selected feature, CRS, geometry ID,
   and revision.
+* Spatial feature editing is now first-class. New helpers
+  `spatial_feature_table()` / `view_spatial_features()`,
+  `remove_spatial_features()` / `delete_spatial_features()`,
+  `keep_spatial_features()`, `add_spatial_features()`, and
+  `replace_spatial_features()` let Shiny apps inspect, remove, keep, add, or
+  replace source `sf` geography without hand-editing geometry columns.
+  `updateDragmapr()` can now send `remove_features =` or
+  `delete_selected = TRUE` to the native widget; the browser removes the
+  geography from the live editor and emits `input$<id>_feature_delete`.
+  Pipeline Studio exposes this in the Refine tab with source-row inspection
+  and Undo/Redo so accidental deletions can be reversed.
 * `dragmapr_widget()` now accepts a direct `region_palette =` argument, matching
   `render_dragged_map()` and `updateDragmapr(region_palette = )` while keeping
   the existing `dragmapr_display_options(region_palette = )` route intact.

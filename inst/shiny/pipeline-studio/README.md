@@ -20,8 +20,10 @@ Explore (explodemap)  ->  Refine (dragmapr)  ->  Apply  ->  Export
    dragmapr editor. Dragging changes a *draft* only, so nothing downstream
    moves until you commit. The Refine controls are the subtle Spatial Studio
    ones: label visibility, origin outlines, movement connectors, drag trail,
-   background, and region selection - wired live with `updateDragmapr()` where
-   the widget supports live updates.
+   background, region selection, and reversible geography removal - wired live
+   with `updateDragmapr()` where the widget supports live updates. Select a
+   geography to inspect its source rows, remove it from the draft source, and
+   use Undo if the deletion was a mistake.
 3. **Apply** - push the draft back. It becomes the new canonical layout, and the
    Explore view now reflects your fix. This is the round trip: a dragmapr edit
    becomes the new face of explodemap.

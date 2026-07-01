@@ -223,7 +223,9 @@ renderDragmapr <- function(expr, env = parent.frame(), quoted = FALSE) {
 #' @param ... Live updates to apply. Display options use the R API, for example
 #'   `show_origin_outlines` or `map_background`. The composition field
 #'   `selected_feature` can also be updated; pass `NULL` or `""` to clear the
-#'   current selection.
+#'   current selection. Use `remove_features = c(...)` to remove one or more
+#'   feature ids from the live widget, or `delete_selected = TRUE` to remove
+#'   the current selection.
 #'
 #' @return Invisibly returns the sent message.
 #' @export
@@ -397,7 +399,11 @@ dragmapr_update_message <- function(dots) {
     connector_linewidth = "connectorLinewidth",
     region_palette = "regionPalette"
   )
-  composition_allowed <- c(selected_feature = "selectedFeature")
+  composition_allowed <- c(
+    selected_feature = "selectedFeature",
+    remove_features = "removeFeatures",
+    delete_selected = "deleteSelected"
+  )
   unknown <- setdiff(names(dots), c(names(display_allowed), names(composition_allowed)))
   if (length(unknown) > 0L) {
     stop("Unsupported live update option(s): ", paste(unknown, collapse = ", "), call. = FALSE)
@@ -407,8 +413,14 @@ dragmapr_update_message <- function(dots) {
   for (nm in names(dots)) {
     value <- dots[[nm]]
     if (nm %in% names(composition_allowed)) {
-      # An empty string clears the selection; the browser treats "" as none.
-      value <- selection_scalar(value)
+      if (nm == "selected_feature") {
+        # An empty string clears the selection; the browser treats "" as none.
+        value <- selection_scalar(value)
+      } else if (nm == "remove_features") {
+        value <- remove_features_vector(value)
+      } else if (nm == "delete_selected") {
+        value <- isTRUE(flag_scalar(value, "`delete_selected`"))
+      }
       message[[composition_allowed[[nm]]]] <- value
       next
     }
@@ -443,6 +455,15 @@ selection_scalar <- function(x) {
     stop("`selected_feature` must be NULL or a single string.", call. = FALSE)
   }
   x
+}
+
+remove_features_vector <- function(x) {
+  if (is.null(x)) {
+    return(character())
+  }
+  x <- as.character(x)
+  x <- x[!is.na(x) & nzchar(x)]
+  unique(x)
 }
 
 positive_scalar <- function(x, name) {

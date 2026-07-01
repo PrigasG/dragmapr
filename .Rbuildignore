@@ -3,6 +3,7 @@
 ^\.git/
 ^\.Rproj\.user$
 ^_pkgdown\.yml$
+^ROADMAP\.md$
 ^\.github$
 ^docs$
 ^doc$

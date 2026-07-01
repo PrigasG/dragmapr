@@ -218,6 +218,52 @@ HTMLWidgets.widget({
       if (eventType) snapshot(eventType);
     }
 
+    function rebuildGeometryIndexes() {
+      state.grouped = d3.group(state.geojson.features || [], f => String(f.properties.drag_region));
+      state.regions = Array.from(state.grouped.keys()).sort(naturalCompare);
+      state.bounds = coordBounds(state.geojson || {features: []});
+      fit();
+      const nextOffsets = new Map(state.regions.map(region => [
+        String(region),
+        state.regionOffsets.get(String(region)) || {dx_m: 0, dy_m: 0}
+      ]));
+      state.regionOffsets = nextOffsets;
+      state.centroids = new Map();
+      state.regions.forEach(region => {
+        const fc = {type: "FeatureCollection", features: state.grouped.get(String(region)) || []};
+        state.centroids.set(String(region), state.path.centroid(fc));
+      });
+    }
+
+    function removeFeatures(featureIds, eventType) {
+      const ids = Array.from(new Set((featureIds || []).map(String).filter(Boolean)));
+      if (ids.length === 0) return [];
+      const removeSet = new Set(ids);
+      const existing = new Set(state.regions.map(String));
+      const removed = ids.filter(id => existing.has(id));
+      if (removed.length === 0) return [];
+      state.geojson.features = (state.geojson.features || [])
+        .filter(f => !removeSet.has(String(f.properties.drag_region)));
+      state.labels = (state.labels || []).filter(label => !removeSet.has(String(label.region)));
+      removed.forEach(id => {
+        state.regionOffsets.delete(id);
+        if (state.selectedFeature === id) state.selectedFeature = "";
+      });
+      for (const [labelId, offset] of Array.from(state.labelOffsets.entries())) {
+        const label = (state.labels || []).find(d => String(d.label_id) === String(labelId));
+        if (!label) state.labelOffsets.delete(labelId);
+      }
+      rebuildGeometryIndexes();
+      renderRegions();
+      renderLabels();
+      syncSelection();
+      applyDisplay(state.display);
+      updateLayout();
+      const payload = snapshot(eventType || "featuredelete", {removed_features: removed});
+      sendInput("feature_delete", payload);
+      return removed;
+    }
+
     function renderRegions() {
       const groups = state.regionLayer.selectAll("g.dragmapr-region")
         .data(state.regions, d => String(d));
@@ -237,6 +283,8 @@ HTMLWidgets.widget({
       const merged = enter.merge(groups)
         .attr("transform", regionTransform)
         .style("fill", colorFor);
+
+      merged.classed("is-selected", region => String(region) === (state.selectedFeature || ""));
 
       merged.selectAll("path")
         .attr("d", state.path)
@@ -459,6 +507,12 @@ HTMLWidgets.widget({
           if (setSelection(message.selectedFeature)) {
             sendInput("state", snapshot("selection", {selected_feature: state.selectedFeature || ""}));
           }
+        }
+        if (message && Array.isArray(message.removeFeatures)) {
+          removeFeatures(message.removeFeatures, "featuredelete");
+        }
+        if (message && message.deleteSelected === true && state.selectedFeature) {
+          removeFeatures([state.selectedFeature], "featuredelete");
         }
       }
     };
