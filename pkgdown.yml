@@ -1,0 +1,15 @@
+pandoc: 3.9.0.2
+pkgdown: 2.2.0
+pkgdown_sha: ~
+articles:
+  dragmap-demo: dragmap-demo.html
+  example-gallery: example-gallery.html
+  getting-started: getting-started.html
+  hhs-placeholder-shapes-demo: hhs-placeholder-shapes-demo.html
+  labels-and-static-output: labels-and-static-output.html
+  shiny-workflows: shiny-workflows.html
+  state-first-workflow: state-first-workflow.html
+last_built: 2026-07-01T18:47Z
+urls:
+  reference: https://prigasg.github.io/dragmapr/reference
+  article: https://prigasg.github.io/dragmapr/articles
