@@ -170,7 +170,32 @@ assign_cluster_regions <- function(x, groups = 6L, seed = 1L) {
 }
 
 geometry_fingerprint <- function(x) {
-  explodemap_fingerprint(x, id_col = "unit_id", group_col = "region")
+  if (!inherits(x, "sf")) return(NULL)
+  attrs <- sf::st_drop_geometry(x)
+  id <- if ("unit_id" %in% names(attrs)) {
+    as.character(attrs$unit_id)
+  } else {
+    sprintf("feature-%06d", seq_len(nrow(x)))
+  }
+  group <- if ("region" %in% names(attrs)) {
+    as.character(attrs$region)
+  } else {
+    rep("", nrow(x))
+  }
+  geom <- tryCatch(sf::st_as_binary(sf::st_geometry(x)), error = function(e) NULL)
+  bbox <- tryCatch(as.numeric(sf::st_bbox(x)), error = function(e) numeric())
+  payload <- list(
+    n = nrow(x),
+    crs = sf::st_crs(x)$input %||% sf::st_crs(x)$wkt %||% "",
+    id = id,
+    group = group,
+    bbox = bbox,
+    geometry = geom
+  )
+  tmp <- tempfile(fileext = ".rds")
+  on.exit(unlink(tmp), add = TRUE)
+  saveRDS(payload, tmp, version = 2)
+  unname(tools::md5sum(tmp))
 }
 
 project_upload <- function(x) {
