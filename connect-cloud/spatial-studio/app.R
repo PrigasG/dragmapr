@@ -26,4 +26,4 @@ library(dragmapr)
 source(
   system.file("examples", "shiny_spatial_studio.R", package = "dragmapr", mustWork = TRUE),
   local = globalenv()
-)
+)$value
