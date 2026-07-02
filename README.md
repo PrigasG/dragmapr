@@ -2,6 +2,7 @@
 
 [![R-CMD-check](https://github.com/PrigasG/dragmapr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/PrigasG/dragmapr/actions/workflows/R-CMD-check.yaml)
 [![Spatial Studio](https://img.shields.io/badge/Hugging%20Face-Spatial%20Studio-ffcc4d)](https://Prigas89-dragmapr-spatial-studio.hf.space)
+[![Connect Cloud](https://img.shields.io/badge/Posit%20Connect-Spatial%20Studio-447099)](https://prigas89-dragmapr.share.connect.posit.cloud)
 [![Pipeline Studio](https://img.shields.io/badge/Hugging%20Face-Pipeline%20Studio-2b7fff)](https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio)
 
 `dragmapr` lets you move map regions and labels by hand, then save the edited
@@ -27,6 +28,7 @@ install.packages("dragmapr")
 ## Try It
 
 - Live Spatial Studio: <https://Prigas89-dragmapr-spatial-studio.hf.space>
+- Connect Cloud Spatial Studio: <https://prigas89-dragmapr.share.connect.posit.cloud>
 - Shared Pipeline Studio: <https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio>
 - Package site: <https://prigasg.github.io/dragmapr/>
 - Cross-package roadmap: [ROADMAP.md](ROADMAP.md)
@@ -42,8 +44,9 @@ apply the edits, and export the final map.
 
 ## Deploy Spatial Studio
 
-The HF Space uses the repository `Dockerfile`. Posit Connect Cloud uses the
-Git-backed app wrapper in `connect-cloud/spatial-studio/`.
+The HF Space uses the repository `Dockerfile`. Posit Connect Cloud is live at
+<https://prigas89-dragmapr.share.connect.posit.cloud> and uses the Git-backed
+app wrapper in `connect-cloud/spatial-studio/`.
 
 For Connect Cloud, publish this GitHub repository from the `master` branch and
 choose `connect-cloud/spatial-studio/app.R` as the primary file. Keep

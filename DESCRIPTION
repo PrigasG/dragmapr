@@ -27,7 +27,8 @@ Description: Creates interactive draggable plots from grouped projected
 License: MIT + file LICENSE
 URL: https://prigasg.github.io/dragmapr/,
     https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio,
-    https://Prigas89-dragmapr-spatial-studio.hf.space
+    https://Prigas89-dragmapr-spatial-studio.hf.space,
+    https://prigas89-dragmapr.share.connect.posit.cloud
 BugReports: https://github.com/PrigasG/dragmapr/issues
 Imports:
     ggplot2,

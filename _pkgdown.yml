@@ -10,6 +10,8 @@ home:
     href: https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio
   - text: "Try the Spatial Studio"
     href: https://Prigas89-dragmapr-spatial-studio.hf.space
+  - text: "Try Spatial Studio on Connect Cloud"
+    href: https://prigas89-dragmapr.share.connect.posit.cloud
   - text: Report a bug
     href: https://github.com/PrigasG/dragmapr/issues
   sidebar:
@@ -18,7 +20,7 @@ home:
 navbar:
   structure:
     left: [intro, reference, articles, examples, news]
-    right: [pipeline, demo, github]
+    right: [pipeline, demo, connect, github]
   components:
     pipeline:
       text: "Pipeline Studio"
@@ -26,6 +28,9 @@ navbar:
     demo:
       text: "Spatial Studio"
       href: https://Prigas89-dragmapr-spatial-studio.hf.space
+    connect:
+      text: "Connect Cloud"
+      href: https://prigas89-dragmapr.share.connect.posit.cloud
     examples:
       text: Examples
       menu:
@@ -45,6 +50,8 @@ navbar:
         href: articles/shiny-workflows.html
       - text: "Spatial studio (live app)"
         href: https://Prigas89-dragmapr-spatial-studio.hf.space
+      - text: "Spatial Studio (Connect Cloud)"
+        href: https://prigas89-dragmapr.share.connect.posit.cloud
       - text: "Pipeline Studio (explodemap bridge)"
         href: https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio
     github:
