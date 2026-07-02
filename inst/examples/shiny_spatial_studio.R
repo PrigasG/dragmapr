@@ -1281,6 +1281,7 @@ var studioBusy = {
   hideTimer: null,
   safetyTimer: null,
   shownAt: null,
+  active: false,
   minVisibleMs: 550,
   showDelayMs: 120
 };
@@ -1304,6 +1305,7 @@ function setBusyText(mode) {
 }
 
 function applyGlobalBusy(active, mode) {
+  studioBusy.active = !!active;
   document.body.classList.toggle('studio-busy', !!active);
   document.body.classList.toggle('studio-busy-loading',
     !!active && mode === 'loading');
@@ -1325,12 +1327,17 @@ function applyGlobalBusy(active, mode) {
 
 function requestStudioBusy(mode, generation) {
   mode = mode || 'processing';
+  generation = generation || null;
+  var sameRequest = studioBusy.active &&
+    studioBusy.mode === mode &&
+    String(studioBusy.generation || '') === String(generation || '');
   window.clearTimeout(studioBusy.hideTimer);
   window.clearTimeout(studioBusy.showTimer);
   window.clearTimeout(studioBusy.safetyTimer);
   studioBusy.mode = mode;
-  studioBusy.generation = generation || null;
-  studioBusy.lockCount = Math.max(1, studioBusy.lockCount + 1);
+  studioBusy.generation = generation;
+  studioBusy.lockCount = sameRequest ? Math.max(1, studioBusy.lockCount) :
+    Math.max(1, studioBusy.lockCount + 1);
   closeStudioDropdowns();
   if (document.activeElement && document.activeElement.blur) {
     document.activeElement.blur();
@@ -1371,6 +1378,7 @@ function releaseStudioBusy(generation, force) {
     studioBusy.mode = null;
     studioBusy.generation = null;
     studioBusy.shownAt = null;
+    studioBusy.active = false;
   }, wait);
 }
 
@@ -2038,6 +2046,7 @@ server <- function(input, output, session) {
     status_level    = "info",    # "info" | "ok" | "error"
     helper_token    = 0L,
     helper_loading_generation = NULL,
+    helper_loading_started = NULL,
     helper_signature = NULL,
     helper_building = FALSE,     # TRUE while drag_map_prototype() is running
     helper_loading  = FALSE,     # TRUE until the new iframe reports ready
@@ -2090,6 +2099,7 @@ server <- function(input, output, session) {
     state$helper_loading <- isTRUE(active)
     if (isTRUE(active)) {
       state$helper_loading_generation <- as.integer(generation)
+      state$helper_loading_started <- Sys.time()
     }
     session$sendCustomMessage("dragmapr-helper-loading", list(
       active = isTRUE(active),
@@ -2097,6 +2107,7 @@ server <- function(input, output, session) {
     ))
     if (!isTRUE(active)) {
       state$helper_loading_generation <- NULL
+      state$helper_loading_started <- NULL
     }
   }
 
@@ -2144,6 +2155,7 @@ server <- function(input, output, session) {
     state$boundary_drag_parent <- NULL
     state$helper_signature <- NULL
     state$column_offset_store <- list()
+    state$helper_loading_started <- NULL
   }
 
   empty_region_offsets <- function(groups) {
@@ -2746,6 +2758,26 @@ server <- function(input, output, session) {
     }
     state$history_ignore_until <- Sys.time() + 2
   }, ignoreInit = TRUE)
+
+  observe({
+    invalidateLater(5000, session)
+    if (!isTRUE(state$helper_loading)) return()
+    started <- state$helper_loading_started
+    if (is.null(started)) return()
+    elapsed <- as.numeric(difftime(Sys.time(), started, units = "secs"))
+    if (!is.finite(elapsed) || elapsed < 45) return()
+    generation <- state$helper_loading_generation
+    set_helper_loading(FALSE, generation = generation)
+    set_loading(FALSE)
+    set_status(
+      paste(
+        "The interactive map is taking longer than expected to report ready.",
+        "Controls are available again; if the map is still blank, try Reset view",
+        "or reduce the uploaded geometry detail."
+      ),
+      "info"
+    )
+  })
 
   # ---- Reactives ----
 
