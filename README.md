@@ -40,6 +40,17 @@ Pipeline Studio is the bridge app for `explodemap` and `dragmapr`: compute a
 layout, refine it by dragging, remove unneeded geography with Undo available,
 apply the edits, and export the final map.
 
+## Deploy Spatial Studio
+
+The HF Space uses the repository `Dockerfile`. Posit Connect Cloud uses the
+Git-backed app wrapper in `connect-cloud/spatial-studio/`.
+
+For Connect Cloud, publish this GitHub repository from the `master` branch and
+choose `connect-cloud/spatial-studio/app.R` as the primary file. Keep
+`connect-cloud/spatial-studio/manifest.json` committed; regenerate it with
+`rsconnect::writeManifest(appDir = "connect-cloud/spatial-studio",
+appPrimaryDoc = "app.R", appMode = "shiny")` after dependency changes.
+
 ## Quick Start
 
 ```r

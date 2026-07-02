@@ -11,6 +11,7 @@
 ^deploy\.R$
 ^rsconnect$
 ^Dockerfile$
+^connect-cloud$
 ^HuggingFace_Deployment_Guide\.docx$
 ^~\$
 ^~\$.*$
