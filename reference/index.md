@@ -2,11 +2,9 @@
 
 ## State-first composition
 
-The recommended workflow. Treat the layout as an editable composition
-object - a dragmapr_state - and carry it through compute, compose,
-render. Includes the friendly editor front door and the full state
-lifecycle (validate, merge, inherit/collapse across levels, apply,
-snapshot/restore, and JSON read/write).
+Keep manual edits in a dragmapr_state, then use the same state for
+browser editing, Shiny apps, static rendering, snapshots, and JSON
+round-trips.
 
 - [`dragmapr_edit()`](https://prigasg.github.io/dragmapr/reference/dragmapr_edit.md)
   : Open the interactive dragmapr editor
@@ -36,10 +34,8 @@ snapshot/restore, and JSON read/write).
 
 ## Native widget (htmlwidget and Shiny)
 
-The browser-native draggable editor and its Shiny bridge: build the
-widget, bind and render it in Shiny, push live display and selection
-updates, and rebuild a dragmapr_state from the edits the browser reports
-back.
+Render a draggable map directly in Shiny, receive structured edit
+events, and update display options without rebuilding the geometry.
 
 - [`dragmapr_widget()`](https://prigasg.github.io/dragmapr/reference/dragmapr_widget.md)
   : Create a native dragmapr htmlwidget
@@ -57,15 +53,15 @@ back.
 
 ## Interactive prototype
 
-Create the browser-based D3 helper. This is the primary deliverable:
-open it, drag, then copy or download the offset tables.
+Write a standalone HTML editor for quick layout work outside a Shiny
+app.
 
 - [`drag_map_prototype()`](https://prigasg.github.io/dragmapr/reference/drag_map_prototype.md)
   : Write a draggable map in your browser
 
 ## Region offsets
 
-Read and apply the region movement tables exported by the helper.
+Read and apply exported region movement tables.
 
 - [`read_offsets()`](https://prigasg.github.io/dragmapr/reference/read_offsets.md)
   : Read region offsets from CSV
@@ -92,8 +88,8 @@ configure connectors, and restore label positions from exported state.
 
 ## Static rendering
 
-Optionally reconstruct the dragged layout as a ggplot2 image from the
-source geometry plus exported region and label offset tables.
+Rebuild edited layouts as ggplot2 images, PNGs, PDFs, or project
+bundles.
 
 - [`render_dragged_map()`](https://prigasg.github.io/dragmapr/reference/render_dragged_map.md)
   : Save the dragged layout as a static image
@@ -156,9 +152,8 @@ and explain CRS meaning for uploaded spatial files.
 ## Spatial I/O helpers
 
 Read spatial files from Shiny uploads or URLs, project and validate
-geometry, and build the JavaScript bridge that relays drag state from
-the helper iframe back to Shiny inputs. These helpers are extracted from
-the spatial studio example so apps can reuse them independently.
+geometry, and reuse the bridge helpers that power the spatial studio
+apps.
 
 - [`read_dragmapr_sf_upload()`](https://prigasg.github.io/dragmapr/reference/read_dragmapr_sf_upload.md)
   : Read an sf object from a Shiny file upload
@@ -172,8 +167,8 @@ the spatial studio example so apps can reuse them independently.
 ## Editable spatial features
 
 Inspect, remove, keep, add, or replace source geography before or during
-a dragmapr editing workflow. These helpers support Shiny review tables
-and reversible geography edits in Pipeline Studio.
+a dragmapr workflow. These helpers support Shiny review tables and
+reversible geography edits.
 
 - [`spatial_feature_table()`](https://prigasg.github.io/dragmapr/reference/spatial_feature_table.md)
   [`view_spatial_features()`](https://prigasg.github.io/dragmapr/reference/spatial_feature_table.md)

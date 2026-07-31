@@ -97,14 +97,35 @@ instead of typing numeric offsets.</p>
 <div class="section level2">
 <h2 id="embed-a-draggable-plot">Embed A Draggable Plot<a class="anchor" aria-label="anchor" href="#embed-a-draggable-plot"></a>
 </h2>
-<p>The simplest Shiny pattern is to write a helper HTML file into a
-Shiny resource directory and show it in an iframe.</p>
+<p>The simplest Shiny pattern is the native widget. It renders the
+draggable map in place and sends browser edits back to Shiny as
+structured inputs.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/interactive.html" class="external-link">interactive</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/runApp.html" class="external-link">runApp</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"examples"</span>, <span class="st">"shiny_draggable_plot.R"</span>, package <span class="op">=</span> <span class="st">"dragmapr"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p>This is useful when the app only needs to let users explore or
-compose a layout.</p>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://shiny.posit.co/" class="external-link">shiny</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://prigasg.github.io/dragmapr/">dragmapr</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ui</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/fluidPage.html" class="external-link">fluidPage</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="../reference/dragmaprOutput.html">dragmaprOutput</a></span><span class="op">(</span><span class="st">"map"</span>, height <span class="op">=</span> <span class="st">"650px"</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/textOutput.html" class="external-link">verbatimTextOutput</a></span><span class="op">(</span><span class="st">"state"</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">server</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">input</span>, <span class="va">output</span>, <span class="va">session</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">output</span><span class="op">$</span><span class="va">map</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/dragmaprOutput.html">renderDragmapr</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>    <span class="fu"><a href="../reference/dragmapr_widget.html">dragmapr_widget</a></span><span class="op">(</span><span class="va">regions</span>, region_col <span class="op">=</span> <span class="st">"region"</span><span class="op">)</span></span>
+<span>  <span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">output</span><span class="op">$</span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/renderPrint.html" class="external-link">renderPrint</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/req.html" class="external-link">req</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">map_state</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="../reference/dragmapr_widget_state.html">dragmapr_widget_state</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">map_state</span><span class="op">)</span></span>
+<span>  <span class="op">}</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/shinyApp.html" class="external-link">shinyApp</a></span><span class="op">(</span><span class="va">ui</span>, <span class="va">server</span><span class="op">)</span></span></code></pre></div>
+<p>That is enough for an app where the map itself is the editing
+surface. The server receives <code>input$map_state</code> after edits,
+plus more specific event inputs such as
+<code>input$map_drag_start</code>, <code>input$map_drag_end</code>, and
+<code>input$map_region_click</code>.</p>
 </div>
 <div class="section level2">
 <h2 id="custom-labels">Custom Labels<a class="anchor" aria-label="anchor" href="#custom-labels"></a>
@@ -115,9 +136,29 @@ workflow-specific metadata. Labels can be ordinary text labels,
 text-only draggable labels, or annotation boxes created with
 <code><a href="../reference/as_drag_annotations.html">as_drag_annotations()</a></code>.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/interactive.html" class="external-link">interactive</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/runApp.html" class="external-link">runApp</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"examples"</span>, <span class="st">"shiny_custom_labels.R"</span>, package <span class="op">=</span> <span class="st">"dragmapr"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="va">labels</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/as_drag_annotations.html">as_drag_annotations</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>    label_id <span class="op">=</span> <span class="st">"east-note"</span>,</span>
+<span>    region <span class="op">=</span> <span class="st">"East"</span>,</span>
+<span>    label <span class="op">=</span> <span class="st">"A review note can move separately from the region."</span>,</span>
+<span>    x <span class="op">=</span> <span class="fl">210000</span>,</span>
+<span>    y <span class="op">=</span> <span class="fl">120000</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  width_px <span class="op">=</span> <span class="fl">190</span>,</span>
+<span>  height_px <span class="op">=</span> <span class="fl">80</span>,</span>
+<span>  connector <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  connector_type <span class="op">=</span> <span class="st">"elbow"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">output</span><span class="op">$</span><span class="va">map</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/dragmaprOutput.html">renderDragmapr</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/dragmapr_widget.html">dragmapr_widget</a></span><span class="op">(</span></span>
+<span>    <span class="va">regions</span>,</span>
+<span>    region_col <span class="op">=</span> <span class="st">"region"</span>,</span>
+<span>    labels <span class="op">=</span> <span class="va">labels</span>,</span>
+<span>    connector_endpoint <span class="op">=</span> <span class="st">"arrow"</span>,</span>
+<span>    connector_smart <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
 <p>The user-supplied label table is created with
 <code><a href="../reference/as_drag_labels.html">as_drag_labels()</a></code> and can carry extra columns for
 app-specific behavior. Connector columns such as <code>connector</code>,
@@ -132,9 +173,37 @@ choose straight, elbow, curved, or squiggle leader lines.</p>
 The helper posts offset state to its Shiny parent window. The Shiny app
 can then render a preview and expose a PNG download.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/interactive.html" class="external-link">interactive</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/runApp.html" class="external-link">runApp</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"examples"</span>, <span class="st">"shiny_draggable_export.R"</span>, package <span class="op">=</span> <span class="st">"dragmapr"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="va">current_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/reactiveVal.html" class="external-link">reactiveVal</a></span><span class="op">(</span><span class="fu"><a href="../reference/dragmapr_state.html">dragmapr_state</a></span><span class="op">(</span>crs <span class="op">=</span> <span class="fl">3857</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/observeEvent.html" class="external-link">observeEvent</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">map_state</span>, <span class="op">{</span></span>
+<span>  <span class="fu">current_state</span><span class="op">(</span><span class="fu"><a href="../reference/dragmapr_widget_state.html">dragmapr_widget_state</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">map_state</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">output</span><span class="op">$</span><span class="va">preview</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/renderPlot.html" class="external-link">renderPlot</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/render_dragged_map.html">render_dragged_map</a></span><span class="op">(</span></span>
+<span>    <span class="va">regions</span>,</span>
+<span>    region_col <span class="op">=</span> <span class="st">"region"</span>,</span>
+<span>    state <span class="op">=</span> <span class="fu">current_state</span><span class="op">(</span><span class="op">)</span>,</span>
+<span>    title <span class="op">=</span> <span class="st">"Current edited layout"</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">output</span><span class="op">$</span><span class="va">png</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/downloadHandler.html" class="external-link">downloadHandler</a></span><span class="op">(</span></span>
+<span>  filename <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="st">"dragmapr-layout.png"</span>,</span>
+<span>  content <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">file</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggsave.html" class="external-link">ggsave</a></span><span class="op">(</span></span>
+<span>      <span class="va">file</span>,</span>
+<span>      plot <span class="op">=</span> <span class="fu"><a href="../reference/render_dragged_map.html">render_dragged_map</a></span><span class="op">(</span></span>
+<span>        <span class="va">regions</span>,</span>
+<span>        region_col <span class="op">=</span> <span class="st">"region"</span>,</span>
+<span>        state <span class="op">=</span> <span class="fu">current_state</span><span class="op">(</span><span class="op">)</span></span>
+<span>      <span class="op">)</span>,</span>
+<span>      width <span class="op">=</span> <span class="fl">10</span>,</span>
+<span>      height <span class="op">=</span> <span class="fl">8</span>,</span>
+<span>      dpi <span class="op">=</span> <span class="fl">300</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span><span class="op">)</span></span></code></pre></div>
 <p>This pattern is useful for report builders, document workflows, or
 review apps where the interactive layout is the editing surface and the
 exported PNG is the deliverable.</p>
@@ -167,9 +236,17 @@ helper.</p>
 <p>If offsets have already been saved, an app can skip the draggable
 helper and only provide static preview/export.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/interactive.html" class="external-link">interactive</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/runApp.html" class="external-link">runApp</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"examples"</span>, <span class="st">"shiny_static_export.R"</span>, package <span class="op">=</span> <span class="st">"dragmapr"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="va">output</span><span class="op">$</span><span class="va">static_map</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/renderPlot.html" class="external-link">renderPlot</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="va">region_offsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/read_offsets.html">read_offsets</a></span><span class="op">(</span><span class="st">"drag_region_offsets.csv"</span><span class="op">)</span></span>
+<span>  <span class="va">label_offsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/read_label_state.html">read_label_state</a></span><span class="op">(</span><span class="st">"drag_label_offsets.csv"</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="fu"><a href="../reference/render_dragged_map.html">render_dragged_map</a></span><span class="op">(</span></span>
+<span>    <span class="va">regions</span>,</span>
+<span>    region_col <span class="op">=</span> <span class="st">"region"</span>,</span>
+<span>    region_offsets <span class="op">=</span> <span class="va">region_offsets</span>,</span>
+<span>    label_offsets <span class="op">=</span> <span class="va">label_offsets</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="spatial-studio">Spatial Studio<a class="anchor" aria-label="anchor" href="#spatial-studio"></a>
@@ -285,6 +362,43 @@ drag offsets as data frames</li>
 save</li>
 </ul>
 <div class="section level3">
+<h3 id="removing-geography">Removing geography<a class="anchor" aria-label="anchor" href="#removing-geography"></a>
+</h3>
+<p>Spatial Studio and Pipeline Studio both treat removal as an editable
+state change. The app can show a feature table, remove the selected
+geography from the live widget, and then apply the same removal to the
+server-side <code>sf</code> object.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">output</span><span class="op">$</span><span class="va">feature_rows</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/renderTable.html" class="external-link">renderTable</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/req.html" class="external-link">req</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">map_state</span><span class="op">)</span></span>
+<span>  <span class="va">selected</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/dragmapr_widget_state.html">dragmapr_widget_state</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">map_state</span><span class="op">)</span><span class="op">$</span><span class="va">selected_feature</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/req.html" class="external-link">req</a></span><span class="op">(</span><span class="va">selected</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">rows</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/spatial_feature_table.html">spatial_feature_table</a></span><span class="op">(</span><span class="fu">source_sf</span><span class="op">(</span><span class="op">)</span>, key_col <span class="op">=</span> <span class="st">"region"</span><span class="op">)</span></span>
+<span>  <span class="va">rows</span><span class="op">[</span><span class="va">rows</span><span class="op">$</span><span class="va">.feature_id</span> <span class="op">==</span> <span class="va">selected</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/observeEvent.html" class="external-link">observeEvent</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">remove_selected</span>, <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/req.html" class="external-link">req</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">selected_region</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="fu"><a href="../reference/updateDragmapr.html">updateDragmapr</a></span><span class="op">(</span></span>
+<span>    <span class="va">session</span>,</span>
+<span>    <span class="st">"map"</span>,</span>
+<span>    remove_features <span class="op">=</span> <span class="va">input</span><span class="op">$</span><span class="va">selected_region</span></span>
+<span>  <span class="op">)</span></span>
+<span></span>
+<span>  <span class="fu">source_sf</span><span class="op">(</span><span class="fu"><a href="../reference/remove_spatial_features.html">remove_spatial_features</a></span><span class="op">(</span></span>
+<span>    <span class="fu">source_sf</span><span class="op">(</span><span class="op">)</span>,</span>
+<span>    ids <span class="op">=</span> <span class="va">input</span><span class="op">$</span><span class="va">selected_region</span>,</span>
+<span>    key_col <span class="op">=</span> <span class="st">"region"</span></span>
+<span>  <span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
+<p>In an app with Undo, store a snapshot before calling
+<code><a href="../reference/remove_spatial_features.html">remove_spatial_features()</a></code>. Restoring the snapshot brings
+back the source geometry, offsets, selection, and visible widget state
+together.</p>
+</div>
+<div class="section level3">
 <h3 id="loading-veil">Loading veil<a class="anchor" aria-label="anchor" href="#loading-veil"></a>
 </h3>
 <p>The studio shows a loading veil while data is being read and the D3
@@ -323,83 +437,132 @@ your UI. The function accepts <code>region_input</code>,
 <code>fast_poll_ms</code>, <code>allowed_origin</code>, and
 <code>iframe_selector</code> arguments to customise the input names,
 timing, origin check, and helper iframe selection.</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">library</span>(shiny)</span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">library</span>(dragmapr)</span>
-<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a></span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>ui <span class="ot">&lt;-</span> <span class="fu">fluidPage</span>(</span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  tags<span class="sc">$</span><span class="fu">head</span>(tags<span class="sc">$</span><span class="fu">script</span>(<span class="fu">HTML</span>(<span class="fu">dragmapr_iframe_bridge</span>()))),</span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  <span class="fu">uiOutput</span>(<span class="st">"helper"</span>)</span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>)</span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>server <span class="ot">&lt;-</span> <span class="cf">function</span>(input, output, session) {</span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  helper_dir <span class="ot">&lt;-</span> <span class="fu">tempfile</span>(<span class="st">"myapp_"</span>)</span>
-<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>  <span class="fu">dir.create</span>(helper_dir)</span>
-<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>  shiny<span class="sc">::</span><span class="fu">addResourcePath</span>(<span class="st">"myapp_static"</span>, helper_dir)</span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a></span>
-<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a>  x <span class="ot">&lt;-</span> <span class="fu">prepare_dragmapr_sf</span>(my_sf)</span>
-<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>  <span class="fu">drag_map_prototype</span>(x, <span class="at">region_col =</span> <span class="st">"region"</span>,</span>
-<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a>                     <span class="at">file =</span> <span class="fu">file.path</span>(helper_dir, <span class="st">"helper.html"</span>))</span>
-<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a></span>
-<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a>  output<span class="sc">$</span>helper <span class="ot">&lt;-</span> <span class="fu">renderUI</span>(</span>
-<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a>    tags<span class="sc">$</span><span class="fu">iframe</span>(<span class="at">src =</span> <span class="st">"myapp_static/helper.html"</span>,</span>
-<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a>                <span class="at">style =</span> <span class="st">"width:100%;height:700px;border:none;"</span>)</span>
-<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a></span>
-<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a><span class="do">## Switching Grouping Columns in Spatial Studio</span></span>
-<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a></span>
-<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a>Spatial Studio stores drag positions per region column and propagates them</span>
-<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a>when you change the <span class="sc">**</span>Group <span class="sc">/</span> region column<span class="sc">**</span> dropdown. This means you can</span>
-<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a>work at multiple levels of geographic hierarchy without losing your layout.</span>
-<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a></span>
-<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a><span class="do">### How inheritance works</span></span>
-<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a></span>
-<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a>Each column maintains its <span class="sc">**</span>own independent layout cache<span class="sc">**</span>. Switching columns</span>
-<span id="cb7-31"><a href="#cb7-31" tabindex="-1"></a>never displaces regions that you have not personally dragged <span class="cf">in</span> that column<span class="sc">:</span></span>
-<span id="cb7-32"><a href="#cb7-32" tabindex="-1"></a></span>
-<span id="cb7-33"><a href="#cb7-33" tabindex="-1"></a><span class="sc">-</span> <span class="er">**</span>Coarser → finer<span class="sc">**</span> (e.g. HHS region → state name)<span class="sc">:</span> the finer column resumes</span>
-<span id="cb7-34"><a href="#cb7-34" tabindex="-1"></a>  its own last saved layout. If you have not visited it before, all fine units</span>
-<span id="cb7-35"><a href="#cb7-35" tabindex="-1"></a>  start at their natural geographic positions — they are <span class="sc">**</span>not<span class="sc">**</span> displaced by</span>
-<span id="cb7-36"><a href="#cb7-36" tabindex="-1"></a>  the parent column<span class="st">'s drag offsets.</span></span>
-<span id="cb7-37"><a href="#cb7-37" tabindex="-1"></a></span>
-<span id="cb7-38"><a href="#cb7-38" tabindex="-1"></a><span class="st">- **Finer → coarser** (e.g. state name → HHS region): each parent group is</span></span>
-<span id="cb7-39"><a href="#cb7-39" tabindex="-1"></a><span class="st">  placed at the **mean** of its member units'</span> current positions, <span class="fu">or</span> (<span class="cf">if</span> you</span>
-<span id="cb7-40"><a href="#cb7-40" tabindex="-1"></a>  choose <span class="st">"Restore parent's last position"</span>) at the position the parent had when</span>
-<span id="cb7-41"><a href="#cb7-41" tabindex="-1"></a>  you last worked at that column.</span>
-<span id="cb7-42"><a href="#cb7-42" tabindex="-1"></a></span>
-<span id="cb7-43"><a href="#cb7-43" tabindex="-1"></a><span class="do">### Example: HHS regions and state names</span></span>
-<span id="cb7-44"><a href="#cb7-44" tabindex="-1"></a></span>
-<span id="cb7-45"><a href="#cb7-45" tabindex="-1"></a>The bundled HHS demo has both an <span class="st">`</span><span class="at">hhs_region</span><span class="st">`</span> <span class="fu">column</span> (ten groups) and a <span class="st">`</span><span class="at">NAME</span><span class="st">`</span></span>
-<span id="cb7-46"><a href="#cb7-46" tabindex="-1"></a><span class="fu">column</span> (individual states). A typical workflow<span class="sc">:</span></span>
-<span id="cb7-47"><a href="#cb7-47" tabindex="-1"></a></span>
-<span id="cb7-48"><a href="#cb7-48" tabindex="-1"></a><span class="fl">1.</span> Set <span class="sc">**</span>Group column<span class="sc">**</span> to <span class="st">`</span><span class="at">hhs_region</span><span class="st">`</span>. Drag the ten regions into an exploded</span>
-<span id="cb7-49"><a href="#cb7-49" tabindex="-1"></a>   layout.</span>
-<span id="cb7-50"><a href="#cb7-50" tabindex="-1"></a><span class="fl">2.</span> Switch to <span class="st">`</span><span class="at">NAME</span><span class="st">`</span>. The states appear at their <span class="sc">**</span>natural positions<span class="sc">**</span> (first</span>
-<span id="cb7-51"><a href="#cb7-51" tabindex="-1"></a>   visit) — ready <span class="cf">for</span> individual fine<span class="sc">-</span>tuning without any carry<span class="sc">-</span>over from the</span>
-<span id="cb7-52"><a href="#cb7-52" tabindex="-1"></a>   HHS drag.</span>
-<span id="cb7-53"><a href="#cb7-53" tabindex="-1"></a><span class="fl">3.</span> Fine<span class="sc">-</span>tune individual states as needed.</span>
-<span id="cb7-54"><a href="#cb7-54" tabindex="-1"></a><span class="fl">4.</span> Switch back to <span class="st">`</span><span class="at">hhs_region</span><span class="st">`</span>. Each region lands at the mean of its states<span class="st">'</span></span>
-<span id="cb7-55"><a href="#cb7-55" tabindex="-1"></a><span class="st">   current positions, reflecting any individual fine-tuning.</span></span>
-<span id="cb7-56"><a href="#cb7-56" tabindex="-1"></a></span>
-<span id="cb7-57"><a href="#cb7-57" tabindex="-1"></a><span class="st">### What resets and what is preserved</span></span>
-<span id="cb7-58"><a href="#cb7-58" tabindex="-1"></a></span>
-<span id="cb7-59"><a href="#cb7-59" tabindex="-1"></a><span class="st">| On column switch | Behaviour |</span></span>
-<span id="cb7-60"><a href="#cb7-60" tabindex="-1"></a><span class="st">|---|---|</span></span>
-<span id="cb7-61"><a href="#cb7-61" tabindex="-1"></a><span class="st">| Region offsets (coarser→finer) | Restored to that column'</span>s last saved positions, or zero <span class="cf">if</span> never visited <span class="sc">|</span></span>
-<span id="cb7-62"><a href="#cb7-62" tabindex="-1"></a><span class="er">|</span> Region <span class="fu">offsets</span> (finer→coarser) <span class="sc">|</span> Average of children<span class="st">'s positions, or restored to parent'</span>s last position <span class="sc">|</span></span>
-<span id="cb7-63"><a href="#cb7-63" tabindex="-1"></a><span class="er">|</span> Label offsets <span class="sc">|</span> Reset — label IDs are derived from the new column<span class="st">'s region names |</span></span>
-<span id="cb7-64"><a href="#cb7-64" tabindex="-1"></a><span class="st">| Undo / redo stack | Reset — new column starts with a clean history |</span></span>
-<span id="cb7-65"><a href="#cb7-65" tabindex="-1"></a><span class="st">| Region palette | Preserved |</span></span>
-<span id="cb7-66"><a href="#cb7-66" tabindex="-1"></a><span class="st">| Legend and label filter selections | Preserved |</span></span>
-<span id="cb7-67"><a href="#cb7-67" tabindex="-1"></a></span>
-<span id="cb7-68"><a href="#cb7-68" tabindex="-1"></a><span class="st">### Round-trip precision</span></span>
-<span id="cb7-69"><a href="#cb7-69" tabindex="-1"></a></span>
-<span id="cb7-70"><a href="#cb7-70" tabindex="-1"></a><span class="st">The only step that involves averaging is **finer → coarser**. If all child</span></span>
-<span id="cb7-71"><a href="#cb7-71" tabindex="-1"></a><span class="st">regions had identical offsets, the round-trip is lossless. Mixed individual child</span></span>
-<span id="cb7-72"><a href="#cb7-72" tabindex="-1"></a><span class="st">moves are summarised into an average for the parent — or you can choose</span></span>
-<span id="cb7-73"><a href="#cb7-73" tabindex="-1"></a><span class="st">**"Restore parent'</span>s last position<span class="st">"** to skip averaging and return the parent to</span></span>
-<span id="cb7-74"><a href="#cb7-74" tabindex="-1"></a><span class="st">exactly where it was.</span></span>
-<span id="cb7-75"><a href="#cb7-75" tabindex="-1"></a></span>
-<span id="cb7-76"><a href="#cb7-76" tabindex="-1"></a><span class="st">Changing only the **Label column** while keeping the region column the same</span></span>
-<span id="cb7-77"><a href="#cb7-77" tabindex="-1"></a><span class="st">leaves region offsets completely untouched. Only the label IDs change.</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://shiny.posit.co/" class="external-link">shiny</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://prigasg.github.io/dragmapr/">dragmapr</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ui</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/fluidPage.html" class="external-link">fluidPage</a></span><span class="op">(</span></span>
+<span>  <span class="va">tags</span><span class="op">$</span><span class="fu">head</span><span class="op">(</span><span class="va">tags</span><span class="op">$</span><span class="fu">script</span><span class="op">(</span><span class="fu"><a href="https://rstudio.github.io/htmltools/reference/HTML.html" class="external-link">HTML</a></span><span class="op">(</span><span class="fu"><a href="../reference/dragmapr_iframe_bridge.html">dragmapr_iframe_bridge</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/htmlOutput.html" class="external-link">uiOutput</a></span><span class="op">(</span><span class="st">"helper"</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">server</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">input</span>, <span class="va">output</span>, <span class="va">session</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">helper_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"myapp_"</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="va">helper_dir</span><span class="op">)</span></span>
+<span>  <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/resourcePaths.html" class="external-link">addResourcePath</a></span><span class="op">(</span><span class="st">"myapp_static"</span>, <span class="va">helper_dir</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_dragmapr_sf.html">prepare_dragmapr_sf</a></span><span class="op">(</span><span class="va">my_sf</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="../reference/drag_map_prototype.html">drag_map_prototype</a></span><span class="op">(</span><span class="va">x</span>, region_col <span class="op">=</span> <span class="st">"region"</span>,</span>
+<span>                     file <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">helper_dir</span>, <span class="st">"helper.html"</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">output</span><span class="op">$</span><span class="va">helper</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/renderUI.html" class="external-link">renderUI</a></span><span class="op">(</span></span>
+<span>    <span class="va">tags</span><span class="op">$</span><span class="fu">iframe</span><span class="op">(</span>src <span class="op">=</span> <span class="st">"myapp_static/helper.html"</span>,</span>
+<span>                style <span class="op">=</span> <span class="st">"width:100%;height:700px;border:none;"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/shinyApp.html" class="external-link">shinyApp</a></span><span class="op">(</span><span class="va">ui</span>, <span class="va">server</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="switching-grouping-columns-in-spatial-studio">Switching Grouping Columns in Spatial Studio<a class="anchor" aria-label="anchor" href="#switching-grouping-columns-in-spatial-studio"></a>
+</h2>
+<p>Spatial Studio stores drag positions per region column and propagates
+them when you change the <strong>Group / region column</strong> menu.
+This means you can work at multiple levels of geographic hierarchy
+without losing your layout.</p>
+<div class="section level3">
+<h3 id="how-inheritance-works">How inheritance works<a class="anchor" aria-label="anchor" href="#how-inheritance-works"></a>
+</h3>
+<p>Each column maintains its <strong>own independent layout
+cache</strong>. Switching columns never displaces regions that you have
+not personally dragged in that column:</p>
+<ul>
+<li><p><strong>Coarser → finer</strong> (e.g. HHS region → state name):
+the finer column resumes its own last saved layout. If you have not
+visited it before, all fine units start at their natural geographic
+positions — they are <strong>not</strong> displaced by the parent
+column’s drag offsets.</p></li>
+<li><p><strong>Finer → coarser</strong> (e.g. state name → HHS region):
+each parent group is placed at the <strong>mean</strong> of its member
+units’ current positions, or (if you choose “Restore parent’s last
+position”) at the position the parent had when you last worked at that
+column.</p></li>
+</ul>
+</div>
+<div class="section level3">
+<h3 id="example-hhs-regions-and-state-names">Example: HHS regions and state names<a class="anchor" aria-label="anchor" href="#example-hhs-regions-and-state-names"></a>
+</h3>
+<p>The bundled HHS demo has both an <code>hhs_region</code> column (ten
+groups) and a <code>NAME</code> column (individual states). A typical
+workflow:</p>
+<ol style="list-style-type: decimal">
+<li>Set <strong>Group column</strong> to <code>hhs_region</code>. Drag
+the ten regions into an exploded layout.</li>
+<li>Switch to <code>NAME</code>. The states appear at their
+<strong>natural positions</strong> (first visit) — ready for individual
+fine-tuning without any carry-over from the HHS drag.</li>
+<li>Fine-tune individual states as needed.</li>
+<li>Switch back to <code>hhs_region</code>. Each region lands at the
+mean of its states’ current positions, reflecting any individual
+fine-tuning.</li>
+</ol>
+</div>
+<div class="section level3">
+<h3 id="what-resets-and-what-is-preserved">What resets and what is preserved<a class="anchor" aria-label="anchor" href="#what-resets-and-what-is-preserved"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>On column switch</th>
+<th>Behaviour</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Region offsets (coarser→finer)</td>
+<td>Restored to that column’s last saved positions, or zero if never
+visited</td>
+</tr>
+<tr class="even">
+<td>Region offsets (finer→coarser)</td>
+<td>Average of children’s positions, or restored to parent’s last
+position</td>
+</tr>
+<tr class="odd">
+<td>Label offsets</td>
+<td>Reset — label IDs are derived from the new column’s region
+names</td>
+</tr>
+<tr class="even">
+<td>Undo / redo stack</td>
+<td>Reset — new column starts with a clean history</td>
+</tr>
+<tr class="odd">
+<td>Region palette</td>
+<td>Preserved</td>
+</tr>
+<tr class="even">
+<td>Legend and label filter selections</td>
+<td>Preserved</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level3">
+<h3 id="round-trip-precision">Round-trip precision<a class="anchor" aria-label="anchor" href="#round-trip-precision"></a>
+</h3>
+<p>The only step that involves averaging is <strong>finer →
+coarser</strong>. If all child regions had identical offsets, the
+round-trip is lossless. Mixed individual child moves are summarized into
+an average for the parent — or you can choose <strong>“Restore parent’s
+last position”</strong> to skip averaging and return the parent to
+exactly where it was.</p>
+<p>Changing only the <strong>Label column</strong> while keeping the
+region column the same leaves region offsets completely untouched. Only
+the label IDs change.</p>
+</div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

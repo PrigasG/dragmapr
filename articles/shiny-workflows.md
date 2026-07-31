@@ -6,18 +6,38 @@ typing numeric offsets.
 
 ## Embed A Draggable Plot
 
-The simplest Shiny pattern is to write a helper HTML file into a Shiny
-resource directory and show it in an iframe.
+The simplest Shiny pattern is the native widget. It renders the
+draggable map in place and sends browser edits back to Shiny as
+structured inputs.
 
 ``` r
 
-if (interactive()) {
-  shiny::runApp(system.file("examples", "shiny_draggable_plot.R", package = "dragmapr"))
+library(shiny)
+library(dragmapr)
+
+ui <- fluidPage(
+  dragmaprOutput("map", height = "650px"),
+  verbatimTextOutput("state")
+)
+
+server <- function(input, output, session) {
+  output$map <- renderDragmapr({
+    dragmapr_widget(regions, region_col = "region")
+  })
+
+  output$state <- renderPrint({
+    req(input$map_state)
+    dragmapr_widget_state(input$map_state)
+  })
 }
+
+shinyApp(ui, server)
 ```
 
-This is useful when the app only needs to let users explore or compose a
-layout.
+That is enough for an app where the map itself is the editing surface.
+The server receives `input$map_state` after edits, plus more specific
+event inputs such as `input$map_drag_start`, `input$map_drag_end`, and
+`input$map_region_click`.
 
 ## Custom Labels
 
@@ -29,9 +49,29 @@ text-only draggable labels, or annotation boxes created with
 
 ``` r
 
-if (interactive()) {
-  shiny::runApp(system.file("examples", "shiny_custom_labels.R", package = "dragmapr"))
-}
+labels <- as_drag_annotations(
+  data.frame(
+    label_id = "east-note",
+    region = "East",
+    label = "A review note can move separately from the region.",
+    x = 210000,
+    y = 120000
+  ),
+  width_px = 190,
+  height_px = 80,
+  connector = TRUE,
+  connector_type = "elbow"
+)
+
+output$map <- renderDragmapr({
+  dragmapr_widget(
+    regions,
+    region_col = "region",
+    labels = labels,
+    connector_endpoint = "arrow",
+    connector_smart = TRUE
+  )
+})
 ```
 
 The user-supplied label table is created with
@@ -49,9 +89,37 @@ then render a preview and expose a PNG download.
 
 ``` r
 
-if (interactive()) {
-  shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
-}
+current_state <- reactiveVal(dragmapr_state(crs = 3857))
+
+observeEvent(input$map_state, {
+  current_state(dragmapr_widget_state(input$map_state))
+})
+
+output$preview <- renderPlot({
+  render_dragged_map(
+    regions,
+    region_col = "region",
+    state = current_state(),
+    title = "Current edited layout"
+  )
+})
+
+output$png <- downloadHandler(
+  filename = function() "dragmapr-layout.png",
+  content = function(file) {
+    ggplot2::ggsave(
+      file,
+      plot = render_dragged_map(
+        regions,
+        region_col = "region",
+        state = current_state()
+      ),
+      width = 10,
+      height = 8,
+      dpi = 300
+    )
+  }
+)
 ```
 
 This pattern is useful for report builders, document workflows, or
@@ -86,9 +154,17 @@ and only provide static preview/export.
 
 ``` r
 
-if (interactive()) {
-  shiny::runApp(system.file("examples", "shiny_static_export.R", package = "dragmapr"))
-}
+output$static_map <- renderPlot({
+  region_offsets <- read_offsets("drag_region_offsets.csv")
+  label_offsets <- read_label_state("drag_label_offsets.csv")
+
+  render_dragged_map(
+    regions,
+    region_col = "region",
+    region_offsets = region_offsets,
+    label_offsets = label_offsets
+  )
+})
 ```
 
 ## Spatial Studio
@@ -193,6 +269,46 @@ code:
 - `region_palette()` — named colour vector
 - `current_plot()` — `ggplot2` object ready to save
 
+### Removing geography
+
+Spatial Studio and Pipeline Studio both treat removal as an editable
+state change. The app can show a feature table, remove the selected
+geography from the live widget, and then apply the same removal to the
+server-side `sf` object.
+
+``` r
+
+output$feature_rows <- renderTable({
+  req(input$map_state)
+  selected <- dragmapr_widget_state(input$map_state)$selected_feature
+  req(selected)
+
+  rows <- spatial_feature_table(source_sf(), key_col = "region")
+  rows[rows$.feature_id == selected, , drop = FALSE]
+})
+
+observeEvent(input$remove_selected, {
+  req(input$selected_region)
+
+  updateDragmapr(
+    session,
+    "map",
+    remove_features = input$selected_region
+  )
+
+  source_sf(remove_spatial_features(
+    source_sf(),
+    ids = input$selected_region,
+    key_col = "region"
+  ))
+})
+```
+
+In an app with Undo, store a snapshot before calling
+[`remove_spatial_features()`](https://prigasg.github.io/dragmapr/reference/remove_spatial_features.md).
+Restoring the snapshot brings back the source geometry, offsets,
+selection, and visible widget state together.
+
 ### Loading veil
 
 The studio shows a loading veil while data is being read and the D3
@@ -234,6 +350,7 @@ customise the input names, timing, origin check, and helper iframe
 selection.
 
 ``` r
+
 library(shiny)
 library(dragmapr)
 
@@ -254,61 +371,68 @@ server <- function(input, output, session) {
   output$helper <- renderUI(
     tags$iframe(src = "myapp_static/helper.html",
                 style = "width:100%;height:700px;border:none;")
+  )
+}
+
+shinyApp(ui, server)
+```
 
 ## Switching Grouping Columns in Spatial Studio
 
-Spatial Studio stores drag positions per region column and propagates them
-when you change the **Group / region column** dropdown. This means you can
-work at multiple levels of geographic hierarchy without losing your layout.
+Spatial Studio stores drag positions per region column and propagates
+them when you change the **Group / region column** menu. This means you
+can work at multiple levels of geographic hierarchy without losing your
+layout.
 
 ### How inheritance works
 
-Each column maintains its **own independent layout cache**. Switching columns
-never displaces regions that you have not personally dragged in that column:
+Each column maintains its **own independent layout cache**. Switching
+columns never displaces regions that you have not personally dragged in
+that column:
 
-- **Coarser → finer** (e.g. HHS region → state name): the finer column resumes
-  its own last saved layout. If you have not visited it before, all fine units
-  start at their natural geographic positions — they are **not** displaced by
-  the parent column's drag offsets.
+- **Coarser → finer** (e.g. HHS region → state name): the finer column
+  resumes its own last saved layout. If you have not visited it before,
+  all fine units start at their natural geographic positions — they are
+  **not** displaced by the parent column’s drag offsets.
 
-- **Finer → coarser** (e.g. state name → HHS region): each parent group is
-  placed at the **mean** of its member units' current positions, or (if you
-  choose "Restore parent's last position") at the position the parent had when
-  you last worked at that column.
+- **Finer → coarser** (e.g. state name → HHS region): each parent group
+  is placed at the **mean** of its member units’ current positions, or
+  (if you choose “Restore parent’s last position”) at the position the
+  parent had when you last worked at that column.
 
 ### Example: HHS regions and state names
 
-The bundled HHS demo has both an `hhs_region` column (ten groups) and a `NAME`
-column (individual states). A typical workflow:
+The bundled HHS demo has both an `hhs_region` column (ten groups) and a
+`NAME` column (individual states). A typical workflow:
 
-1. Set **Group column** to `hhs_region`. Drag the ten regions into an exploded
-   layout.
-2. Switch to `NAME`. The states appear at their **natural positions** (first
-   visit) — ready for individual fine-tuning without any carry-over from the
-   HHS drag.
-3. Fine-tune individual states as needed.
-4. Switch back to `hhs_region`. Each region lands at the mean of its states'
-   current positions, reflecting any individual fine-tuning.
+1.  Set **Group column** to `hhs_region`. Drag the ten regions into an
+    exploded layout.
+2.  Switch to `NAME`. The states appear at their **natural positions**
+    (first visit) — ready for individual fine-tuning without any
+    carry-over from the HHS drag.
+3.  Fine-tune individual states as needed.
+4.  Switch back to `hhs_region`. Each region lands at the mean of its
+    states’ current positions, reflecting any individual fine-tuning.
 
 ### What resets and what is preserved
 
 | On column switch | Behaviour |
-|---|---|
-| Region offsets (coarser→finer) | Restored to that column's last saved positions, or zero if never visited |
-| Region offsets (finer→coarser) | Average of children's positions, or restored to parent's last position |
-| Label offsets | Reset — label IDs are derived from the new column's region names |
+|----|----|
+| Region offsets (coarser→finer) | Restored to that column’s last saved positions, or zero if never visited |
+| Region offsets (finer→coarser) | Average of children’s positions, or restored to parent’s last position |
+| Label offsets | Reset — label IDs are derived from the new column’s region names |
 | Undo / redo stack | Reset — new column starts with a clean history |
 | Region palette | Preserved |
 | Legend and label filter selections | Preserved |
 
 ### Round-trip precision
 
-The only step that involves averaging is **finer → coarser**. If all child
-regions had identical offsets, the round-trip is lossless. Mixed individual child
-moves are summarised into an average for the parent — or you can choose
-**"Restore parent's last position"** to skip averaging and return the parent to
-exactly where it was.
+The only step that involves averaging is **finer → coarser**. If all
+child regions had identical offsets, the round-trip is lossless. Mixed
+individual child moves are summarized into an average for the parent —
+or you can choose **“Restore parent’s last position”** to skip averaging
+and return the parent to exactly where it was.
 
-Changing only the **Label column** while keeping the region column the same
-leaves region offsets completely untouched. Only the label IDs change.
-```
+Changing only the **Label column** while keeping the region column the
+same leaves region offsets completely untouched. Only the label IDs
+change.

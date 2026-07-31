@@ -474,29 +474,106 @@ render_dragged_map(
 
 ------------------------------------------------------------------------
 
-## Running examples
+## Edit the source features
 
-Installed example scripts live under
-`system.file("examples", package = "dragmapr")`. To exercise the full
-package surface non-interactively:
+Sometimes the right display map is not just a moved map. It is a lighter
+map: one or more features are removed, or a corrected feature is swapped
+in before the final layout is composed.
 
 ``` r
 
-source(system.file("examples", "smoke_examples.R", package = "dragmapr"))
+feature_rows <- spatial_feature_table(regions, key_col = "region")
+feature_rows[, c(".feature_id", ".row", ".geometry_type")]
+
+regions_without_north <- remove_spatial_features(
+  regions,
+  ids = "North",
+  key_col = "region"
+)
+
+regions_only_south_west <- keep_spatial_features(
+  regions,
+  ids = c("South", "West"),
+  key_col = "region"
+)
 ```
 
-Shiny examples launch interactive apps and must be run separately. See
-the [Shiny workflows
-vignette](https://prigasg.github.io/dragmapr/articles/shiny-workflows.md)
-for a full walkthrough, or run any example directly:
+The editing helpers return ordinary `sf` objects, so the result can go
+straight back into the draggable helper:
 
 ``` r
 
-if (interactive()) {
-  shiny::runApp(system.file("examples", "shiny_draggable_plot.R",   package = "dragmapr"))
-  shiny::runApp(system.file("examples", "shiny_custom_labels.R",    package = "dragmapr"))
-  shiny::runApp(system.file("examples", "shiny_draggable_export.R", package = "dragmapr"))
-  shiny::runApp(system.file("examples", "shiny_spatial_studio.R",   package = "dragmapr"))
-  shiny::runApp(system.file("examples", "shiny_static_export.R",    package = "dragmapr"))
+drag_map_prototype(
+  regions_without_north,
+  region_col = "region",
+  open = interactive()
+)
+```
+
+## A small Shiny editor
+
+This is the same loop inside a minimal Shiny app: render the widget,
+receive state from the browser, and push a live display update from the
+server.
+
+``` r
+
+library(shiny)
+library(dragmapr)
+
+ui <- fluidPage(
+  checkboxInput("origin", "Show origin outlines", TRUE),
+  dragmaprOutput("map", height = "650px"),
+  verbatimTextOutput("state")
+)
+
+server <- function(input, output, session) {
+  current_state <- reactiveVal(dragmapr_state(crs = 3857))
+
+  output$map <- renderDragmapr({
+    dragmapr_widget(
+      regions,
+      region_col = "region",
+      state = current_state(),
+      show_origin_outlines = input$origin
+    )
+  })
+
+  observeEvent(input$map_state, {
+    current_state(dragmapr_widget_state(input$map_state))
+  })
+
+  observeEvent(input$origin, {
+    updateDragmapr(session, "map", show_origin_outlines = input$origin)
+  })
+
+  output$state <- renderPrint(summary(current_state()))
 }
+
+shinyApp(ui, server)
 ```
+
+## Working with your own data
+
+Use projected polygon data for editing. If your source file is longitude
+and latitude, run it through
+[`prepare_dragmapr_sf()`](https://prigasg.github.io/dragmapr/reference/prepare_dragmapr_sf.md)
+first so offsets are measured in metres:
+
+``` r
+
+my_sf <- read_dragmapr_sf_url("https://example.com/regions.geojson")
+my_sf <- prepare_dragmapr_sf(my_sf)
+
+drag_map_prototype(
+  my_sf,
+  region_col = "region_name",
+  label_col = "short_name",
+  map_background = "light_grid",
+  open = interactive()
+)
+```
+
+The package keeps the display edits separate from the source geometry.
+That separation is the useful part: you can drag, remove, restore,
+export, and render without hiding how the final map was made.

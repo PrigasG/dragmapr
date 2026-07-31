@@ -170,18 +170,54 @@ A `dragmapr_state` carries:
 The full lifecycle (`validate_`, `merge_`, `snapshot_`/`restore_`,
 [`inherit_drag_offsets()`](https://prigasg.github.io/dragmapr/reference/inherit_drag_offsets.md),
 [`collapse_drag_offsets()`](https://prigasg.github.io/dragmapr/reference/collapse_drag_offsets.md),
-and JSON `read_`/`write_`) operates on this object. For a complete
-runnable round-trip, see the Shiny app in
-`system.file("examples/full_state_roundtrip.R", package = "dragmapr")`.
-
-For a fuller cross-package example that starts in `explodemap`, uses
-layout-quality diagnostics and label-aware parameter search, then
-composes and renders with `dragmapr`, run:
+and JSON `read_`/`write_`) operates on this object. A small app can keep
+one canonical state, one draft state, and compare them before enabling
+save/export:
 
 ``` r
 
-source(system.file(
-  "examples/explodemap_dragmapr_pipeline.R",
-  package = "dragmapr"
-))
+canonical <- reactiveVal(state)
+draft <- reactiveVal(state)
+
+observeEvent(input$map_state, {
+  draft(dragmapr_widget_state(input$map_state))
+})
+
+output$dirty <- renderText({
+  changed <- !dragmapr_state_equal(
+    draft(),
+    canonical(),
+    compare = "composition"
+  )
+
+  if (changed) "Unsaved layout edits" else "Layout saved"
+})
+
+observeEvent(input$save_layout, {
+  validate_dragmapr_state(draft())
+  write_dragmapr_state(draft(), "composition.json")
+  canonical(draft())
+})
+```
+
+When a workflow starts in `explodemap`, the handoff stays the same:
+compute the layout, convert it once to a `dragmapr_state`, edit the
+state, then render from the same state.
+
+``` r
+
+library(explodemap)
+library(dragmapr)
+
+layout <- explode_grouped(my_sf, region_col = "region", plot = FALSE)
+state <- as_dragmapr_state(layout, geometry_id = "service-territory-v1")
+
+edited <- dragmapr_edit(layout, state = state)
+
+render_dragged_map(
+  layout$sf_grouped,
+  region_col = "region",
+  state = state,
+  file = "edited-layout.png"
+)
 ```

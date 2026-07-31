@@ -119,7 +119,7 @@ opens on the exploded composition rather than the bare geometry:</p>
 re-render them), read the widget's state input in Shiny with
 <code><a href="dragmapr_widget_state.html">dragmapr_widget_state()</a></code>:</p>
 <p></p><div class="sourceCode r"><pre><code><span><span class="va">output</span><span class="op">$</span><span class="va">map</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/dragmaprOutput.html">renderDragmapr</a></span><span class="op">(</span><span class="fu"><a href="../reference/dragmapr_edit.html">dragmapr_edit</a></span><span class="op">(</span><span class="va">layout</span>, state <span class="op">=</span> <span class="va">state</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu">observeEvent</span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">map_state</span>, <span class="op">{</span></span>
+<span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/observeEvent.html" class="external-link">observeEvent</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">map_state</span>, <span class="op">{</span></span>
 <span>  <span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/dragmapr_widget_state.html">dragmapr_widget_state</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">map_state</span><span class="op">)</span></span>
 <span><span class="op">}</span><span class="op">)</span></span></code></pre><p></p></div>
     </div>

@@ -57,7 +57,7 @@
     <div class="section level2">
       <h2 id="state-first-composition">State-first composition<a class="anchor" aria-label="anchor" href="#state-first-composition"></a></h2>
 
-      <div class="section-desc"><p>The recommended workflow. Treat the layout as an editable composition object - a dragmapr_state - and carry it through compute, compose, render. Includes the friendly editor front door and the full state lifecycle (validate, merge, inherit/collapse across levels, apply, snapshot/restore, and JSON read/write).</p></div>
+      <div class="section-desc"><p>Keep manual edits in a dragmapr_state, then use the same state for browser editing, Shiny apps, static rendering, snapshots, and JSON round-trips.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -143,7 +143,7 @@
       </dl></div><div class="section level2">
       <h2 id="native-widget-htmlwidget-and-shiny-">Native widget (htmlwidget and Shiny)<a class="anchor" aria-label="anchor" href="#native-widget-htmlwidget-and-shiny-"></a></h2>
 
-      <div class="section-desc"><p>The browser-native draggable editor and its Shiny bridge: build the widget, bind and render it in Shiny, push live display and selection updates, and rebuild a dragmapr_state from the edits the browser reports back.</p></div>
+      <div class="section-desc"><p>Render a draggable map directly in Shiny, receive structured edit events, and update display options without rebuilding the geometry.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -187,7 +187,7 @@
       </dl></div><div class="section level2">
       <h2 id="interactive-prototype">Interactive prototype<a class="anchor" aria-label="anchor" href="#interactive-prototype"></a></h2>
 
-      <div class="section-desc"><p>Create the browser-based D3 helper. This is the primary deliverable: open it, drag, then copy or download the offset tables.</p></div>
+      <div class="section-desc"><p>Write a standalone HTML editor for quick layout work outside a Shiny app.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -203,7 +203,7 @@
       </dl></div><div class="section level2">
       <h2 id="region-offsets">Region offsets<a class="anchor" aria-label="anchor" href="#region-offsets"></a></h2>
 
-      <div class="section-desc"><p>Read and apply the region movement tables exported by the helper.</p></div>
+      <div class="section-desc"><p>Read and apply exported region movement tables.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -277,7 +277,7 @@
       </dl></div><div class="section level2">
       <h2 id="static-rendering">Static rendering<a class="anchor" aria-label="anchor" href="#static-rendering"></a></h2>
 
-      <div class="section-desc"><p>Optionally reconstruct the dragged layout as a ggplot2 image from the source geometry plus exported region and label offset tables.</p></div>
+      <div class="section-desc"><p>Rebuild edited layouts as ggplot2 images, PNGs, PDFs, or project bundles.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -465,7 +465,7 @@
       </dl></div><div class="section level2">
       <h2 id="spatial-i-o-helpers">Spatial I/O helpers<a class="anchor" aria-label="anchor" href="#spatial-i-o-helpers"></a></h2>
 
-      <div class="section-desc"><p>Read spatial files from Shiny uploads or URLs, project and validate geometry, and build the JavaScript bridge that relays drag state from the helper iframe back to Shiny inputs. These helpers are extracted from the spatial studio example so apps can reuse them independently.</p></div>
+      <div class="section-desc"><p>Read spatial files from Shiny uploads or URLs, project and validate geometry, and reuse the bridge helpers that power the spatial studio apps.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -502,7 +502,7 @@
       </dl></div><div class="section level2">
       <h2 id="editable-spatial-features">Editable spatial features<a class="anchor" aria-label="anchor" href="#editable-spatial-features"></a></h2>
 
-      <div class="section-desc"><p>Inspect, remove, keep, add, or replace source geography before or during a dragmapr editing workflow. These helpers support Shiny review tables and reversible geography edits in Pipeline Studio.</p></div>
+      <div class="section-desc"><p>Inspect, remove, keep, add, or replace source geography before or during a dragmapr workflow. These helpers support Shiny review tables and reversible geography edits.</p></div>
 
       <dl></dl></div><div class="section level2">
 

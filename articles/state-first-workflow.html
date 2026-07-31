@@ -251,18 +251,51 @@ accumulate.</li>
 <code>snapshot_</code>/<code>restore_</code>,
 <code><a href="../reference/inherit_drag_offsets.html">inherit_drag_offsets()</a></code>,
 <code><a href="../reference/collapse_drag_offsets.html">collapse_drag_offsets()</a></code>, and JSON
-<code>read_</code>/<code>write_</code>) operates on this object. For a
-complete runnable round-trip, see the Shiny app in
-<code>system.file("examples/full_state_roundtrip.R", package = "dragmapr")</code>.</p>
-<p>For a fuller cross-package example that starts in
-<code>explodemap</code>, uses layout-quality diagnostics and label-aware
-parameter search, then composes and renders with <code>dragmapr</code>,
-run:</p>
+<code>read_</code>/<code>write_</code>) operates on this object. A small
+app can keep one canonical state, one draft state, and compare them
+before enabling save/export:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span></span>
-<span>  <span class="st">"examples/explodemap_dragmapr_pipeline.R"</span>,</span>
-<span>  package <span class="op">=</span> <span class="st">"dragmapr"</span></span>
-<span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="va">canonical</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/reactiveVal.html" class="external-link">reactiveVal</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span>
+<span><span class="va">draft</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/reactiveVal.html" class="external-link">reactiveVal</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/observeEvent.html" class="external-link">observeEvent</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">map_state</span>, <span class="op">{</span></span>
+<span>  <span class="fu">draft</span><span class="op">(</span><span class="fu"><a href="../reference/dragmapr_widget_state.html">dragmapr_widget_state</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">map_state</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">output</span><span class="op">$</span><span class="va">dirty</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/shiny/man/renderPrint.html" class="external-link">renderText</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="va">changed</span> <span class="op">&lt;-</span> <span class="op">!</span><span class="fu"><a href="../reference/dragmapr_state_diff.html">dragmapr_state_equal</a></span><span class="op">(</span></span>
+<span>    <span class="fu">draft</span><span class="op">(</span><span class="op">)</span>,</span>
+<span>    <span class="fu">canonical</span><span class="op">(</span><span class="op">)</span>,</span>
+<span>    compare <span class="op">=</span> <span class="st">"composition"</span></span>
+<span>  <span class="op">)</span></span>
+<span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="va">changed</span><span class="op">)</span> <span class="st">"Unsaved layout edits"</span> <span class="kw">else</span> <span class="st">"Layout saved"</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/observeEvent.html" class="external-link">observeEvent</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">save_layout</span>, <span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/validate_dragmapr_state.html">validate_dragmapr_state</a></span><span class="op">(</span><span class="fu">draft</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="../reference/write_dragmapr_state.html">write_dragmapr_state</a></span><span class="op">(</span><span class="fu">draft</span><span class="op">(</span><span class="op">)</span>, <span class="st">"composition.json"</span><span class="op">)</span></span>
+<span>  <span class="fu">canonical</span><span class="op">(</span><span class="fu">draft</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
+<p>When a workflow starts in <code>explodemap</code>, the handoff stays
+the same: compute the layout, convert it once to a
+<code>dragmapr_state</code>, edit the state, then render from the same
+state.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://prigasg.github.io/explodemap/" class="external-link">explodemap</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://prigasg.github.io/dragmapr/">dragmapr</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">layout</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://prigasg.github.io/explodemap/reference/explode_grouped.html" class="external-link">explode_grouped</a></span><span class="op">(</span><span class="va">my_sf</span>, region_col <span class="op">=</span> <span class="st">"region"</span>, plot <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://prigasg.github.io/explodemap/reference/as_dragmapr_state.html" class="external-link">as_dragmapr_state</a></span><span class="op">(</span><span class="va">layout</span>, geometry_id <span class="op">=</span> <span class="st">"service-territory-v1"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">edited</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/dragmapr_edit.html">dragmapr_edit</a></span><span class="op">(</span><span class="va">layout</span>, state <span class="op">=</span> <span class="va">state</span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="../reference/render_dragged_map.html">render_dragged_map</a></span><span class="op">(</span></span>
+<span>  <span class="va">layout</span><span class="op">$</span><span class="va">sf_grouped</span>,</span>
+<span>  region_col <span class="op">=</span> <span class="st">"region"</span>,</span>
+<span>  state <span class="op">=</span> <span class="va">state</span>,</span>
+<span>  file <span class="op">=</span> <span class="st">"edited-layout.png"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>
