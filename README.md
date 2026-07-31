@@ -5,15 +5,14 @@
 [![Connect Cloud](https://img.shields.io/badge/Posit%20Connect-Spatial%20Studio-447099)](https://prigas89-dragmapr.share.connect.posit.cloud)
 [![Pipeline Studio](https://img.shields.io/badge/Hugging%20Face-Pipeline%20Studio-2b7fff)](https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio)
 
-`dragmapr` lets you move map regions and labels by hand, then save the edited
-layout as reproducible data.
+`dragmapr` is a small editing layer for maps that need a human hand. It lets
+you drag regions, labels, and callouts in the browser, then save those edits as
+plain R data so the same layout can be rebuilt later.
 
-Use it when you want to:
-
-- fix a map layout manually after automatic placement
-- drag labels independently from regions
-- save offsets and recreate the same map later
-- connect an editor to `explodemap`, Shiny, or a static `ggplot2` export
+It is useful when automatic placement gets close but not quite close enough:
+service areas that need breathing room, labels that need manual nudging, small
+geographies that should be removed from a presentation map, or an
+`explodemap` layout that needs final editorial polish.
 
 ## Install
 
@@ -25,65 +24,100 @@ install.packages("dragmapr")
 # pak::pak("PrigasG/dragmapr")
 ```
 
-## Try It
+## A First Draggable Map
 
-- Live Spatial Studio: <https://Prigas89-dragmapr-spatial-studio.hf.space>
-- Connect Cloud Spatial Studio: <https://prigas89-dragmapr.share.connect.posit.cloud>
-- Shared Pipeline Studio: <https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio>
-- Package site: <https://prigasg.github.io/dragmapr/>
-- Cross-package roadmap: [ROADMAP.md](ROADMAP.md)
-- Pipeline Studio:
-
-```r
-shiny::runApp(system.file("shiny/pipeline-studio", package = "dragmapr"))
-```
-
-Pipeline Studio is the bridge app for `explodemap` and `dragmapr`: compute a
-layout, refine it by dragging, remove unneeded geography with Undo available,
-apply the edits, and export the final map.
-
-## Deploy Spatial Studio
-
-The HF Space uses the repository `Dockerfile`. Posit Connect Cloud is live at
-<https://prigas89-dragmapr.share.connect.posit.cloud> and uses the Git-backed
-app wrapper in `connect-cloud/spatial-studio/`.
-
-For Connect Cloud, publish this GitHub repository from the `master` branch and
-choose `connect-cloud/spatial-studio/app.R` as the primary file. Keep
-`connect-cloud/spatial-studio/manifest.json` committed; regenerate it with
-`rsconnect::writeManifest(appDir = "connect-cloud/spatial-studio",
-appPrimaryDoc = "app.R", appMode = "shiny")` after dependency changes.
-
-## Quick Start
+This example builds four projected polygons, opens the editor, and saves the
+browser helper as a standalone HTML file.
 
 ```r
 library(dragmapr)
 
-my_sf <- prepare_dragmapr_sf(my_sf)
+make_square <- function(x0, y0, size = 100000) {
+  sf::st_polygon(list(rbind(
+    c(x0, y0), c(x0 + size, y0), c(x0 + size, y0 + size),
+    c(x0, y0 + size), c(x0, y0)
+  )))
+}
+
+regions <- sf::st_sf(
+  region = c("North", "South", "East", "West"),
+  label = c("North", "South", "East", "West"),
+  geometry = sf::st_sfc(
+    make_square(0, 140000),
+    make_square(0, 0),
+    make_square(140000, 70000),
+    make_square(-140000, 70000),
+    crs = 3857
+  )
+)
 
 drag_map_prototype(
-  my_sf,
+  regions,
   region_col = "region",
-  open = TRUE
+  label_col = "label",
+  show_origin_outlines = TRUE,
+  file = "drag-map.html",
+  open = interactive()
 )
 ```
 
-After dragging, download the offset CSVs and rebuild the map:
+After dragging, the helper can download region and label offset CSVs. Those
+offsets are enough to recreate a static map from the original geometry:
 
 ```r
+region_offsets <- data.frame(
+  region = c("North", "South", "East", "West"),
+  dx_m = c(0, 0, 60000, -60000),
+  dy_m = c(50000, -50000, 0, 0)
+)
+
+label_offsets <- data.frame(
+  label_id = c("North", "South", "East", "West"),
+  region = c("North", "South", "East", "West"),
+  dx_m = c(0, 0, 25000, -25000),
+  dy_m = c(30000, -30000, 0, 0)
+)
+
 render_dragged_map(
-  my_sf,
+  regions,
   region_col = "region",
-  region_offsets = "drag_region_offsets.csv",
-  label_offsets = "drag_label_offsets.csv",
-  file = "map.png"
+  label_col = "label",
+  region_offsets = region_offsets,
+  label_offsets = label_offsets,
+  title = "Edited layout",
+  file = "edited-map.png"
 )
 ```
 
-## State-First Workflow
+## Work With State
 
-For new work, prefer a `dragmapr_state`. It keeps the computed geometry separate
-from your editorial choices.
+For apps and repeatable pipelines, keep the edits in a `dragmapr_state`. The
+state stores region offsets, label offsets, the selected feature, the viewport,
+and a version number while leaving the source geometry untouched.
+
+```r
+state <- dragmapr_state(
+  region_offsets = region_offsets,
+  label_offsets = label_offsets,
+  crs = 3857,
+  geometry_id = "toy-regions-v1",
+  selected_feature = "East"
+)
+
+validate_dragmapr_state(state)
+write_dragmapr_state(state, "composition.json")
+
+state <- read_dragmapr_state("composition.json")
+
+render_dragged_map(
+  regions,
+  region_col = "region",
+  state = state,
+  file = "composition.png"
+)
+```
+
+The same object is the handoff point for `explodemap`:
 
 ```r
 library(explodemap)
@@ -95,138 +129,150 @@ state <- as_dragmapr_state(layout)
 dragmapr_edit(layout, state = state)
 ```
 
-Use the same state for interactive and static output:
+## Use It In Shiny
+
+The native widget reports structured state to Shiny inputs. The server can keep
+that state, render previews, enable Undo, or push display updates without
+rebuilding the geometry.
 
 ```r
-focus_map(layout, state = state)
+library(shiny)
+library(dragmapr)
 
-render_dragged_map(
-  layout$sf_grouped,
-  region_col = "region",
-  state = state,
-  file = "map.png"
-)
-```
-
-Save and restore the state:
-
-```r
-write_dragmapr_state(state, "composition.json")
-state <- read_dragmapr_state("composition.json")
-```
-
-## Shiny
-
-```r
 ui <- fluidPage(
-  dragmaprOutput("map", height = "650px")
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("selected", "Selected region", choices = regions$region),
+      checkboxInput("origin", "Show origin outlines", TRUE),
+      actionButton("remove", "Remove selected geography")
+    ),
+    mainPanel(
+      dragmaprOutput("map", height = "650px"),
+      verbatimTextOutput("state_summary")
+    )
+  )
 )
 
 server <- function(input, output, session) {
+  current_state <- reactiveVal(dragmapr_state(crs = 3857))
+
   output$map <- renderDragmapr({
     dragmapr_widget(
-      my_sf,
+      regions,
       region_col = "region",
-      region_palette = c(North = "#4C78A8", South = "#54A24B")
+      state = current_state(),
+      show_origin_outlines = input$origin
     )
   })
 
   observeEvent(input$map_state, {
-    state <- dragmapr_widget_state(input$map_state)
+    current_state(dragmapr_widget_state(input$map_state))
   })
+
+  observeEvent(input$selected, {
+    updateDragmapr(session, "map", selected_feature = input$selected)
+  })
+
+  observeEvent(input$origin, {
+    updateDragmapr(session, "map", show_origin_outlines = input$origin)
+  })
+
+  observeEvent(input$remove, {
+    updateDragmapr(session, "map", remove_features = input$selected)
+  })
+
+  output$state_summary <- renderPrint(summary(current_state()))
 }
+
+shinyApp(ui, server)
 ```
 
-Update display options without rebuilding the widget:
+Useful Shiny inputs emitted by the widget include `input$map_state`,
+`input$map_region_click`, `input$map_drag_start`, `input$map_drag_end`,
+`input$map_feature_delete`, and `input$map_ready`.
+
+## Remove Or Replace Geography
+
+Presentation maps often carry more geography than the story needs. `dragmapr`
+keeps deletion as an explicit edit: inspect the features, remove or keep stable
+ids, and still let Undo restore the previous state in an app.
 
 ```r
-updateDragmapr(session, "map", selected_feature = "North")
-updateDragmapr(session, "map", region_palette = palette)
+features <- spatial_feature_table(regions, key_col = "region")
+features[, c(".feature_id", ".row", ".geometry_type", ".bbox_xmin", ".bbox_ymin")]
+
+without_north <- remove_spatial_features(
+  regions,
+  ids = "North",
+  key_col = "region"
+)
+
+south_and_west <- keep_spatial_features(
+  regions,
+  ids = c("South", "West"),
+  key_col = "region"
+)
 ```
 
-## Compare States
-
-Release A adds small state helpers for apps and tests:
+New or corrected geography can be appended or swapped in without changing the
+rest of the workflow:
 
 ```r
-diff <- dragmapr_state_diff(draft, canonical, tolerance = 1)
+new_region <- sf::st_sf(
+  region = "Central",
+  label = "Central",
+  geometry = sf::st_sfc(make_square(280000, 70000), crs = 3857)
+)
 
-diff$changed
-diff$changed_regions
-diff$changed_labels
-
-dragmapr_state_equal(draft, canonical, compare = "composition")
-summary(draft)
+regions2 <- add_spatial_features(regions, new_region)
+regions3 <- replace_spatial_features(
+  regions2,
+  ids = "East",
+  features = new_region,
+  key_col = "region"
+)
 ```
 
-Use `compare = "composition"` when selection or viewport changes should not
-count as dirty edits.
+Pipeline Studio exposes this as a left-panel editing flow: select a geography,
+review its source rows, remove it from the draft source, and Undo if the edit
+was wrong.
 
-## Edit Spatial Features
+## Labels, Notes, And Connectors
 
-Some workflows need to remove unneeded geography before or during layout
-editing. Use `spatial_feature_table()` to show a review table in Shiny, then
-filter the source `sf` with stable feature ids:
-
-```r
-features <- spatial_feature_table(my_sf, key_col = "region")
-
-my_sf <- remove_spatial_features(my_sf, "North", key_col = "region")
-my_sf <- keep_spatial_features(my_sf, c("South", "West"), key_col = "region")
-```
-
-To add or replace geography after drawing or importing a new shape:
+Labels can be hidden, dragged independently, or replaced with callout boxes.
 
 ```r
-my_sf <- add_spatial_features(my_sf, new_shape_sf)
-my_sf <- replace_spatial_features(my_sf, "Old region", new_shape_sf, key_col = "region")
-```
+labels <- make_region_labels(regions, region_col = "region", label_col = "label")
 
-In Shiny, the native widget can remove the selected feature from the live view
-and emit `input$map_feature_delete` so the server can apply the same edit to the
-source `sf`:
-
-```r
-updateDragmapr(session, "map", delete_selected = TRUE)
-updateDragmapr(session, "map", remove_features = c("North", "East"))
-```
-
-Pipeline Studio exposes this in the Refine tab: select a geography, review its
-source rows, remove it, and use Undo if the deletion was wrong.
-
-## Labels And Notes
-
-Labels are optional:
-
-```r
-dragmapr_widget(my_sf, region_col = "region", labels = FALSE)
-```
-
-Create one label per region:
-
-```r
-labels <- make_region_labels(my_sf, region_col = "region", label_col = "name")
-```
-
-Create callout boxes:
-
-```r
 notes <- as_drag_annotations(
   data.frame(
-    label_id = "note-1",
-    region = "North",
-    label = "Important note",
-    x = 50000,
-    y = 150000
+    label_id = "east-note",
+    region = "East",
+    label = "A longer note can move independently.",
+    x = 210000,
+    y = 120000
   ),
+  width_px = 180,
+  height_px = 80,
   connector = TRUE,
   connector_type = "curve"
+)
+
+drag_map_prototype(
+  regions,
+  region_col = "region",
+  labels = notes,
+  connector_smart = TRUE,
+  connector_endpoint = "arrow",
+  open = interactive()
 )
 ```
 
 ## Project Bundles
 
-Spatial Studio can export a project ZIP. Recreate the static map from the ZIP:
+Spatial Studio exports a project ZIP containing the source geometry, offsets,
+labels, palette, metadata, and a small R script. A bundle can be rendered later
+without reopening the browser editor.
 
 ```r
 render_dragmapr_project(
@@ -238,23 +284,43 @@ render_dragmapr_project(
 )
 ```
 
-## Built-In Examples
+## Live Apps
+
+- Spatial Studio on Hugging Face: <https://Prigas89-dragmapr-spatial-studio.hf.space>
+- Spatial Studio on Posit Connect Cloud: <https://prigas89-dragmapr.share.connect.posit.cloud>
+- Pipeline Studio for `explodemap` and `dragmapr`: <https://huggingface.co/spaces/Prigas89/spatial-pipeline-studio>
+- Package site: <https://prigasg.github.io/dragmapr/>
+
+Run Pipeline Studio locally:
 
 ```r
-source(system.file("examples/basic_draggable_map.R", package = "dragmapr"))
-source(system.file("examples/full_state_roundtrip.R", package = "dragmapr"))
-source(system.file("examples/explodemap_dragmapr_pipeline.R", package = "dragmapr"))
+shiny::runApp(system.file("shiny/pipeline-studio", package = "dragmapr"))
 ```
 
-For the full app:
+## Deployment Notes
+
+The Hugging Face Space uses the repository `Dockerfile`. Posit Connect Cloud
+uses the Git-backed wrapper in `connect-cloud/spatial-studio/`; publish
+`master` and choose `connect-cloud/spatial-studio/app.R` as the primary file.
+
+Regenerate the Connect manifest after dependency changes:
 
 ```r
-shiny::runApp(system.file("examples/shiny_spatial_studio.R", package = "dragmapr"))
+rsconnect::writeManifest(
+  appDir = "connect-cloud/spatial-studio",
+  appPrimaryDoc = "app.R",
+  appMode = "shiny"
+)
 ```
 
-## Notes
+## What To Expect
 
-- Use projected polygon data. Run `prepare_dragmapr_sf()` for longitude/latitude data.
-- Dragged layouts are for display and communication, not geographic analysis.
-- Large datasets should be simplified or grouped before editing in the browser.
-- Offset CSV workflows still work; `dragmapr_state` is the recommended path for new apps.
+`dragmapr` edits display geometry. The original spatial data remains the source
+of truth, while offsets and state describe how the map should appear. Use a
+projected CRS for editing; `prepare_dragmapr_sf()` can repair common geometry
+issues and transform longitude/latitude data before the browser sees it. For
+large files, simplify or group features first so dragging stays responsive.
+
+The package supports both paths: quick standalone HTML for one-off layout work,
+and native Shiny/htmlwidget state for applications that need Undo, live display
+updates, geography removal, and reproducible export.

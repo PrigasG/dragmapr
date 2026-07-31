@@ -62,11 +62,9 @@ navbar:
 reference:
 - title: State-first composition
   desc: >
-    The recommended workflow. Treat the layout as an editable composition
-    object - a dragmapr_state - and carry it through compute, compose, render.
-    Includes the friendly editor front door and the full state lifecycle
-    (validate, merge, inherit/collapse across levels, apply, snapshot/restore,
-    and JSON read/write).
+    Keep manual edits in a dragmapr_state, then use the same state for
+    browser editing, Shiny apps, static rendering, snapshots, and JSON
+    round-trips.
   contents:
   - dragmapr_edit
   - dragmapr_state
@@ -83,9 +81,8 @@ reference:
 
 - title: Native widget (htmlwidget and Shiny)
   desc: >
-    The browser-native draggable editor and its Shiny bridge: build the widget,
-    bind and render it in Shiny, push live display and selection updates, and
-    rebuild a dragmapr_state from the edits the browser reports back.
+    Render a draggable map directly in Shiny, receive structured edit events,
+    and update display options without rebuilding the geometry.
   contents:
   - dragmapr_widget
   - dragmapr_widget_state
@@ -95,13 +92,12 @@ reference:
 
 - title: Interactive prototype
   desc: >
-    Create the browser-based D3 helper. This is the primary deliverable:
-    open it, drag, then copy or download the offset tables.
+    Write a standalone HTML editor for quick layout work outside a Shiny app.
   contents:
   - drag_map_prototype
 
 - title: Region offsets
-  desc: Read and apply the region movement tables exported by the helper.
+  desc: Read and apply exported region movement tables.
   contents:
   - read_offsets
   - apply_offsets
@@ -120,8 +116,7 @@ reference:
 
 - title: Static rendering
   desc: >
-    Optionally reconstruct the dragged layout as a ggplot2 image from the
-    source geometry plus exported region and label offset tables.
+    Rebuild edited layouts as ggplot2 images, PNGs, PDFs, or project bundles.
   contents:
   - render_dragged_map
   - render_dragmapr_project
@@ -160,9 +155,7 @@ reference:
 - title: Spatial I/O helpers
   desc: >
     Read spatial files from Shiny uploads or URLs, project and validate
-    geometry, and build the JavaScript bridge that relays drag state from the
-    helper iframe back to Shiny inputs.  These helpers are extracted from the
-    spatial studio example so apps can reuse them independently.
+    geometry, and reuse the bridge helpers that power the spatial studio apps.
   contents:
   - read_dragmapr_sf_upload
   - read_dragmapr_sf_url
@@ -172,8 +165,8 @@ reference:
 - title: Editable spatial features
   desc: >
     Inspect, remove, keep, add, or replace source geography before or during a
-    dragmapr editing workflow. These helpers support Shiny review tables and
-    reversible geography edits in Pipeline Studio.
+    dragmapr workflow. These helpers support Shiny review tables and reversible
+    geography edits.
   contents:
   - spatial_feature_table
   - remove_spatial_features
