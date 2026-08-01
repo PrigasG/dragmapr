@@ -1,13 +1,3 @@
-# Git LFS tracking for binary assets.
-# Required by HuggingFace Spaces, which rejects non-LFS binary pushes.
-*.png  filter=lfs diff=lfs merge=lfs -text
-*.jpg  filter=lfs diff=lfs merge=lfs -text
-*.jpeg filter=lfs diff=lfs merge=lfs -text
-*.gif  filter=lfs diff=lfs merge=lfs -text
-*.ico  filter=lfs diff=lfs merge=lfs -text
-*.svg  filter=lfs diff=lfs merge=lfs -text
-*.pdf  filter=lfs diff=lfs merge=lfs -text
-*.mp4 filter=lfs diff=lfs merge=lfs -text
-pkgdown/assets/dragmap-demo.mp4 filter=lfs diff=lfs merge=lfs -text
-pkgdown/assets/hhs-placeholder-shapes-demo.mp4 filter=lfs diff=lfs merge=lfs -text
+# Keep only large demo videos in LFS. Package and pkgdown assets must remain
+# ordinary Git blobs so GitHub source archives contain usable files.
 pkgdown/assets/*.mp4 filter=lfs diff=lfs merge=lfs -text

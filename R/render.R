@@ -177,6 +177,7 @@ render_dragged_map <- function(x,
                                width = 8,
                                height = 6,
                                dpi = 300) {
+  validate_dragmapr_sf(x)
   legend_position <- match.arg(legend_position)
   connector_linetype <- match.arg(connector_linetype, c("solid", "dashed", "dotted"))
   connector_endpoint <- match.arg(connector_endpoint)

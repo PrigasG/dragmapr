@@ -40,6 +40,7 @@ spatial_feature_table <- function(x, key_col = NULL, include_geometry = FALSE) {
     check.names = FALSE
   )
   out <- cbind(out, attrs, stringsAsFactors = FALSE)
+  names(out) <- make.unique(names(out))
   if (isTRUE(include_geometry)) {
     out[[geom_col]] <- geometry
   }
@@ -73,7 +74,10 @@ remove_spatial_features <- function(x,
   invert <- flag_scalar(invert, "`invert`")
   prune_empty <- flag_scalar(prune_empty, "`prune_empty`")
   if (missing(ids) || is.null(ids) || length(ids) == 0L) {
-    return(x)
+    if (!isTRUE(invert)) {
+      return(x)
+    }
+    return(sf::st_as_sf(x[FALSE, , drop = FALSE]))
   }
 
   keys <- if (is.null(key_col)) {
@@ -165,19 +169,7 @@ align_spatial_features <- function(x, features) {
 }
 
 typed_na_column <- function(x, n) {
-  if (is.factor(x)) {
-    return(factor(rep(NA_character_, n), levels = levels(x)))
-  }
-  if (inherits(x, "Date")) {
-    return(as.Date(rep(NA_real_, n), origin = "1970-01-01"))
-  }
-  if (inherits(x, "POSIXt")) {
-    return(as.POSIXct(rep(NA_real_, n), origin = "1970-01-01", tz = attr(x, "tzone") %||% "UTC"))
-  }
-  if (is.integer(x)) return(rep(NA_integer_, n))
-  if (is.numeric(x)) return(rep(NA_real_, n))
-  if (is.logical(x)) return(rep(NA, n))
-  rep(NA_character_, n)
+  x[rep.int(NA_integer_, n)]
 }
 
 normalize_optional_column <- function(col, choices, arg) {

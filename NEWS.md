@@ -1,3 +1,16 @@
+# dragmapr 0.3.1
+
+* Fixed `keep_spatial_features()` so an empty id vector correctly returns an
+  empty `sf` object instead of retaining every feature.
+* Strengthened `sf` validation to reject an active geometry column that is not
+  an `sfc` vector, including at the start of `render_dragged_map()`.
+* Spatial feature alignment now preserves missing attribute types, including
+  units and list columns, and feature-table metadata names remain unique when
+  source attributes use reserved helper names.
+* Package and site images plus the installed cheatsheet are stored as regular
+  Git files so GitHub source archives contain the real assets; only demo MP4s
+  remain in Git LFS.
+
 # dragmapr 0.3.0
 
 * Release A of the Pipeline Studio extraction adds state comparison helpers:

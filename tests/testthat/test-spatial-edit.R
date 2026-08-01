@@ -19,6 +19,14 @@ test_that("spatial_feature_table summarizes editable features", {
 
   with_geom <- spatial_feature_table(x, key_col = "id", include_geometry = TRUE)
   expect_true(inherits(with_geom$geometry, "sfc"))
+
+  colliding <- x
+  colliding$.feature_id <- c("original-a", "original-b")
+  colliding$.row <- c(10L, 20L)
+  collision_tbl <- spatial_feature_table(colliding, key_col = "id")
+  expect_identical(anyDuplicated(names(collision_tbl)), 0L)
+  expect_equal(collision_tbl$.feature_id.1, colliding$.feature_id)
+  expect_equal(collision_tbl$.row.1, colliding$.row)
 })
 
 test_that("remove and keep spatial features work by key or row id", {
@@ -40,6 +48,8 @@ test_that("remove and keep spatial features work by key or row id", {
   expect_equal(kept$id, c("A", "C"))
 
   expect_equal(nrow(remove_spatial_features(x, character(), key_col = "id")), 3L)
+  expect_equal(nrow(keep_spatial_features(x, character(), key_col = "id")), 0L)
+  expect_s3_class(keep_spatial_features(x, character(), key_col = "id"), "sf")
 })
 
 test_that("add and replace spatial features preserve target schema", {
@@ -72,4 +82,28 @@ test_that("add and replace spatial features preserve target schema", {
   replaced <- replace_spatial_features(x, "B", replacement, key_col = "id")
   expect_equal(replaced$id, c("A", "B2"))
   expect_equal(replaced$value[replaced$id == "B2"], 20L)
+})
+
+test_that("missing feature attributes retain their vector type", {
+  geometry <- sf::st_sfc(
+    sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0, 0)))),
+    crs = 3857
+  )
+  x <- sf::st_sf(
+    id = "A",
+    metadata = I(list(list(source = "original"))),
+    geometry = geometry
+  )
+  x$area <- sf::st_area(x)
+  feature <- sf::st_sf(
+    id = "B",
+    geometry = geometry + c(2, 0)
+  )
+
+  added <- add_spatial_features(x, feature)
+
+  expect_true(inherits(added$area, "units"))
+  expect_true(is.na(added$area[[2L]]))
+  expect_true(is.list(added$metadata))
+  expect_null(added$metadata[[2L]])
 })

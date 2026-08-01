@@ -12,6 +12,13 @@ test_that("validate_dragmapr_sf flags non-sf and malformed geometry columns", {
   )
   expect_silent(validate_dragmapr_sf(x))
 
+  wrong_type <- structure(
+    data.frame(region = "A", geometry = 1),
+    class = c("sf", "data.frame"),
+    sf_column = "geometry"
+  )
+  expect_error(validate_dragmapr_sf(wrong_type), "must contain an sfc vector")
+
   # Rename the geometry column out from under the active sf_column attribute.
   broken <- x
   names(broken)[names(broken) == "geometry"] <- "geom"

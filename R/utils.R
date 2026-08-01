@@ -19,5 +19,12 @@ validate_dragmapr_sf <- function(x, arg = "x") {
       call. = FALSE
     )
   }
+  if (!inherits(x[[geom_col]], "sfc")) {
+    stop(
+      "`", arg, "` has an invalid active sf geometry column (`", geom_col,
+      "`); it must contain an sfc vector.",
+      call. = FALSE
+    )
+  }
   invisible(x)
 }
