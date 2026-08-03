@@ -97,6 +97,8 @@ and a version number while leaving the source geometry untouched.
 
 ```r
 state <- dragmapr_state(
+  level = "state",
+  region_col = "geoid",
   region_offsets = region_offsets,
   label_offsets = label_offsets,
   crs = 3857,
@@ -117,6 +119,10 @@ render_dragged_map(
 )
 ```
 
+`level` names the active geography. `region_col` is the source column used to
+join offsets back to geometry, so saved state can use stable IDs without tying
+the display label to the data key.
+
 The same object is the handoff point for `explodemap`:
 
 ```r
@@ -127,6 +133,14 @@ layout <- explode_grouped(my_sf, region_col = "region", plot = FALSE)
 state <- as_dragmapr_state(layout)
 
 dragmapr_edit(layout, state = state)
+```
+
+For drill-down apps, keep each level's edits together:
+
+```r
+hierarchy <- dragmapr_hierarchy_state(root = state, active_path = "state")
+hierarchy <- dragmapr_set_child_state(hierarchy, "state:06", county_state)
+county_state <- dragmapr_child_state(hierarchy, "state:06")
 ```
 
 ## Use It In Shiny

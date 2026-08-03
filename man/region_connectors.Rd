@@ -19,7 +19,8 @@ geometry.}
 
 \item{state}{A \code{dragmapr_state}.}
 
-\item{region_col}{Region column in \code{x}. Defaults to \code{state$level}.}
+\item{region_col}{Region column in \code{x}. Defaults to the binding metadata
+stored in \code{state}.}
 
 \item{threshold_m}{Minimum movement distance to mark a connector visible.}
 

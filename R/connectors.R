@@ -7,7 +7,8 @@
 #' @param x An `sf` object, a `dragmapr_layout`, or a layout-like object with sf
 #'   geometry.
 #' @param state A `dragmapr_state`.
-#' @param region_col Region column in `x`. Defaults to `state$level`.
+#' @param region_col Region column in `x`. Defaults to the binding metadata
+#'   stored in `state`.
 #' @param threshold_m Minimum movement distance to mark a connector visible.
 #' @param include_unmoved Include zero-distance rows.
 #' @param as_sf Return an `sf` line layer instead of a plain data frame.
@@ -23,7 +24,7 @@ region_connectors <- function(x,
   state <- validate_dragmapr_state(state)
   sf_obj <- connector_sf_input(x)
   validate_dragmapr_sf(sf_obj)
-  region_col <- region_col %||% state$level
+  region_col <- state_region_col(state, region_col)
   if (!region_col %in% names(sf_obj)) {
     stop("region_col '", region_col, "' not found.", call. = FALSE)
   }

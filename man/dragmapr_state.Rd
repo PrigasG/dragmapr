@@ -6,6 +6,8 @@
 \usage{
 dragmapr_state(
   level = "region",
+  region_col = NULL,
+  label_id_col = NULL,
   region_offsets = NULL,
   label_offsets = NULL,
   expanded_groups = character(),
@@ -14,12 +16,20 @@ dragmapr_state(
   crs = NULL,
   geometry_id = NULL,
   selected_feature = NULL,
-  schema_version = "1.0.0",
+  binding = NULL,
+  schema_version = "1.1.0",
   package_version = as.character(utils::packageVersion("dragmapr"))
 )
 }
 \arguments{
 \item{level}{Character label for the active geography level.}
+
+\item{region_col}{Source-geometry column used to join \code{region_offsets$region}
+back to features. Defaults to \code{level} for old/simple states, but should be
+set explicitly for saved projects and package handoffs.}
+
+\item{label_id_col}{Source or label-table column identifying draggable
+labels.}
 
 \item{region_offsets}{Data frame with \code{region}, \code{dx_m}, and \code{dy_m}.}
 
@@ -49,6 +59,10 @@ it was authored for.}
 selected in a dashboard or editor. Carried so a composition can be
 restored with focus intact.}
 
+\item{binding}{Optional list of binding metadata. When supplied,
+\code{binding$region_col} and \code{binding$label_id_col} are used as defaults for
+the corresponding top-level arguments.}
+
 \item{schema_version}{State schema version. Stored with JSON snapshots so
 future migrations can read older projects.}
 
@@ -67,7 +81,8 @@ renderers.
 \details{
 The state is deliberately geometry-free: it carries \emph{deltas}, not absolute
 geometry, and is bound to features at apply time via a join key. That key is
-the \code{region} column of the offset tables. For durable round-trips prefer a
-stable code (e.g. a FIPS/ISO id) over a display name, and record which
-geometry the state was composed against with \code{geometry_id}.
+recorded in \code{region_col}, while \code{level} remains the human geography level
+label. For durable round-trips prefer a stable code (e.g. a FIPS/ISO id)
+over a display name, and record which geometry the state was composed
+against with \code{geometry_id}.
 }

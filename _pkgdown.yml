@@ -74,6 +74,9 @@ reference:
   - validate_dragmapr_state
   - validate_state_compatibility
   - merge_dragmapr_state
+  - dragmapr_hierarchy_state
+  - dragmapr_set_child_state
+  - validate_dragmapr_hierarchy_state
   - update_region_offset
   - update_label_offset
   - reset_region
@@ -81,6 +84,7 @@ reference:
   - collapse_drag_offsets
   - apply_dragmapr_state
   - snapshot_dragmapr_state
+  - migrate_dragmapr_state
   - write_dragmapr_state
 
 - title: Native widget (htmlwidget and Shiny)

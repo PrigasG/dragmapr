@@ -11,6 +11,8 @@ test_that("dragmapr_state validates and round-trips JSON", {
   expect_s3_class(state, "dragmapr_state")
   expect_equal(state$expanded_groups, c("A", "B"))
   expect_equal(snapshot_dragmapr_state(state)$version, 12L)
+  expect_equal(state$region_col, "division")
+  expect_equal(state$label_id_col, "label_id")
 
   path <- tempfile(fileext = ".json")
   write_dragmapr_state(state, path)
@@ -18,6 +20,7 @@ test_that("dragmapr_state validates and round-trips JSON", {
 
   expect_s3_class(restored, "dragmapr_state")
   expect_equal(restored$level, "division")
+  expect_equal(restored$region_col, "division")
   expect_equal(restored$region_offsets$dx_m, 10)
   expect_equal(restored$label_offsets$label_id, "lbl")
 })
@@ -106,6 +109,25 @@ test_that("older snapshots without new fields still restore", {
   expect_null(restored$crs)
   expect_null(restored$geometry_id)
   expect_null(restored$selected_feature)
+  expect_equal(restored$region_col, "region")
+  expect_equal(restored$schema_version, "1.1.0")
+})
+
+test_that("state binding separates level labels from join columns", {
+  state <- dragmapr_state(
+    level = "ADM1",
+    region_col = "unit_id",
+    region_offsets = data.frame(region = "01", dx_m = 5, dy_m = 0)
+  )
+  x <- sf::st_sf(
+    unit_id = "01",
+    ADM1 = "Alabama",
+    geometry = sf::st_sfc(sf::st_point(c(0, 0)), crs = 3857)
+  )
+
+  out <- apply_dragmapr_state(x, state)
+  expect_equal(unclass(sf::st_geometry(out)[[1]]), c(5, 0))
+  expect_equal(snapshot_dragmapr_state(state)$binding$region_col, "unit_id")
 })
 
 test_that("merge carries crs and geometry_id; level change drops selection", {

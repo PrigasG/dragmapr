@@ -95,6 +95,12 @@ HTMLWidgets.widget({
         package_version: state.packageVersion,
         event: eventType || "state",
         level: state.stateLevel,
+        region_col: state.regionCol,
+        label_id_col: state.labelIdCol,
+        binding: {
+          region_col: state.regionCol,
+          label_id_col: state.labelIdCol
+        },
         crs: state.crs,
         geometry_id: state.geometryId,
         selected_feature: state.selectedFeature || "",
@@ -436,9 +442,11 @@ HTMLWidgets.widget({
       state = {
         generation: x.generation,
         revision: Number(x.revision) || 0,
-        schemaVersion: statePayload.schema_version || "1.0.0",
+        schemaVersion: statePayload.schema_version || "1.1.0",
         packageVersion: statePayload.package_version || "0.0.0",
         stateLevel: statePayload.level || "region",
+        regionCol: statePayload.region_col || (statePayload.binding && statePayload.binding.region_col) || x.regionCol || statePayload.level || "region",
+        labelIdCol: statePayload.label_id_col || (statePayload.binding && statePayload.binding.label_id_col) || x.labelIdCol || "label_id",
         crs: (x.crs != null ? x.crs : statePayload.crs) || null,
         geometryId: (x.geometryId != null ? x.geometryId : statePayload.geometry_id) || null,
         selectedFeature: String(selected),

@@ -171,11 +171,18 @@ read_dragmapr_project <- function(project) {
     labels <- read_optional_project_csv(project_dir, "drag_labels.csv")
   }
   palette <- read_optional_project_csv(project_dir, "palette.csv")
+  state_file <- file.path(project_dir, "state.json")
+  state <- if (file.exists(state_file)) {
+    read_dragmapr_state(state_file)
+  } else {
+    NULL
+  }
 
   list(
     source = sf::st_read(source_file, quiet = TRUE),
     region_offsets = read_optional_project_csv(project_dir, "drag_region_offsets.csv"),
     label_offsets = read_optional_project_csv(project_dir, "drag_label_offsets.csv"),
+    state = state,
     labels = if (is.null(labels)) NULL else as_drag_labels(labels),
     region_palette = project_palette_vector(palette),
     metadata = metadata,

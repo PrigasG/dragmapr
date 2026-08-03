@@ -295,6 +295,8 @@ dragmapr_widget_state <- function(value) {
 
   dragmapr_state(
     level = value$level %||% "region",
+    region_col = value$region_col %||% value$binding$region_col %||% NULL,
+    label_id_col = value$label_id_col %||% value$binding$label_id_col %||% NULL,
     region_offsets = widget_rows_to_df(value$region_offsets),
     label_offsets = widget_rows_to_df(value$label_offsets),
     expanded_groups = expanded,
@@ -303,7 +305,8 @@ dragmapr_widget_state <- function(value) {
     crs = value$crs %||% NULL,
     geometry_id = value$geometry_id %||% NULL,
     selected_feature = selected,
-    schema_version = value$schema_version %||% "1.0.0",
+    binding = value$binding %||% NULL,
+    schema_version = value$schema_version %||% "1.1.0",
     package_version = value$package_version %||% "0.0.0"
   )
 }
@@ -359,11 +362,30 @@ dragmapr_widget_payload <- function(x, region_col, label_col, labels, state,
 
   state <- if (is.null(state)) {
     dragmapr_state(
+      region_col = region_col,
+      label_id_col = "label_id",
       region_offsets = data.frame(region = character(), dx_m = numeric(), dy_m = numeric()),
       label_offsets = data.frame(label_id = character(), region = character(), dx_m = numeric(), dy_m = numeric())
     )
   } else {
     validate_dragmapr_state(state)
+  }
+  if (!identical(state$region_col, region_col)) {
+    state <- dragmapr_state(
+      level = state$level,
+      region_col = region_col,
+      label_id_col = state$label_id_col,
+      region_offsets = state$region_offsets,
+      label_offsets = state$label_offsets,
+      expanded_groups = state$expanded_groups,
+      view = state$view,
+      version = state$version,
+      crs = state$crs,
+      geometry_id = state$geometry_id,
+      selected_feature = state$selected_feature,
+      schema_version = state$schema_version,
+      package_version = state$package_version
+    )
   }
 
   state_payload <- snapshot_dragmapr_state(state)
@@ -377,6 +399,8 @@ dragmapr_widget_payload <- function(x, region_col, label_col, labels, state,
     crs = state$crs,
     geometryId = state$geometry_id,
     selectedFeature = state$selected_feature %||% "",
+    regionCol = state$region_col,
+    labelIdCol = state$label_id_col,
     geojson = geojson,
     labels = dataframe_records(label_data),
     state = state_payload,

@@ -8,11 +8,17 @@
 #'
 #' The state is deliberately geometry-free: it carries *deltas*, not absolute
 #' geometry, and is bound to features at apply time via a join key. That key is
-#' the `region` column of the offset tables. For durable round-trips prefer a
-#' stable code (e.g. a FIPS/ISO id) over a display name, and record which
-#' geometry the state was composed against with `geometry_id`.
+#' recorded in `region_col`, while `level` remains the human geography level
+#' label. For durable round-trips prefer a stable code (e.g. a FIPS/ISO id)
+#' over a display name, and record which geometry the state was composed
+#' against with `geometry_id`.
 #'
 #' @param level Character label for the active geography level.
+#' @param region_col Source-geometry column used to join `region_offsets$region`
+#'   back to features. Defaults to `level` for old/simple states, but should be
+#'   set explicitly for saved projects and package handoffs.
+#' @param label_id_col Source or label-table column identifying draggable
+#'   labels.
 #' @param region_offsets Data frame with `region`, `dx_m`, and `dy_m`.
 #' @param label_offsets Data frame with `label_id`, `region`, `dx_m`, and
 #'   `dy_m`.
@@ -33,6 +39,9 @@
 #' @param selected_feature Optional single string naming the feature currently
 #'   selected in a dashboard or editor. Carried so a composition can be
 #'   restored with focus intact.
+#' @param binding Optional list of binding metadata. When supplied,
+#'   `binding$region_col` and `binding$label_id_col` are used as defaults for
+#'   the corresponding top-level arguments.
 #' @param schema_version State schema version. Stored with JSON snapshots so
 #'   future migrations can read older projects.
 #' @param package_version Package version that created the state.
@@ -40,6 +49,8 @@
 #' @return An object of class `"dragmapr_state"`.
 #' @export
 dragmapr_state <- function(level = "region",
+                           region_col = NULL,
+                           label_id_col = NULL,
                            region_offsets = NULL,
                            label_offsets = NULL,
                            expanded_groups = character(),
@@ -48,7 +59,8 @@ dragmapr_state <- function(level = "region",
                            crs = NULL,
                            geometry_id = NULL,
                            selected_feature = NULL,
-                           schema_version = "1.0.0",
+                           binding = NULL,
+                           schema_version = "1.1.0",
                            package_version = as.character(utils::packageVersion("dragmapr"))) {
   if (!is.character(level) || length(level) != 1L || is.na(level) || !nzchar(level)) {
     stop("`level` must be a single non-empty string.", call. = FALSE)
@@ -75,6 +87,9 @@ dragmapr_state <- function(level = "region",
   crs <- normalize_state_crs(crs)
   geometry_id <- normalize_state_scalar(geometry_id, "geometry_id")
   selected_feature <- normalize_state_scalar(selected_feature, "selected_feature")
+  binding <- normalize_state_binding(binding, region_col, label_id_col, level)
+  region_col <- binding$region_col
+  label_id_col <- binding$label_id_col
   schema_version <- normalize_state_scalar(schema_version, "schema_version")
   package_version <- normalize_state_scalar(package_version, "package_version")
 
@@ -89,6 +104,9 @@ dragmapr_state <- function(level = "region",
       crs = crs,
       geometry_id = geometry_id,
       selected_feature = selected_feature,
+      region_col = region_col,
+      label_id_col = label_id_col,
+      binding = binding,
       schema_version = schema_version,
       package_version = package_version
     ),
@@ -137,6 +155,29 @@ normalize_state_scalar <- function(x, arg) {
   x
 }
 
+normalize_state_binding <- function(binding = NULL,
+                                    region_col = NULL,
+                                    label_id_col = NULL,
+                                    level = "region") {
+  if (!is.null(binding) && !is.list(binding)) {
+    stop("`binding` must be NULL or a list.", call. = FALSE)
+  }
+  region_col <- region_col %||% binding$region_col %||% level
+  label_id_col <- label_id_col %||% binding$label_id_col %||% "label_id"
+  list(
+    region_col = normalize_state_scalar(region_col, "region_col"),
+    label_id_col = normalize_state_scalar(label_id_col, "label_id_col")
+  )
+}
+
+state_region_col <- function(state, region_col = NULL, required = TRUE) {
+  region_col <- region_col %||% state$region_col %||% state$binding$region_col %||% state$level
+  if (isTRUE(required)) {
+    region_col <- normalize_state_scalar(region_col, "region_col")
+  }
+  region_col
+}
+
 #' Validate a dragmapr state object
 #'
 #' @param state A `dragmapr_state` object.
@@ -157,7 +198,10 @@ validate_dragmapr_state <- function(state) {
     crs = state$crs,
     geometry_id = state$geometry_id,
     selected_feature = state$selected_feature,
-    schema_version = state$schema_version %||% "1.0.0",
+    region_col = state$region_col %||% state$binding$region_col %||% state$level,
+    label_id_col = state$label_id_col %||% state$binding$label_id_col %||% "label_id",
+    binding = state$binding,
+    schema_version = state$schema_version %||% "1.1.0",
     package_version = state$package_version %||% "0.0.0"
   )
 }
@@ -372,6 +416,8 @@ merge_dragmapr_state <- function(state, update) {
   label_offsets <- merge_state_rows(state$label_offsets, update$label_offsets, "label_id")
   dragmapr_state(
     level = update$level %||% state$level,
+    region_col = update$region_col %||% state$region_col,
+    label_id_col = update$label_id_col %||% state$label_id_col,
     region_offsets = region_offsets,
     label_offsets = label_offsets,
     expanded_groups = update$expanded_groups,
@@ -396,9 +442,12 @@ merge_state_rows <- function(base, update, key) {
 #'
 #' @param state A `dragmapr_state` object.
 #' @param snapshot A list previously returned by `snapshot_dragmapr_state()`.
+#' @param target_schema_version Schema version to migrate snapshots to before
+#'   restoring.
 #'
 #' @return `snapshot_dragmapr_state()` returns a plain list.
 #'   `restore_dragmapr_state()` returns a `dragmapr_state`.
+#'   `migrate_dragmapr_state()` returns a migrated plain list.
 #' @export
 snapshot_dragmapr_state <- function(state) {
   state <- validate_dragmapr_state(state)
@@ -410,12 +459,46 @@ snapshot_dragmapr_state <- function(state) {
 
 #' @rdname snapshot_dragmapr_state
 #' @export
+migrate_dragmapr_state <- function(snapshot, target_schema_version = "1.1.0") {
+  if (inherits(snapshot, "dragmapr_state")) {
+    snapshot <- snapshot_dragmapr_state(snapshot)
+  }
+  if (!is.list(snapshot)) {
+    stop("`snapshot` must be a list.", call. = FALSE)
+  }
+  target_schema_version <- normalize_state_scalar(target_schema_version, "target_schema_version")
+  current <- snapshot$schema_version %||% "1.0.0"
+  if (utils::compareVersion(current, target_schema_version) > 0L) {
+    stop(
+      "State schema version ", current, " is newer than this package supports (",
+      target_schema_version, ").",
+      call. = FALSE
+    )
+  }
+  binding <- normalize_state_binding(
+    snapshot$binding,
+    snapshot$region_col,
+    snapshot$label_id_col,
+    snapshot$level %||% "region"
+  )
+  snapshot$region_col <- binding$region_col
+  snapshot$label_id_col <- binding$label_id_col
+  snapshot$binding <- binding
+  snapshot$schema_version <- target_schema_version
+  snapshot
+}
+
+#' @rdname snapshot_dragmapr_state
+#' @export
 restore_dragmapr_state <- function(snapshot) {
   if (!is.list(snapshot)) {
     stop("`snapshot` must be a list.", call. = FALSE)
   }
+  snapshot <- migrate_dragmapr_state(snapshot)
   dragmapr_state(
     level = snapshot$level %||% "region",
+    region_col = snapshot$region_col,
+    label_id_col = snapshot$label_id_col,
     region_offsets = restore_state_table(snapshot$region_offsets, "region"),
     label_offsets = restore_state_table(snapshot$label_offsets, "label"),
     expanded_groups = snapshot$expanded_groups %||% character(),
@@ -424,7 +507,8 @@ restore_dragmapr_state <- function(snapshot) {
     crs = snapshot$crs %||% NULL,
     geometry_id = snapshot$geometry_id %||% NULL,
     selected_feature = snapshot$selected_feature %||% NULL,
-    schema_version = snapshot$schema_version %||% "1.0.0",
+    binding = snapshot$binding %||% NULL,
+    schema_version = snapshot$schema_version %||% "1.1.0",
     package_version = snapshot$package_version %||% "0.0.0"
   )
 }
@@ -490,12 +574,14 @@ read_dragmapr_state <- function(path) {
 #'
 #' @param x An `sf` object.
 #' @param state A `dragmapr_state` object.
-#' @param region_col Column in `x` defining draggable groups.
+#' @param region_col Column in `x` defining draggable groups. Defaults to the
+#'   binding metadata stored in `state`.
 #'
 #' @return An `sf` object with region offsets applied.
 #' @export
-apply_dragmapr_state <- function(x, state, region_col) {
+apply_dragmapr_state <- function(x, state, region_col = NULL) {
   state <- validate_dragmapr_state(state)
+  region_col <- state_region_col(state, region_col)
   if (!is.null(state$crs) && inherits(x, "sf")) {
     target <- sf::st_crs(x)
     authored <- tryCatch(sf::st_crs(state$crs), error = function(e) NA)
@@ -539,6 +625,8 @@ inherit_drag_offsets <- function(state, from, to, relation) {
   )
   dragmapr_state(
     level = to,
+    region_col = to,
+    label_id_col = state$label_id_col,
     region_offsets = out[, c("region", "dx_m", "dy_m")],
     label_offsets = state$label_offsets,
     expanded_groups = state$expanded_groups,
@@ -585,6 +673,8 @@ collapse_drag_offsets <- function(state, from, to, relation, method = "centroid"
   }
   dragmapr_state(
     level = to,
+    region_col = to,
+    label_id_col = state$label_id_col,
     region_offsets = offsets,
     label_offsets = state$label_offsets,
     expanded_groups = character(),
@@ -746,8 +836,8 @@ reset_all <- function(state) {
 #'
 #' @param x An `sf` object or layout-like object.
 #' @param state A `dragmapr_state`.
-#' @param region_col Region column in `x`. Defaults to `state$level` when
-#'   available.
+#' @param region_col Region column in `x`. Defaults to the binding metadata
+#'   stored in `state`.
 #' @param geometry_id Optional expected geometry ID or fingerprint.
 #' @param strict Treat warnings as invalid.
 #'
@@ -761,7 +851,7 @@ validate_state_compatibility <- function(x,
   state <- validate_dragmapr_state(state)
   strict <- flag_scalar(strict, "`strict`")
   sf_obj <- coerce_compatibility_sf(x)
-  region_col <- region_col %||% state$level
+  region_col <- state_region_col(state, region_col)
   errors <- character()
   warnings <- character()
   recommendations <- character()

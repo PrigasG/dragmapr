@@ -17,8 +17,8 @@ validate_state_compatibility(
 
 \item{state}{A \code{dragmapr_state}.}
 
-\item{region_col}{Region column in \code{x}. Defaults to \code{state$level} when
-available.}
+\item{region_col}{Region column in \code{x}. Defaults to the binding metadata
+stored in \code{state}.}
 
 \item{geometry_id}{Optional expected geometry ID or fingerprint.}
 

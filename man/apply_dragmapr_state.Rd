@@ -4,14 +4,15 @@
 \alias{apply_dragmapr_state}
 \title{Apply a dragmapr state to sf geometry}
 \usage{
-apply_dragmapr_state(x, state, region_col)
+apply_dragmapr_state(x, state, region_col = NULL)
 }
 \arguments{
 \item{x}{An \code{sf} object.}
 
 \item{state}{A \code{dragmapr_state} object.}
 
-\item{region_col}{Column in \code{x} defining draggable groups.}
+\item{region_col}{Column in \code{x} defining draggable groups. Defaults to the
+binding metadata stored in \code{state}.}
 }
 \value{
 An \code{sf} object with region offsets applied.

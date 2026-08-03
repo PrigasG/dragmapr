@@ -1,6 +1,7 @@
 ^.*\.Rproj$
 ^\.git
 ^\.git/
+^\.git($|[\\/])
 ^\.Rproj\.user$
 ^_pkgdown\.yml$
 ^ROADMAP\.md$

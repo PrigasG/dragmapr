@@ -2,10 +2,13 @@
 % Please edit documentation in R/state.R
 \name{snapshot_dragmapr_state}
 \alias{snapshot_dragmapr_state}
+\alias{migrate_dragmapr_state}
 \alias{restore_dragmapr_state}
 \title{Snapshot or restore dragmapr state}
 \usage{
 snapshot_dragmapr_state(state)
+
+migrate_dragmapr_state(snapshot, target_schema_version = "1.1.0")
 
 restore_dragmapr_state(snapshot)
 }
@@ -13,10 +16,14 @@ restore_dragmapr_state(snapshot)
 \item{state}{A \code{dragmapr_state} object.}
 
 \item{snapshot}{A list previously returned by \code{snapshot_dragmapr_state()}.}
+
+\item{target_schema_version}{Schema version to migrate snapshots to before
+restoring.}
 }
 \value{
 \code{snapshot_dragmapr_state()} returns a plain list.
 \code{restore_dragmapr_state()} returns a \code{dragmapr_state}.
+\code{migrate_dragmapr_state()} returns a migrated plain list.
 }
 \description{
 Snapshot or restore dragmapr state
