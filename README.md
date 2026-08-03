@@ -161,7 +161,9 @@ server <- function(input, output, session) {
       regions,
       region_col = "region",
       state = current_state(),
-      show_origin_outlines = input$origin
+      display_options = dragmapr_display_options(
+        show_origin_outlines = isTRUE(input$origin)
+      )
     )
   })
 
@@ -323,4 +325,6 @@ large files, simplify or group features first so dragging stays responsive.
 
 The package supports both paths: quick standalone HTML for one-off layout work,
 and native Shiny/htmlwidget state for applications that need Undo, live display
-updates, geography removal, and reproducible export.
+updates, geography removal, and reproducible export. The common thread is that
+every edit is visible as data: an offset table, a state JSON file, or an edited
+`sf` object you can inspect before you publish the final map.

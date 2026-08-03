@@ -75,8 +75,10 @@ output$map <- renderDragmapr({
     regions,
     region_col = "region",
     labels = labels,
-    connector_endpoint = "arrow",
-    connector_smart = TRUE
+    display_options = dragmapr_display_options(
+      connector_color = "#334155",
+      connector_linewidth = 1.3
+    )
   )
 })
 ```
@@ -199,19 +201,45 @@ label type are shown: text size is always visible; marker size (width + height)
 appears only for rounded-box labels; circle radius only for circle labels; box
 dimensions only for info boxes.
 
+The geography editing panel is ordinary Shiny state, so Undo can restore a
+mistaken deletion:
+
+```{r, eval = FALSE}
+observeEvent(input$remove_selected_geography, {
+  key <- selected_geography_key()
+  showModal(modalDialog(
+    title = "Remove selected geography?",
+    sprintf("Remove %s from the working spatial file?", key),
+    footer = tagList(
+      modalButton("Cancel"),
+      actionButton("confirm_remove_selected_geography", "Remove")
+    )
+  ))
+})
+
+observeEvent(input$confirm_remove_selected_geography, {
+  push_history(state_snapshot(include_source = TRUE))
+  set_source(remove_spatial_features(
+    state$source,
+    ids = selected_geography_key(),
+    key_col = effective_region_col()
+  ))
+})
+```
+
 Available downloads from the studio sidebar:
 
-- **PNG** — static render from `render_dragged_map()`
-- **Region CSV** — current region offsets, importable by any later session
-- **Label CSV** — current label offsets
-- **Labels table** — current label geometry and edited label text
-- **GeoJSON / GPKG** — the adjusted sf geometry with offsets applied
-- **HTML helper** — the standalone D3 drag file you can share or reopen
-- **Project ZIP** — source geometry, offsets, labels, `palette.csv`,
+- **PNG** - static render from `render_dragged_map()`
+- **Region CSV** - current region offsets, importable by any later session
+- **Label CSV** - current label offsets
+- **Labels table** - current label geometry and edited label text
+- **GeoJSON / GPKG** - the adjusted sf geometry with offsets applied
+- **HTML helper** - the standalone D3 drag file you can share or reopen
+- **Project ZIP** - source geometry, offsets, labels, `palette.csv`,
   `metadata.json`, and `recreate-static-map.R`; enough to reopen the project in
   Spatial Studio, reconstruct the layout in a new session, including legend and
   label selections plus movement context settings, or hand off to a collaborator
-- **Static bundle** — the project bundle plus ready-to-share PNG and PDF files
+- **Static bundle** - the project bundle plus ready-to-share PNG and PDF files
 
 Spatial Studio intentionally keeps its adjusted-geometry exports focused on
 GeoJSON and GeoPackage. If another shape format is needed, download either
@@ -246,12 +274,12 @@ When launched with `?debug=1`, the app includes a State tab that names its
 central reactive values so they are easy to find when adapting the code:
 
 - `source_sf()` - raw sf from upload / demo / project bundle
-- `projected_sf()` — after `prepare_dragmapr_sf()`
-- `region_col()`, `label_col()` — chosen columns
-- `label_table()` — styled label data frame passed to `drag_map_prototype()`
-- `region_state()`, `label_state()` — current drag offsets as data frames
-- `region_palette()` — named colour vector
-- `current_plot()` — `ggplot2` object ready to save
+- `projected_sf()` - after `prepare_dragmapr_sf()`
+- `region_col()`, `label_col()` - chosen columns
+- `label_table()` - styled label data frame passed to `drag_map_prototype()`
+- `region_state()`, `label_state()` - current drag offsets as data frames
+- `region_palette()` - named colour vector
+- `current_plot()` - `ggplot2` object ready to save
 
 ### Removing geography
 
@@ -364,7 +392,7 @@ never displaces regions that you have not personally dragged in that column:
 
 - **Coarser → finer** (e.g. HHS region → state name): the finer column resumes
   its own last saved layout. If you have not visited it before, all fine units
-  start at their natural geographic positions — they are **not** displaced by
+  start at their natural geographic positions - they are **not** displaced by
   the parent column's drag offsets.
 
 - **Finer → coarser** (e.g. state name → HHS region): each parent group is
@@ -380,7 +408,7 @@ column (individual states). A typical workflow:
 1. Set **Group column** to `hhs_region`. Drag the ten regions into an exploded
    layout.
 2. Switch to `NAME`. The states appear at their **natural positions** (first
-   visit) — ready for individual fine-tuning without any carry-over from the
+   visit) - ready for individual fine-tuning without any carry-over from the
    HHS drag.
 3. Fine-tune individual states as needed.
 4. Switch back to `hhs_region`. Each region lands at the mean of its states'
@@ -392,8 +420,8 @@ column (individual states). A typical workflow:
 |---|---|
 | Region offsets (coarser→finer) | Restored to that column's last saved positions, or zero if never visited |
 | Region offsets (finer→coarser) | Average of children's positions, or restored to parent's last position |
-| Label offsets | Reset — label IDs are derived from the new column's region names |
-| Undo / redo stack | Reset — new column starts with a clean history |
+| Label offsets | Reset - label IDs are derived from the new column's region names |
+| Undo / redo stack | Reset - new column starts with a clean history |
 | Region palette | Preserved |
 | Legend and label filter selections | Preserved |
 
@@ -401,7 +429,7 @@ column (individual states). A typical workflow:
 
 The only step that involves averaging is **finer → coarser**. If all child
 regions had identical offsets, the round-trip is lossless. Mixed individual child
-moves are summarized into an average for the parent — or you can choose
+moves are summarized into an average for the parent - or you can choose
 **"Restore parent's last position"** to skip averaging and return the parent to
 exactly where it was.
 

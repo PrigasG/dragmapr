@@ -866,6 +866,7 @@ server <- function(input, output, session) {
                        source = MAP_SOURCES[[1]], level = "county",
                        key = NULL, saved = list(), fallback = NULL,
                        palette = NULL, egen = 0L,
+                       editor_generation = NULL,
                        undo_stack = list(), redo_stack = list())
 
   upload_source <- reactiveValues(path = NULL, name = NULL, size = NULL,
@@ -928,6 +929,7 @@ server <- function(input, output, session) {
     rv$key <- key
     rv$undo_stack <- list()
     rv$redo_stack <- list()
+    rv$editor_generation <- NULL
     rv$egen <- rv$egen + 1L
     regions <- sort(unique(as.character(rv$state$region_offsets$region)))
     updateSelectInput(session, "sel_region", choices = regions)
@@ -967,6 +969,7 @@ server <- function(input, output, session) {
     rv$level <- snapshot$level
     rv$key <- snapshot$key
     rv$fallback <- snapshot$fallback
+    rv$editor_generation <- NULL
     rv$egen <- rv$egen + 1L
     regions <- sort(unique(as.character(rv$draft$region_offsets$region)))
     selected <- rv$draft$selected_feature %||%
@@ -1594,8 +1597,26 @@ server <- function(input, output, session) {
   # instead of flashing blank when you switch to Refine.
   outputOptions(output, "editor", suspendWhenHidden = FALSE)
 
+  current_editor_generation <- function() {
+    rv$editor_generation %||% (input$editor_ready$generation %||% NULL)
+  }
+
+  is_current_editor_message <- function(value) {
+    if (is.null(value) || is.null(value$generation)) return(TRUE)
+    active <- current_editor_generation()
+    is.null(active) || identical(as.character(value$generation), as.character(active))
+  }
+
+  observeEvent(input$editor_ready, {
+    ready <- input$editor_ready
+    if (!is.null(ready$generation)) {
+      rv$editor_generation <- ready$generation
+    }
+  }, ignoreInit = TRUE)
+
   # Every browser edit rebuilds the draft (not the canonical state).
   observeEvent(input$editor_state, {
+    if (!is_current_editor_message(input$editor_state)) return()
     edit <- dragmapr_widget_state(input$editor_state)
     if (!is.null(edit)) rv$draft <- edit
   })
@@ -1604,22 +1625,32 @@ server <- function(input, output, session) {
 
   # Live display toggles - update in place, never rebuild (edits are preserved).
   observeEvent(input$show_origin, {
-    updateDragmapr(session, "editor", show_origin_outlines = isTRUE(input$show_origin))
+    updateDragmapr(session, "editor",
+                   show_origin_outlines = isTRUE(input$show_origin),
+                   generation = current_editor_generation())
   }, ignoreInit = TRUE)
   observeEvent(input$show_connectors, {
-    updateDragmapr(session, "editor", show_movement_connectors = isTRUE(input$show_connectors))
+    updateDragmapr(session, "editor",
+                   show_movement_connectors = isTRUE(input$show_connectors),
+                   generation = current_editor_generation())
   }, ignoreInit = TRUE)
   observeEvent(input$show_trail, {
-    updateDragmapr(session, "editor", show_drag_trail = isTRUE(input$show_trail))
+    updateDragmapr(session, "editor",
+                   show_drag_trail = isTRUE(input$show_trail),
+                   generation = current_editor_generation())
   }, ignoreInit = TRUE)
   observeEvent(input$map_bg, {
-    updateDragmapr(session, "editor", map_background = input$map_bg)
+    updateDragmapr(session, "editor",
+                   map_background = input$map_bg,
+                   generation = current_editor_generation())
   }, ignoreInit = TRUE)
 
   # Selecting a region immediately highlights it in the editor (no extra click).
   observeEvent(input$sel_region, {
     req(input$sel_region)
-    updateDragmapr(session, "editor", selected_feature = input$sel_region)
+    updateDragmapr(session, "editor",
+                   selected_feature = input$sel_region,
+                   generation = current_editor_generation())
   }, ignoreInit = TRUE)
 
   output$selected_feature_table <- renderTable({
@@ -1662,11 +1693,14 @@ server <- function(input, output, session) {
   observeEvent(input$confirm_delete_selected_region, {
     removeModal()
     selected <- input$sel_region %||% rv$draft$selected_feature
-    updateDragmapr(session, "editor", remove_features = selected)
+    updateDragmapr(session, "editor",
+                   remove_features = selected,
+                   generation = current_editor_generation())
     delete_regions_from_layout(selected)
   }, ignoreInit = TRUE)
 
   observeEvent(input$editor_feature_delete, {
+    if (!is_current_editor_message(input$editor_feature_delete)) return()
     deleted <- input$editor_feature_delete$removed_features %||% character()
     if (length(deleted)) {
       delete_regions_from_layout(deleted)

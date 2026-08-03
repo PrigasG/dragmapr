@@ -4,7 +4,7 @@
 \alias{updateDragmapr}
 \title{Update a dragmapr widget in place}
 \usage{
-updateDragmapr(session, outputId, ...)
+updateDragmapr(session, outputId, ..., generation = NULL, revision = NULL)
 }
 \arguments{
 \item{session}{Shiny session.}
@@ -17,6 +17,12 @@ updateDragmapr(session, outputId, ...)
 current selection. Use \code{remove_features = c(...)} to remove one or more
 feature ids from the live widget, or \code{delete_selected = TRUE} to remove
 the current selection.}
+
+\item{generation}{Optional widget generation token. When supplied, the
+browser ignores the update unless it targets the active render generation.}
+
+\item{revision}{Optional server-side revision token to echo in the widget
+acknowledgement input.}
 }
 \value{
 Invisibly returns the sent message.

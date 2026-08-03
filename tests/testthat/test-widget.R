@@ -113,7 +113,15 @@ test_that("updateDragmapr routes selected_feature as a composition update", {
   deleted <- updateDragmapr(session, "map", delete_selected = TRUE)
   expect_true(deleted$deleteSelected)
 
+  targeted <- updateDragmapr(session, "map", show_drag_trail = FALSE,
+                             generation = 42, revision = 11)
+  expect_equal(targeted$generation, 42)
+  expect_equal(targeted$serverRevision, 11)
+  expect_equal(sent$message$generation, 42)
+  expect_equal(sent$message$serverRevision, 11)
+
   expect_error(updateDragmapr(session, "map", delete_selected = NA), "TRUE or FALSE")
+  expect_error(updateDragmapr(session, "map", generation = NA), "generation")
 })
 
 test_that("dragmapr_edit accepts sf and layout-shaped inputs", {
@@ -153,6 +161,8 @@ test_that("dragmapr_widget_state ingests a browser state event", {
   # no selection.
   value <- list(
     event = "region_click",
+    schema_version = "1.0.0",
+    package_version = "0.2.0",
     level = "division",
     revision = 17,
     crs = 3857,
@@ -174,6 +184,8 @@ test_that("dragmapr_widget_state ingests a browser state event", {
   expect_equal(state$version, 17L)
   expect_equal(state$crs, 3857L)
   expect_equal(state$geometry_id, "hhs-2026")
+  expect_equal(state$schema_version, "1.0.0")
+  expect_equal(state$package_version, "0.2.0")
   expect_equal(state$selected_feature, "North")
   expect_equal(state$region_offsets$dx_m[state$region_offsets$region == "North"], 10)
   expect_equal(nrow(state$label_offsets), 0L)

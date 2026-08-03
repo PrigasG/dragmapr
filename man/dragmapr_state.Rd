@@ -13,7 +13,9 @@ dragmapr_state(
   version = 0L,
   crs = NULL,
   geometry_id = NULL,
-  selected_feature = NULL
+  selected_feature = NULL,
+  schema_version = "1.0.0",
+  package_version = as.character(utils::packageVersion("dragmapr"))
 )
 }
 \arguments{
@@ -46,6 +48,11 @@ it was authored for.}
 \item{selected_feature}{Optional single string naming the feature currently
 selected in a dashboard or editor. Carried so a composition can be
 restored with focus intact.}
+
+\item{schema_version}{State schema version. Stored with JSON snapshots so
+future migrations can read older projects.}
+
+\item{package_version}{Package version that created the state.}
 }
 \value{
 An object of class \code{"dragmapr_state"}.

@@ -91,6 +91,8 @@ HTMLWidgets.widget({
         widget_id: el.id,
         generation: state.generation,
         revision: state.revision,
+        schema_version: state.schemaVersion,
+        package_version: state.packageVersion,
         event: eventType || "state",
         level: state.stateLevel,
         crs: state.crs,
@@ -434,6 +436,8 @@ HTMLWidgets.widget({
       state = {
         generation: x.generation,
         revision: Number(x.revision) || 0,
+        schemaVersion: statePayload.schema_version || "1.0.0",
+        packageVersion: statePayload.package_version || "0.0.0",
         stateLevel: statePayload.level || "region",
         crs: (x.crs != null ? x.crs : statePayload.crs) || null,
         geometryId: (x.geometryId != null ? x.geometryId : statePayload.geometry_id) || null,
@@ -485,7 +489,17 @@ HTMLWidgets.widget({
         widget_id: el.id,
         generation: state.generation,
         revision: state.revision,
+        schema_version: state.schemaVersion,
+        package_version: state.packageVersion,
+        event: "ready",
         ready: true
+      });
+      sendInput("ack", {
+        widget_id: el.id,
+        generation: state.generation,
+        revision: state.revision,
+        event: "ready",
+        accepted: true
       });
       snapshot("ready");
     }
@@ -502,6 +516,19 @@ HTMLWidgets.widget({
       },
       update: function(message) {
         if (!state) return;
+        if (message && message.generation != null &&
+            String(message.generation) !== String(state.generation)) {
+          sendInput("ack", {
+            widget_id: el.id,
+            generation: state.generation,
+            revision: state.revision,
+            server_revision: message && message.serverRevision != null ? message.serverRevision : null,
+            event: "update",
+            accepted: false,
+            reason: "stale-generation"
+          });
+          return;
+        }
         applyDisplay((message && message.display) || {});
         if (message && Object.prototype.hasOwnProperty.call(message, "selectedFeature")) {
           if (setSelection(message.selectedFeature)) {
@@ -514,6 +541,14 @@ HTMLWidgets.widget({
         if (message && message.deleteSelected === true && state.selectedFeature) {
           removeFeatures([state.selectedFeature], "featuredelete");
         }
+        sendInput("ack", {
+          widget_id: el.id,
+          generation: state.generation,
+          revision: state.revision,
+          server_revision: message && message.serverRevision != null ? message.serverRevision : null,
+          event: "update",
+          accepted: true
+        });
       }
     };
   }

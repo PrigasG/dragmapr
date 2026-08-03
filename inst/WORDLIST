@@ -14,6 +14,7 @@ GPKG
 GeoJSON
 GeoPackage
 Heer
+LFS
 Mapshaper
 Ogievetsky
 POSIXct
@@ -27,6 +28,7 @@ UI
 WKT
 addin
 addins
+acknowledgement
 bbox
 behaviour
 callout

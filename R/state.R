@@ -33,6 +33,9 @@
 #' @param selected_feature Optional single string naming the feature currently
 #'   selected in a dashboard or editor. Carried so a composition can be
 #'   restored with focus intact.
+#' @param schema_version State schema version. Stored with JSON snapshots so
+#'   future migrations can read older projects.
+#' @param package_version Package version that created the state.
 #'
 #' @return An object of class `"dragmapr_state"`.
 #' @export
@@ -44,7 +47,9 @@ dragmapr_state <- function(level = "region",
                            version = 0L,
                            crs = NULL,
                            geometry_id = NULL,
-                           selected_feature = NULL) {
+                           selected_feature = NULL,
+                           schema_version = "1.0.0",
+                           package_version = as.character(utils::packageVersion("dragmapr"))) {
   if (!is.character(level) || length(level) != 1L || is.na(level) || !nzchar(level)) {
     stop("`level` must be a single non-empty string.", call. = FALSE)
   }
@@ -70,6 +75,8 @@ dragmapr_state <- function(level = "region",
   crs <- normalize_state_crs(crs)
   geometry_id <- normalize_state_scalar(geometry_id, "geometry_id")
   selected_feature <- normalize_state_scalar(selected_feature, "selected_feature")
+  schema_version <- normalize_state_scalar(schema_version, "schema_version")
+  package_version <- normalize_state_scalar(package_version, "package_version")
 
   structure(
     list(
@@ -81,7 +88,9 @@ dragmapr_state <- function(level = "region",
       version = version,
       crs = crs,
       geometry_id = geometry_id,
-      selected_feature = selected_feature
+      selected_feature = selected_feature,
+      schema_version = schema_version,
+      package_version = package_version
     ),
     class = "dragmapr_state"
   )
@@ -147,7 +156,9 @@ validate_dragmapr_state <- function(state) {
     version = state$version,
     crs = state$crs,
     geometry_id = state$geometry_id,
-    selected_feature = state$selected_feature
+    selected_feature = state$selected_feature,
+    schema_version = state$schema_version %||% "1.0.0",
+    package_version = state$package_version %||% "0.0.0"
   )
 }
 
@@ -187,6 +198,14 @@ dragmapr_state_diff <- function(draft,
     key = "label_id",
     tolerance = tolerance
   )
+  draft_regions <- as.character(draft$region_offsets$region)
+  canonical_regions <- as.character(canonical$region_offsets$region)
+  draft_labels <- as.character(draft$label_offsets$label_id)
+  canonical_labels <- as.character(canonical$label_offsets$label_id)
+  added_regions <- setdiff(draft_regions, canonical_regions)
+  removed_regions <- setdiff(canonical_regions, draft_regions)
+  added_labels <- setdiff(draft_labels, canonical_labels)
+  removed_labels <- setdiff(canonical_labels, draft_labels)
 
   selected_feature_changed <- !identical(draft$selected_feature, canonical$selected_feature)
   viewport_changed <- !identical(draft$view, canonical$view)
@@ -212,6 +231,12 @@ dragmapr_state_diff <- function(draft,
       label_count = nrow(label_changes),
       regions = region_changes,
       labels = label_changes,
+      moved_regions = region_changes,
+      moved_labels = label_changes,
+      added_regions = added_regions,
+      removed_regions = removed_regions,
+      added_labels = added_labels,
+      removed_labels = removed_labels,
       changed_regions = region_changes$region,
       changed_labels = label_changes$label_id,
       selected_feature_changed = selected_feature_changed,
@@ -220,6 +245,14 @@ dragmapr_state_diff <- function(draft,
       geometry_id_changed = geometry_id_changed,
       crs_changed = crs_changed,
       version_changed = version_changed,
+      summary = list(
+        region_changes = nrow(region_changes),
+        label_changes = nrow(label_changes),
+        added_regions = length(added_regions),
+        removed_regions = length(removed_regions),
+        added_labels = length(added_labels),
+        removed_labels = length(removed_labels)
+      ),
       compare = compare,
       tolerance = tolerance
     ),
@@ -390,7 +423,9 @@ restore_dragmapr_state <- function(snapshot) {
     version = snapshot$version %||% 0L,
     crs = snapshot$crs %||% NULL,
     geometry_id = snapshot$geometry_id %||% NULL,
-    selected_feature = snapshot$selected_feature %||% NULL
+    selected_feature = snapshot$selected_feature %||% NULL,
+    schema_version = snapshot$schema_version %||% "1.0.0",
+    package_version = snapshot$package_version %||% "0.0.0"
   )
 }
 
@@ -580,4 +615,293 @@ validate_offset_relation <- function(relation, from, to) {
   relation[[to]] <- as.character(relation[[to]])
   relation <- relation[nzchar(relation[[from]]) & nzchar(relation[[to]]), , drop = FALSE]
   unique(relation)
+}
+
+#' Safely update region offsets in a dragmapr state
+#'
+#' @param state A `dragmapr_state`.
+#' @param region Region ID to update.
+#' @param dx_m,dy_m New or incremental offsets. `NULL` preserves the current
+#'   value for that axis.
+#' @param mode `"replace"` sets the supplied values; `"increment"` adds them to
+#'   the current values.
+#'
+#' @return An updated `dragmapr_state` with a bumped version.
+#' @export
+update_region_offset <- function(state,
+                                 region,
+                                 dx_m = NULL,
+                                 dy_m = NULL,
+                                 mode = c("replace", "increment")) {
+  state <- validate_dragmapr_state(state)
+  region <- state_key_scalar(region, "region")
+  mode <- match.arg(mode)
+  state$region_offsets <- update_offset_table(
+    state$region_offsets,
+    key = "region",
+    id = region,
+    dx_m = dx_m,
+    dy_m = dy_m,
+    mode = mode,
+    extra = list()
+  )
+  state$version <- bump_revision(state$version)
+  validate_dragmapr_state(state)
+}
+
+#' Safely update label offsets in a dragmapr state
+#'
+#' @param state A `dragmapr_state`.
+#' @param label_id Label ID to update.
+#' @param dx_m,dy_m New or incremental offsets. `NULL` preserves the current
+#'   value for that axis.
+#' @param mode `"replace"` sets the supplied values; `"increment"` adds them to
+#'   the current values.
+#' @param region Optional region for a new label row. Defaults to `label_id`.
+#'
+#' @return An updated `dragmapr_state` with a bumped version.
+#' @export
+update_label_offset <- function(state,
+                                label_id,
+                                dx_m = NULL,
+                                dy_m = NULL,
+                                mode = c("replace", "increment"),
+                                region = NULL) {
+  state <- validate_dragmapr_state(state)
+  label_id <- state_key_scalar(label_id, "label_id")
+  region <- if (is.null(region)) label_id else state_key_scalar(region, "region")
+  mode <- match.arg(mode)
+  state$label_offsets <- update_offset_table(
+    state$label_offsets,
+    key = "label_id",
+    id = label_id,
+    dx_m = dx_m,
+    dy_m = dy_m,
+    mode = mode,
+    extra = list(region = region)
+  )
+  state$version <- bump_revision(state$version)
+  validate_dragmapr_state(state)
+}
+
+#' Reset offsets in a dragmapr state
+#'
+#' @param state A `dragmapr_state`.
+#' @param region,label_id Region or label IDs to reset.
+#'
+#' @return An updated `dragmapr_state` with a bumped version.
+#' @export
+reset_region <- function(state, region) {
+  state <- validate_dragmapr_state(state)
+  ids <- state_key_vector(region, "region")
+  state$region_offsets <- state$region_offsets[
+    !as.character(state$region_offsets$region) %in% ids,
+    ,
+    drop = FALSE
+  ]
+  state$version <- bump_revision(state$version)
+  validate_dragmapr_state(state)
+}
+
+#' @rdname reset_region
+#' @export
+reset_regions <- reset_region
+
+#' @rdname reset_region
+#' @export
+reset_label <- function(state, label_id) {
+  state <- validate_dragmapr_state(state)
+  ids <- state_key_vector(label_id, "label_id")
+  state$label_offsets <- state$label_offsets[
+    !as.character(state$label_offsets$label_id) %in% ids,
+    ,
+    drop = FALSE
+  ]
+  state$version <- bump_revision(state$version)
+  validate_dragmapr_state(state)
+}
+
+#' @rdname reset_region
+#' @export
+reset_labels <- function(state) {
+  state <- validate_dragmapr_state(state)
+  state$label_offsets <- state$label_offsets[0L, , drop = FALSE]
+  state$version <- bump_revision(state$version)
+  validate_dragmapr_state(state)
+}
+
+#' @rdname reset_region
+#' @export
+reset_all <- function(state) {
+  state <- validate_dragmapr_state(state)
+  state$region_offsets <- state$region_offsets[0L, , drop = FALSE]
+  state$label_offsets <- state$label_offsets[0L, , drop = FALSE]
+  state$expanded_groups <- character()
+  state$selected_feature <- NULL
+  state$version <- bump_revision(state$version)
+  validate_dragmapr_state(state)
+}
+
+#' Validate compatibility between geometry and dragmapr state
+#'
+#' @param x An `sf` object or layout-like object.
+#' @param state A `dragmapr_state`.
+#' @param region_col Region column in `x`. Defaults to `state$level` when
+#'   available.
+#' @param geometry_id Optional expected geometry ID or fingerprint.
+#' @param strict Treat warnings as invalid.
+#'
+#' @return A `dragmapr_compatibility` object with structured findings.
+#' @export
+validate_state_compatibility <- function(x,
+                                         state,
+                                         region_col = NULL,
+                                         geometry_id = NULL,
+                                         strict = TRUE) {
+  state <- validate_dragmapr_state(state)
+  strict <- flag_scalar(strict, "`strict`")
+  sf_obj <- coerce_compatibility_sf(x)
+  region_col <- region_col %||% state$level
+  errors <- character()
+  warnings <- character()
+  recommendations <- character()
+
+  if (!inherits(sf_obj, "sf")) {
+    errors <- c(errors, "`x` must be an sf object or layout-like object with sf geometry.")
+  } else if (!region_col %in% names(sf_obj)) {
+    errors <- c(errors, paste0("region_col '", region_col, "' not found in geometry."))
+  } else {
+    geometry_regions <- unique(as.character(sf_obj[[region_col]]))
+    state_regions <- unique(as.character(state$region_offsets$region))
+    missing_regions <- setdiff(state_regions, geometry_regions)
+    unused_regions <- setdiff(geometry_regions, state_regions)
+    if (length(missing_regions)) {
+      errors <- c(errors, paste0(
+        "State contains region(s) not present in geometry: ",
+        paste(utils::head(missing_regions, 8), collapse = ", "),
+        if (length(missing_regions) > 8L) ", ..." else ""
+      ))
+    }
+    if (length(unused_regions)) {
+      warnings <- c(warnings, paste0(
+        "Geometry contains region(s) with no state row; zero movement will be used for ",
+        length(unused_regions), " region(s)."
+      ))
+    }
+  }
+
+  if (!is.null(state$crs) && inherits(sf_obj, "sf")) {
+    authored <- tryCatch(sf::st_crs(state$crs), error = function(e) NA)
+    target <- tryCatch(sf::st_crs(sf_obj), error = function(e) NA)
+    if (!is.na(authored) && !is.na(target) && authored != target) {
+      errors <- c(errors, "State CRS does not match geometry CRS.")
+      recommendations <- c(recommendations, "Reproject the geometry to the state CRS or rebuild the state.")
+    }
+  }
+
+  expected_geometry <- geometry_id %||% attr(x, "geometry_id", exact = TRUE)
+  if (is.null(expected_geometry) && is.list(x) && !is.null(x$diagnostics$label)) {
+    expected_geometry <- x$diagnostics$label
+  }
+  if (!is.null(expected_geometry) && !is.null(state$geometry_id) &&
+      !identical(as.character(expected_geometry), as.character(state$geometry_id))) {
+    errors <- c(errors, "State geometry_id does not match the supplied geometry.")
+    recommendations <- c(recommendations, "Use the matching source geometry or migrate/rebuild the state.")
+  }
+
+  out <- list(
+    valid = length(errors) == 0L && (!strict || length(warnings) == 0L),
+    errors = unique(errors),
+    warnings = unique(warnings),
+    recommendations = unique(recommendations),
+    metrics = list(
+      state_regions = nrow(state$region_offsets),
+      state_labels = nrow(state$label_offsets),
+      geometry_regions = if (inherits(sf_obj, "sf") && region_col %in% names(sf_obj)) {
+        length(unique(as.character(sf_obj[[region_col]])))
+      } else {
+        NA_integer_
+      }
+    ),
+    strict = strict
+  )
+  structure(out, class = "dragmapr_compatibility")
+}
+
+#' @export
+print.dragmapr_compatibility <- function(x, ...) {
+  cat("dragmapr compatibility\n")
+  cat("Status: ", if (isTRUE(x$valid)) "valid" else "invalid", "\n", sep = "")
+  if (length(x$errors)) {
+    cat("Errors:\n")
+    cat(paste0("- ", x$errors, collapse = "\n"), "\n")
+  }
+  if (length(x$warnings)) {
+    cat("Warnings:\n")
+    cat(paste0("- ", x$warnings, collapse = "\n"), "\n")
+  }
+  invisible(x)
+}
+
+state_key_scalar <- function(x, arg) {
+  x <- as.character(x)
+  if (length(x) != 1L || is.na(x) || !nzchar(x)) {
+    stop("`", arg, "` must be a single non-empty string.", call. = FALSE)
+  }
+  x
+}
+
+state_key_vector <- function(x, arg) {
+  x <- as.character(x)
+  x <- x[!is.na(x) & nzchar(x)]
+  if (!length(x)) {
+    stop("`", arg, "` must contain at least one non-empty string.", call. = FALSE)
+  }
+  unique(x)
+}
+
+update_offset_table <- function(offsets, key, id, dx_m, dy_m, mode, extra) {
+  idx <- match(id, as.character(offsets[[key]]))
+  current_dx <- if (is.na(idx)) 0 else offsets$dx_m[[idx]]
+  current_dy <- if (is.na(idx)) 0 else offsets$dy_m[[idx]]
+  dx <- if (is.null(dx_m)) current_dx else numeric_offset_scalar(dx_m, "dx_m")
+  dy <- if (is.null(dy_m)) current_dy else numeric_offset_scalar(dy_m, "dy_m")
+  if (identical(mode, "increment")) {
+    dx <- current_dx + if (is.null(dx_m)) 0 else numeric_offset_scalar(dx_m, "dx_m")
+    dy <- current_dy + if (is.null(dy_m)) 0 else numeric_offset_scalar(dy_m, "dy_m")
+  }
+  row <- offsets[NA_integer_, , drop = FALSE]
+  row[[key]] <- id
+  if ("region" %in% names(row) && key != "region") {
+    row$region <- extra$region %||% id
+  }
+  row$dx_m <- dx
+  row$dy_m <- dy
+  out <- offsets
+  if (is.na(idx)) {
+    out <- rbind(out, row[, names(out), drop = FALSE])
+  } else {
+    out[idx, names(row)] <- row
+  }
+  out[order(out[[key]]), , drop = FALSE]
+}
+
+numeric_offset_scalar <- function(x, arg) {
+  x <- suppressWarnings(as.numeric(x))
+  if (length(x) != 1L || !is.finite(x)) {
+    stop("`", arg, "` must be a single finite number.", call. = FALSE)
+  }
+  x
+}
+
+coerce_compatibility_sf <- function(x) {
+  if (inherits(x, "sf")) {
+    return(x)
+  }
+  if (is.list(x)) {
+    for (nm in c("sf_grouped", "sf", "data", "source")) {
+      if (inherits(x[[nm]], "sf")) return(x[[nm]])
+    }
+  }
+  NULL
 }

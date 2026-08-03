@@ -296,6 +296,20 @@ test_that("spatial studio has a fallback for helper readiness", {
   expect_match(studio_code, "req(state$helper_token > 0L, file.exists(helper_file))", fixed = TRUE)
 })
 
+test_that("connect cloud wrapper returns a shiny app object", {
+  wrapper <- file.path(
+    testthat::test_path("..", ".."),
+    "connect-cloud",
+    "spatial-studio",
+    "app.R"
+  )
+  skip_if_not(file.exists(wrapper))
+
+  obj <- suppressWarnings(source(wrapper, local = new.env(parent = globalenv()))$value)
+
+  expect_s3_class(obj, "shiny.appobj")
+})
+
 test_that("spatial studio applies text edits explicitly and locks controls during rebuilds", {
   studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
   studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
@@ -384,6 +398,20 @@ test_that("spatial studio demonstrates movement context controls", {
   expect_match(studio_code, '"movement_connector_endpoint", "Movement connector arrow"', fixed = TRUE)
   expect_match(studio_code, "movementConnectorColor = studio_color_value", fixed = TRUE)
   expect_match(studio_code, "movement_connector_endpoint = input$movement_connector_endpoint", fixed = TRUE)
+})
+
+test_that("spatial studio exposes geography removal in the left sidebar", {
+  studio_file <- system.file("examples", "shiny_spatial_studio.R", package = "dragmapr")
+  studio_code <- paste(readLines(studio_file, warn = FALSE), collapse = "\n")
+
+  expect_match(studio_code, '"Geography editing"', fixed = TRUE)
+  expect_match(studio_code, '"Inspect or remove unneeded polygons"', fixed = TRUE)
+  expect_match(studio_code, 'uiOutput("geography_edit_ui")', fixed = TRUE)
+  expect_match(studio_code, 'tableOutput("selected_geography_table")', fixed = TRUE)
+  expect_match(studio_code, 'actionButton("remove_selected_geography"', fixed = TRUE)
+  expect_match(studio_code, "remove_selected_geography_now <- function", fixed = TRUE)
+  expect_match(studio_code, "push_history(pre_delete, force = TRUE)", fixed = TRUE)
+  expect_match(studio_code, "Undo restores removed geography", fixed = TRUE)
 })
 
 test_that("spatial studio sends legend and label value filters live", {

@@ -226,10 +226,14 @@ renderDragmapr <- function(expr, env = parent.frame(), quoted = FALSE) {
 #'   current selection. Use `remove_features = c(...)` to remove one or more
 #'   feature ids from the live widget, or `delete_selected = TRUE` to remove
 #'   the current selection.
+#' @param generation Optional widget generation token. When supplied, the
+#'   browser ignores the update unless it targets the active render generation.
+#' @param revision Optional server-side revision token to echo in the widget
+#'   acknowledgement input.
 #'
 #' @return Invisibly returns the sent message.
 #' @export
-updateDragmapr <- function(session, outputId, ...) {
+updateDragmapr <- function(session, outputId, ..., generation = NULL, revision = NULL) {
   if (missing(session) || is.null(session)) {
     stop("`session` is required.", call. = FALSE)
   }
@@ -238,6 +242,12 @@ updateDragmapr <- function(session, outputId, ...) {
   }
   dots <- list(...)
   message <- dragmapr_update_message(dots)
+  if (!is.null(generation)) {
+    message$generation <- generation_scalar(generation, "`generation`")
+  }
+  if (!is.null(revision)) {
+    message$serverRevision <- generation_scalar(revision, "`revision`")
+  }
   session$sendCustomMessage("dragmapr-update", c(list(id = session$ns(outputId)), message))
   invisible(message)
 }
@@ -292,7 +302,9 @@ dragmapr_widget_state <- function(value) {
     version = value$revision %||% 0L,
     crs = value$crs %||% NULL,
     geometry_id = value$geometry_id %||% NULL,
-    selected_feature = selected
+    selected_feature = selected,
+    schema_version = value$schema_version %||% "1.0.0",
+    package_version = value$package_version %||% "0.0.0"
   )
 }
 
@@ -484,6 +496,20 @@ flag_scalar <- function(x, name) {
 color_scalar <- function(x, name) {
   if (!is.character(x) || length(x) != 1L || is.na(x) || !nzchar(x)) {
     stop(name, " must be a single color string.", call. = FALSE)
+  }
+  unname(x)
+}
+
+generation_scalar <- function(x, name) {
+  if (is.character(x)) {
+    if (length(x) != 1L || is.na(x) || !nzchar(x)) {
+      stop(name, " must be a single non-empty string or finite number.", call. = FALSE)
+    }
+    return(unname(x))
+  }
+  x <- suppressWarnings(as.numeric(x))
+  if (length(x) != 1L || !is.finite(x)) {
+    stop(name, " must be a single non-empty string or finite number.", call. = FALSE)
   }
   unname(x)
 }

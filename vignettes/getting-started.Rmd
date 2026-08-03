@@ -500,7 +500,9 @@ server <- function(input, output, session) {
       regions,
       region_col = "region",
       state = current_state(),
-      show_origin_outlines = input$origin
+      display_options = dragmapr_display_options(
+        show_origin_outlines = isTRUE(input$origin)
+      )
     )
   })
 

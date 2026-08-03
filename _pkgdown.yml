@@ -72,7 +72,11 @@ reference:
   - dragmapr_state_equal
   - summary.dragmapr_state
   - validate_dragmapr_state
+  - validate_state_compatibility
   - merge_dragmapr_state
+  - update_region_offset
+  - update_label_offset
+  - reset_region
   - inherit_drag_offsets
   - collapse_drag_offsets
   - apply_dragmapr_state
@@ -89,6 +93,9 @@ reference:
   - dragmaprOutput
   - updateDragmapr
   - dragmapr_geometry_options
+  - region_connectors
+  - label_connectors
+  - connector_sf
 
 - title: Interactive prototype
   desc: >
