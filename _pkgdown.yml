@@ -66,16 +66,23 @@ reference:
     browser editing, Shiny apps, static rendering, snapshots, and JSON
     round-trips.
   contents:
-  - dragmapr_edit
-  - dragmapr_state
-  - dragmapr_state_diff
-  - dragmapr_state_equal
+  - d_edit
+  - d_state
+  - d_state_diff
+  - d_state_equal
   - summary.dragmapr_state
   - validate_dragmapr_state
   - validate_state_compatibility
   - merge_dragmapr_state
-  - dragmapr_hierarchy_state
-  - dragmapr_set_child_state
+  - compose_offsets
+  - d_styles
+  - merge_dragmapr_styles
+  - d_hierarchy_state
+  - d_relationships
+  - children_of
+  - d_set_active_path
+  - d_set_child_state
+  - snapshot_dragmapr_hierarchy_state
   - validate_dragmapr_hierarchy_state
   - update_region_offset
   - update_label_offset
@@ -92,11 +99,11 @@ reference:
     Render a draggable map directly in Shiny, receive structured edit events,
     and update display options without rebuilding the geometry.
   contents:
-  - dragmapr_widget
-  - dragmapr_widget_state
+  - d_widget
+  - d_widget_state
   - dragmaprOutput
   - updateDragmapr
-  - dragmapr_geometry_options
+  - d_geometry_options
   - region_connectors
   - label_connectors
   - connector_sf
@@ -156,12 +163,13 @@ reference:
   - make_branch_bloom_labels
   - transition_options
   - build_elastic_transition
+  - build_transition_plan
   - make_group_boundaries
   - layout_metrics
   - summarise_spatial_crs
   - profile_spatial_upload
   - suggest_offsets
-  - dragmapr_diagnostics
+  - d_diagnostics
 
 - title: Spatial I/O helpers
   desc: >
@@ -171,7 +179,7 @@ reference:
   - read_dragmapr_sf_upload
   - read_dragmapr_sf_url
   - prepare_dragmapr_sf
-  - dragmapr_iframe_bridge
+  - d_iframe_bridge
 
 - title: Editable spatial features
   desc: >
@@ -186,7 +194,7 @@ reference:
 - title: RStudio addin
   desc: Launch the interactive prototype from the RStudio Addins menu.
   contents:
-  - dragmapr_addin
+  - d_addin
 
 - title: Compatibility aliases
   desc: Earlier names kept for backward compatibility.

@@ -22,7 +22,7 @@ test_that("RStudio addin is registered", {
   expect_true(file.exists(addin_file))
 
   addins <- read.dcf(addin_file)
-  expect_true("dragmapr_addin" %in% addins[, "Binding"])
+  expect_true("d_addin" %in% addins[, "Binding"])
   expect_true("true" %in% tolower(addins[, "Interactive"]))
 })
 

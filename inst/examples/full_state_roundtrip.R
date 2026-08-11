@@ -3,7 +3,7 @@
 #   explodemap::as_dragmapr_state()   ->   edit in the browser
 #        (compute)                          (compose)
 #                                              |
-#   write_dragmapr_state() / re-render   <-   dragmapr_widget_state()
+#   write_dragmapr_state() / re-render   <-   d_widget_state()
 #        (persist)                            (ingest)
 #
 # The same `dragmapr_state` object travels the whole loop: an initial layout is
@@ -54,7 +54,7 @@ regions <- sf::st_sf(
 # as_dragmapr_state() converts the exploded anchors into dx_m/dy_m deltas and
 # records the projected CRS plus a geometry_id. We build the equivalent shape
 # directly here so the example runs with only dragmapr installed.
-state0 <- dragmapr_state(
+state0 <- d_state(
   region_offsets = data.frame(
     region = c("North", "South", "East", "West"),
     dx_m   = c(0, 0, 60000, -60000),
@@ -97,13 +97,13 @@ server <- function(input, output, session) {
   composition <- reactiveVal(state0)
 
   output$map <- renderDragmapr({
-    dragmapr_widget(regions, region_col = "region", state = isolate(composition()))
+    d_widget(regions, region_col = "region", state = isolate(composition()))
   })
 
   # Inbound bridge: rebuild a dragmapr_state from each browser state event
   # (the `<id>_state` input the widget emits on drag / click / selection).
   observeEvent(input$map_state, {
-    edit <- dragmapr_widget_state(input$map_state)
+    edit <- d_widget_state(input$map_state)
     if (!is.null(edit)) {
       composition(edit)
     }

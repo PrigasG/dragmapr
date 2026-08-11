@@ -158,13 +158,23 @@ box_labels$label <- paste0(
 stopifnot(all(box_labels$label_type == "box"))
 message("2d OK  as_drag_annotations: all label_type == 'box'")
 
-# 2e. apply_label_state shifts x/y by offsets
-shifted <- apply_label_state(hhs$labels, hhs$label_offsets)
-stopifnot(nrow(shifted) == nrow(hhs$labels))
-# At least some labels should have moved
-diffs <- abs(shifted$x - hhs$labels$x) + abs(shifted$y - hhs$labels$y)
-stopifnot(any(diffs > 0))
-message("2e OK  apply_label_state: positions shifted")
+# 2e. apply_label_state shifts x/y by deterministic offsets
+# The bundled HHS state may intentionally contain zero offsets, so use a
+# non-zero example state here to verify the transformation itself.
+example_label_offsets <- data.frame(
+  label_id = hhs$labels$label_id,
+  region   = hhs$labels$region,
+  dx_m     = seq_len(nrow(hhs$labels)) * 1000,
+  dy_m     = -seq_len(nrow(hhs$labels)) * 500,
+  stringsAsFactors = FALSE
+)
+shifted <- apply_label_state(hhs$labels, example_label_offsets)
+stopifnot(
+  nrow(shifted) == nrow(hhs$labels),
+  isTRUE(all.equal(shifted$x, hhs$labels$x + example_label_offsets$dx_m)),
+  isTRUE(all.equal(shifted$y, hhs$labels$y + example_label_offsets$dy_m))
+)
+message("2e OK  apply_label_state: positions shifted by the supplied state")
 
 
 # =============================================================================
@@ -597,7 +607,7 @@ message("10e OK prototype: pre-seeded legend + label filters")
 # Section 11: dragmapr_iframe_bridge — JS output verification
 # =============================================================================
 
-bridge_js <- dragmapr_iframe_bridge(
+bridge_js <- d_iframe_bridge(
   region_input    = "region_csv",
   label_input     = "label_csv",
   iframe_selector = "#my-helper",

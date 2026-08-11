@@ -1,5 +1,5 @@
 test_that("safe state mutation updates and resets region offsets", {
-  state <- dragmapr_state(version = 2)
+  state <- d_state(version = 2)
 
   state <- update_region_offset(state, "A", dx_m = 10, dy_m = -2)
   expect_equal(state$version, 3L)
@@ -15,7 +15,7 @@ test_that("safe state mutation updates and resets region offsets", {
 })
 
 test_that("safe state mutation updates and resets label offsets", {
-  state <- dragmapr_state(version = 1)
+  state <- d_state(version = 1)
 
   state <- update_label_offset(state, "A-label", region = "A", dx_m = 3, dy_m = 4)
   expect_equal(state$label_offsets$region, "A")
@@ -30,16 +30,16 @@ test_that("safe state mutation updates and resets label offsets", {
 })
 
 test_that("state diff reports added and removed keys", {
-  before <- dragmapr_state(
+  before <- d_state(
     region_offsets = data.frame(region = c("A", "B"), dx_m = c(0, 1), dy_m = 0),
     label_offsets = data.frame(label_id = "la", region = "A", dx_m = 0, dy_m = 0)
   )
-  after <- dragmapr_state(
+  after <- d_state(
     region_offsets = data.frame(region = c("A", "C"), dx_m = c(0, 2), dy_m = 0),
     label_offsets = data.frame(label_id = "lc", region = "C", dx_m = 1, dy_m = 0)
   )
 
-  diff <- dragmapr_state_diff(after, before)
+  diff <- d_state_diff(after, before)
 
   expect_equal(diff$added_regions, "C")
   expect_equal(diff$removed_regions, "B")
@@ -57,7 +57,7 @@ test_that("compatibility validation checks ids and CRS", {
       crs = 3857
     )
   )
-  ok_state <- dragmapr_state(
+  ok_state <- d_state(
     region_offsets = data.frame(region = "A", dx_m = 1, dy_m = 0),
     crs = 3857,
     geometry_id = "fixture"
@@ -86,7 +86,7 @@ test_that("region and label connector helpers return tables and sf lines", {
       crs = 3857
     )
   )
-  state <- dragmapr_state(
+  state <- d_state(
     region_offsets = data.frame(region = "A", dx_m = 10, dy_m = 0),
     label_offsets = data.frame(label_id = "A", region = "A", dx_m = 5, dy_m = 0),
     crs = 3857

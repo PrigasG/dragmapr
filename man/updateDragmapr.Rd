@@ -16,7 +16,8 @@ updateDragmapr(session, outputId, ..., generation = NULL, revision = NULL)
 \code{selected_feature} can also be updated; pass \code{NULL} or \code{""} to clear the
 current selection. Use \code{remove_features = c(...)} to remove one or more
 feature ids from the live widget, or \code{delete_selected = TRUE} to remove
-the current selection.}
+the current selection. \code{expanded_groups} and \code{styles} update the
+hierarchy/style composition without rebuilding geometry.}
 
 \item{generation}{Optional widget generation token. When supplied, the
 browser ignores the update unless it targets the active render generation.}

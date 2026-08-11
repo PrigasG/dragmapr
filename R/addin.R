@@ -22,7 +22,7 @@
 #'   [render_dragged_map()] to reconstruct a static ggplot2 image from the
 #'   returned offsets.
 #' @export
-dragmapr_addin <- function(env = dragmapr_global_env()) {
+d_addin <- function(env = d_global_env()) {
   .check_addin_deps()
   if (!is.environment(env)) {
     stop("`env` must be an environment.", call. = FALSE)
@@ -229,7 +229,7 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
     ),
     shiny::tags$head(
       shiny::tags$script(shiny::HTML(
-        dragmapr_iframe_bridge(
+        d_iframe_bridge(
           region_input = "region_csv",
           label_input = "label_csv",
           iframe_selector = "iframe.dragmapr-helper-frame",
@@ -1132,6 +1132,6 @@ dragmapr_addin <- function(env = dragmapr_global_env()) {
   }
 }
 
-dragmapr_global_env <- function() {
+d_global_env <- function() {
   get(".GlobalEnv", envir = baseenv())
 }

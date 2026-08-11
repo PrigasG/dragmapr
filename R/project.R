@@ -91,10 +91,13 @@ render_dragmapr_project <- function(project,
   args <- c(
     list(
       x = bundle$source,
-      region_offsets = bundle$region_offsets,
+      region_offsets = bundle$region_offsets %||%
+        if (is.null(bundle$state)) NULL else bundle$state$region_offsets,
       region_col = region_col,
       label_col = label_col,
-      label_offsets = bundle$label_offsets,
+      label_offsets = bundle$label_offsets %||%
+        if (is.null(bundle$state)) NULL else bundle$state$label_offsets,
+      styles = bundle$styles,
       region_palette = bundle$region_palette,
       title = plot_title,
       file = file,
@@ -177,12 +180,28 @@ read_dragmapr_project <- function(project) {
   } else {
     NULL
   }
+  hierarchy_file <- file.path(project_dir, "hierarchy.json")
+  hierarchy <- if (file.exists(hierarchy_file)) {
+    restore_dragmapr_hierarchy_state(
+      jsonlite::read_json(hierarchy_file, simplifyVector = FALSE)
+    )
+  } else {
+    NULL
+  }
+  styles_file <- read_optional_project_csv(project_dir, "styles.csv")
+  styles <- if (is.null(styles_file)) {
+    if (is.null(state)) d_styles() else state$styles
+  } else {
+    d_styles(styles_file)
+  }
 
   list(
     source = sf::st_read(source_file, quiet = TRUE),
     region_offsets = read_optional_project_csv(project_dir, "drag_region_offsets.csv"),
     label_offsets = read_optional_project_csv(project_dir, "drag_label_offsets.csv"),
     state = state,
+    hierarchy = hierarchy,
+    styles = styles,
     labels = if (is.null(labels)) NULL else as_drag_labels(labels),
     region_palette = project_palette_vector(palette),
     metadata = metadata,
@@ -382,6 +401,11 @@ project_smart_connector_labels <- function(labels, label_offsets) {
 #'   [as_drag_labels()].
 #' @param region_palette Optional named character vector of fill colors (names
 #'   are region values, values are hex strings).
+#' @param state Optional [d_state()] persisted as `state.json`. Its
+#'   offset/style tables supply defaults when explicit arguments are omitted.
+#' @param hierarchy Optional [d_hierarchy_state()] persisted as
+#'   `hierarchy.json`.
+#' @param styles Optional [d_styles()] table persisted as `styles.csv`.
 #' @param label_col Column used for default label text. Defaults to
 #'   `region_col`.
 #' @param title Optional project title stored in metadata.
@@ -418,6 +442,9 @@ write_dragmapr_project <- function(x,
                                    label_offsets  = NULL,
                                    labels         = NULL,
                                    region_palette = NULL,
+                                   state          = NULL,
+                                   hierarchy      = NULL,
+                                   styles         = NULL,
                                    label_col      = region_col,
                                    title          = NULL,
                                    ...) {
@@ -430,6 +457,17 @@ write_dragmapr_project <- function(x,
   if (is.null(file)) {
     file <- tempfile("dragmapr-project-", fileext = ".zip")
   }
+
+  if (!is.null(state)) {
+    state <- validate_dragmapr_state(state)
+    if (is.null(region_offsets)) region_offsets <- state$region_offsets
+    if (is.null(label_offsets)) label_offsets <- state$label_offsets
+    if (is.null(styles)) styles <- state$styles
+  }
+  if (!is.null(hierarchy)) {
+    hierarchy <- validate_dragmapr_hierarchy_state(hierarchy)
+  }
+  styles <- d_styles(styles)
   if (!is.character(file) || length(file) != 1L || !nzchar(file)) {
     stop("`file` must be a single non-empty file path.", call. = FALSE)
   }
@@ -477,6 +515,25 @@ write_dragmapr_project <- function(x,
     utils::write.csv(pal_df, file.path(proj_dir, "palette.csv"), row.names = FALSE)
   }
 
+  if (nrow(styles)) {
+    utils::write.csv(as.data.frame(styles), file.path(proj_dir, "styles.csv"),
+                     row.names = FALSE, na = "")
+  }
+
+  if (!is.null(state)) {
+    write_dragmapr_state(state, file.path(proj_dir, "state.json"))
+  }
+  if (!is.null(hierarchy)) {
+    jsonlite::write_json(
+      snapshot_dragmapr_hierarchy_state(hierarchy),
+      file.path(proj_dir, "hierarchy.json"),
+      auto_unbox = TRUE,
+      pretty = TRUE,
+      dataframe = "rows",
+      na = "null"
+    )
+  }
+
   # metadata.json
   extra_meta <- list(...)
   metadata <- c(
@@ -485,7 +542,17 @@ write_dragmapr_project <- function(x,
       label_col   = label_col,
       title       = if (is.null(title)) "" else as.character(title),
       created_by  = "write_dragmapr_project",
-      dragmapr_version = as.character(utils::packageVersion("dragmapr"))
+      created_at = format(Sys.time(), tz = "UTC", usetz = TRUE),
+      dragmapr_version = as.character(utils::packageVersion("dragmapr")),
+      explodemap_version = if (requireNamespace("explodemap", quietly = TRUE)) {
+        as.character(utils::packageVersion("explodemap"))
+      } else {
+        NULL
+      },
+      state_schema = if (is.null(state)) NULL else state$schema_version,
+      hierarchy_version = if (is.null(hierarchy)) NULL else hierarchy$version,
+      geometry_id = if (is.null(state)) NULL else state$geometry_id,
+      crs = if (is.null(state)) NULL else state$crs
     ),
     extra_meta
   )

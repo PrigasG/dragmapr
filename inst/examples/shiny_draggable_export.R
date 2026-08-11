@@ -18,7 +18,7 @@ read_csv_text <- function(text) {
 ui <- fluidPage(
   tags$head(
     # Iframe bridge: relays drag state from the helper iframe to Shiny inputs.
-    tags$script(HTML(dragmapr_iframe_bridge(
+    tags$script(HTML(d_iframe_bridge(
       iframe_selector = "#dragmapr-export-helper"
     ))),
     # Custom message handlers: push presentation changes from Shiny into the iframe.

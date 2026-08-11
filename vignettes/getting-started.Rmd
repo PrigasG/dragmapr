@@ -285,7 +285,7 @@ compact prototype gadget. The addin looks for `sf` objects in `.GlobalEnv`,
 lets you choose the region and label columns, and assigns `region_offsets` and
 `label_offsets` when you click **Done**.
 Create or load the `sf` object before opening the addin. If you call
-`dragmapr_addin()` directly, pass `env =` to work with another environment.
+`d_addin()` directly, pass `env =` to work with another environment.
 
 ---
 
@@ -493,21 +493,21 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
-  current_state <- reactiveVal(dragmapr_state(crs = 3857))
+  current_state <- reactiveVal(d_state(crs = 3857))
 
   output$map <- renderDragmapr({
-    dragmapr_widget(
+    d_widget(
       regions,
       region_col = "region",
       state = current_state(),
-      display_options = dragmapr_display_options(
+      display_options = d_display_options(
         show_origin_outlines = isTRUE(input$origin)
       )
     )
   })
 
   observeEvent(input$map_state, {
-    current_state(dragmapr_widget_state(input$map_state))
+    current_state(d_widget_state(input$map_state))
   })
 
   observeEvent(input$origin, {

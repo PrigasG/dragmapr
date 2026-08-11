@@ -14,7 +14,7 @@ renderDragmapr(expr, env = parent.frame(), quoted = FALSE)
 
 \item{width, height}{Output dimensions.}
 
-\item{expr}{Expression returning \code{\link[=dragmapr_widget]{dragmapr_widget()}}.}
+\item{expr}{Expression returning \code{\link[=d_widget]{d_widget()}}.}
 
 \item{env}{Evaluation environment.}
 

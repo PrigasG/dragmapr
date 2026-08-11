@@ -96,7 +96,7 @@ state stores region offsets, label offsets, the selected feature, the viewport,
 and a version number while leaving the source geometry untouched.
 
 ```r
-state <- dragmapr_state(
+state <- d_state(
   level = "state",
   region_col = "geoid",
   region_offsets = region_offsets,
@@ -132,15 +132,15 @@ library(dragmapr)
 layout <- explode_grouped(my_sf, region_col = "region", plot = FALSE)
 state <- as_dragmapr_state(layout)
 
-dragmapr_edit(layout, state = state)
+d_edit(layout, state = state)
 ```
 
 For drill-down apps, keep each level's edits together:
 
 ```r
-hierarchy <- dragmapr_hierarchy_state(root = state, active_path = "state")
-hierarchy <- dragmapr_set_child_state(hierarchy, "state:06", county_state)
-county_state <- dragmapr_child_state(hierarchy, "state:06")
+hierarchy <- d_hierarchy_state(root = state, active_path = "state")
+hierarchy <- d_set_child_state(hierarchy, "state:06", county_state)
+county_state <- d_child_state(hierarchy, "state:06")
 ```
 
 ## Use It In Shiny
@@ -168,21 +168,21 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
-  current_state <- reactiveVal(dragmapr_state(crs = 3857))
+  current_state <- reactiveVal(d_state(crs = 3857))
 
   output$map <- renderDragmapr({
-    dragmapr_widget(
+    d_widget(
       regions,
       region_col = "region",
       state = current_state(),
-      display_options = dragmapr_display_options(
+      display_options = d_display_options(
         show_origin_outlines = isTRUE(input$origin)
       )
     )
   })
 
   observeEvent(input$map_state, {
-    current_state(dragmapr_widget_state(input$map_state))
+    current_state(d_widget_state(input$map_state))
   })
 
   observeEvent(input$selected, {

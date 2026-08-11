@@ -4,7 +4,13 @@
 \alias{apply_dragmapr_state}
 \title{Apply a dragmapr state to sf geometry}
 \usage{
-apply_dragmapr_state(x, state, region_col = NULL)
+apply_dragmapr_state(
+  x,
+  state,
+  region_col = NULL,
+  base_offsets = NULL,
+  ancestor_offsets = NULL
+)
 }
 \arguments{
 \item{x}{An \code{sf} object.}
@@ -13,6 +19,12 @@ apply_dragmapr_state(x, state, region_col = NULL)
 
 \item{region_col}{Column in \code{x} defining draggable groups. Defaults to the
 binding metadata stored in \code{state}.}
+
+\item{base_offsets}{Optional algorithmic base movement accepted by
+\code{\link[=compose_offsets]{compose_offsets()}}.}
+
+\item{ancestor_offsets}{Optional inherited movement accepted by
+\code{\link[=compose_offsets]{compose_offsets()}}.}
 }
 \value{
 An \code{sf} object with region offsets applied.

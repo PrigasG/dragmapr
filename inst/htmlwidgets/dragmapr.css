@@ -72,13 +72,12 @@
 }
 
 .dragmapr-region.is-selected path {
-  stroke: #0f172a;
-  stroke-width: 2.2;
+  stroke: #2563eb !important;
+  stroke-width: 2.4 !important;
 }
 
-.dragmapr-region.is-selected path {
-  stroke: #2563eb;
-  stroke-width: 2.4;
+.dragmapr-region.is-highlighted path {
+  filter: drop-shadow(0 0 3px rgba(37, 99, 235, 0.7));
 }
 
 .dragmapr-origin-outline path {

@@ -69,7 +69,7 @@ regions <- sf::st_sf(
   )
 )
 
-state <- dragmapr_state(
+state <- d_state(
   region_offsets = data.frame(
     region = c("North", "South", "East", "West"),
     dx_m   = c(0, 0, 60000, -60000),
@@ -83,23 +83,23 @@ state
 
 ## 2. Compose
 
-`dragmapr_edit()` is the friendly front door to the interactive editor. It
+`d_edit()` is the friendly front door to the interactive editor. It
 accepts a projected `sf`, an explodemap `grouped_exploded_map`, or a
 `dragmapr_layout`, seeded with the state:
 
 ```{r compose, eval = FALSE}
-dragmapr_edit(regions, region_col = "region", state = state)
+d_edit(regions, region_col = "region", state = state)
 ```
 
 Inside Shiny, the widget reports every edit through an input named
 `paste0(outputId, "_state")`. Rebuild a `dragmapr_state` from it with
-`dragmapr_widget_state()` so the server always holds the live composition:
+`d_widget_state()` so the server always holds the live composition:
 
 ```{r compose-shiny, eval = FALSE}
-output$map <- renderDragmapr(dragmapr_edit(regions, "region", state = state))
+output$map <- renderDragmapr(d_edit(regions, "region", state = state))
 
 observeEvent(input$map_state, {
-  state <- dragmapr_widget_state(input$map_state)
+  state <- d_widget_state(input$map_state)
 })
 
 # Push a selection from R back into the browser:
@@ -147,11 +147,11 @@ canonical <- reactiveVal(state)
 draft <- reactiveVal(state)
 
 observeEvent(input$map_state, {
-  draft(dragmapr_widget_state(input$map_state))
+  draft(d_widget_state(input$map_state))
 })
 
 output$dirty <- renderText({
-  changed <- !dragmapr_state_equal(
+  changed <- !d_state_equal(
     draft(),
     canonical(),
     compare = "composition"
@@ -178,7 +178,7 @@ library(dragmapr)
 layout <- explode_grouped(my_sf, region_col = "region", plot = FALSE)
 state <- as_dragmapr_state(layout, geometry_id = "service-territory-v1")
 
-edited <- dragmapr_edit(layout, state = state)
+edited <- d_edit(layout, state = state)
 
 render_dragged_map(
   layout$sf_grouped,

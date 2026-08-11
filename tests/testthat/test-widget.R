@@ -1,19 +1,44 @@
 test_that("dragmapr option constructors validate boundaries", {
-  display <- dragmapr_display_options(
+  display <- d_display_options(
     region_palette = c(North = "#123456"),
     show_origin_outlines = TRUE,
     map_background = "dark"
   )
-  interaction <- dragmapr_interaction_options(draggable_regions = FALSE)
-  geometry <- dragmapr_geometry_options(width = 1000, height = 800)
+  interaction <- d_interaction_options(draggable_regions = FALSE)
+  geometry <- d_geometry_options(width = 1000, height = 800)
 
   expect_equal(display$regionPalette$North, "#123456")
   expect_true(display$showOriginOutlines)
   expect_equal(display$mapBackground, "dark")
   expect_false(interaction$draggableRegions)
   expect_equal(geometry$width, 1000)
-  expect_error(dragmapr_display_options(region_palette = c("#123456")), "named vector")
-  expect_error(dragmapr_interaction_options(draggable_regions = NA), "TRUE or FALSE")
+  expect_error(d_display_options(region_palette = c("#123456")), "named vector")
+  expect_error(d_interaction_options(draggable_regions = NA), "TRUE or FALSE")
+})
+
+test_that("interaction options default to full state on drag end", {
+  options <- d_interaction_options()
+  throttled <- d_interaction_options(
+    state_emit = "throttled", live_drag = FALSE, throttle_ms = 120
+  )
+
+  expect_equal(options$stateEmit, "end")
+  expect_true(options$liveDrag)
+  expect_equal(throttled$stateEmit, "throttled")
+  expect_false(throttled$liveDrag)
+  expect_equal(throttled$throttleMs, 120)
+  expect_error(d_interaction_options(throttle_ms = -1), "non-negative")
+})
+
+test_that("widget preserves hierarchy state and emits compact live drags", {
+  js <- paste(readLines(
+    system.file("htmlwidgets", "dragmapr.js", package = "dragmapr"), warn = FALSE
+  ), collapse = "\n")
+
+  expect_match(js, "expanded_groups: state.expandedGroups.slice()", fixed = TRUE)
+  expect_match(js, "stateEmit: \"end\"", fixed = TRUE)
+  expect_match(js, "emitLiveDrag", fixed = TRUE)
+  expect_false(grepl('sendInput("drag", snapshot("drag"', js, fixed = TRUE))
 })
 
 test_that("dragmapr_widget builds row-oriented payload", {
@@ -25,18 +50,22 @@ test_that("dragmapr_widget builds row-oriented payload", {
       crs = 3857
     )
   )
-  state <- dragmapr_state(
+  state <- d_state(
     level = "division",
     region_offsets = data.frame(region = "North", dx_m = 10, dy_m = -5),
+    expanded_groups = "North",
+    styles = d_styles(data.frame(region = "North", fill = "#112233")),
     version = 3
   )
 
-  widget <- dragmapr_widget(x, region_col = "region", label_col = "name", state = state)
+  widget <- d_widget(x, region_col = "region", label_col = "name", state = state)
 
   expect_s3_class(widget, "htmlwidget")
   expect_equal(widget$x$state$level, "division")
   expect_equal(widget$x$revision, 3L)
   expect_equal(widget$x$state$region_offsets[[1]]$region, "North")
+  expect_equal(widget$x$state$expanded_groups, "North")
+  expect_equal(widget$x$state$styles[[1]]$fill, "#112233")
   expect_equal(widget$x$labels[[1]]$label, "North label")
   expect_equal(widget$x$geojson$type, "FeatureCollection")
 })
@@ -50,7 +79,7 @@ test_that("dragmapr_widget accepts direct region_palette argument", {
     )
   )
 
-  widget <- dragmapr_widget(
+  widget <- d_widget(
     x,
     region_col = "region",
     labels = FALSE,
@@ -59,7 +88,7 @@ test_that("dragmapr_widget accepts direct region_palette argument", {
 
   expect_equal(widget$x$display$regionPalette$North, "#123456")
   expect_error(
-    dragmapr_widget(x, region_col = "region", labels = FALSE, region_palette = c("#123456")),
+    d_widget(x, region_col = "region", labels = FALSE, region_palette = c("#123456")),
     "named vector"
   )
 })
@@ -72,21 +101,21 @@ test_that("widget payload hoists crs and selected_feature", {
       crs = 3857
     )
   )
-  state <- dragmapr_state(
+  state <- d_state(
     region_offsets = data.frame(region = "North", dx_m = 1, dy_m = 0),
     crs = 3857,
     geometry_id = "hhs-2026",
     selected_feature = "North"
   )
 
-  widget <- dragmapr_widget(x, region_col = "region", labels = FALSE, state = state)
+  widget <- d_widget(x, region_col = "region", labels = FALSE, state = state)
 
   expect_equal(widget$x$crs, 3857L)
   expect_equal(widget$x$selectedFeature, "North")
   expect_equal(widget$x$state$geometry_id, "hhs-2026")
 
   # No selection -> empty string sentinel that the browser reads as "none".
-  bare <- dragmapr_widget(x, region_col = "region", labels = FALSE)
+  bare <- d_widget(x, region_col = "region", labels = FALSE)
   expect_equal(bare$x$selectedFeature, "")
 })
 
@@ -132,8 +161,8 @@ test_that("dragmapr_edit accepts sf and layout-shaped inputs", {
   x <- sf::st_sf(region = "North", geometry = poly)
 
   # Raw sf needs region_col.
-  expect_error(dragmapr_edit(x), "region_col")
-  w1 <- dragmapr_edit(x, region_col = "region", labels = FALSE)
+  expect_error(d_edit(x), "region_col")
+  w1 <- d_edit(x, region_col = "region", labels = FALSE)
   expect_s3_class(w1, "htmlwidget")
 
   # Duck-typed dragmapr_layout (as explodemap::as_dragmapr() returns).
@@ -141,18 +170,18 @@ test_that("dragmapr_edit accepts sf and layout-shaped inputs", {
     list(sf = x, region_col = "region", region_offsets = NULL, label_offsets = NULL),
     class = c("dragmapr_layout", "list")
   )
-  w2 <- dragmapr_edit(layout, labels = FALSE)
+  w2 <- d_edit(layout, labels = FALSE)
   expect_s3_class(w2, "htmlwidget")
   expect_equal(w2$x$state$level, "region")
 
   # Duck-typed grouped_exploded_map shape.
   grouped <- list(sf_grouped = x, diagnostics = list(region_col = "region"))
-  w3 <- dragmapr_edit(grouped, labels = FALSE, state = dragmapr_state(
+  w3 <- d_edit(grouped, labels = FALSE, state = d_state(
     region_offsets = data.frame(region = "North", dx_m = 5, dy_m = 0)
   ))
   expect_s3_class(w3, "htmlwidget")
 
-  expect_error(dragmapr_edit(42), "must be a projected sf")
+  expect_error(d_edit(42), "must be a projected sf")
 })
 
 test_that("dragmapr_widget_state ingests a browser state event", {
@@ -177,7 +206,7 @@ test_that("dragmapr_widget_state ingests a browser state event", {
     view = list(scale = 2)
   )
 
-  state <- dragmapr_widget_state(value)
+  state <- d_widget_state(value)
 
   expect_s3_class(state, "dragmapr_state")
   expect_equal(state$level, "division")
@@ -190,10 +219,10 @@ test_that("dragmapr_widget_state ingests a browser state event", {
   expect_equal(state$region_offsets$dx_m[state$region_offsets$region == "North"], 10)
   expect_equal(nrow(state$label_offsets), 0L)
 
-  expect_null(dragmapr_widget_state(NULL))
+  expect_null(d_widget_state(NULL))
 
   value$selected_feature <- ""
-  expect_null(dragmapr_widget_state(value)$selected_feature)
+  expect_null(d_widget_state(value)$selected_feature)
 })
 
 test_that("updateDragmapr sends display-only message", {
@@ -217,4 +246,22 @@ test_that("updateDragmapr sends display-only message", {
   expect_true(sent$message$display$showOriginOutlines)
   expect_equal(out$display$mapBackground, "white")
   expect_error(updateDragmapr(session, "map", region_col = "region"), "Unsupported")
+})
+
+test_that("updateDragmapr sends hierarchy and style composition", {
+  sent <- NULL
+  session <- list(
+    ns = identity,
+    sendCustomMessage = function(type, message) sent <<- message
+  )
+
+  updateDragmapr(
+    session, "map",
+    expanded_groups = c("A", "B"),
+    styles = d_styles(data.frame(region = "A", fill = "#112233"))
+  )
+
+  expect_equal(sent$expandedGroups, c("A", "B"))
+  expect_equal(sent$styles[[1]]$region, "A")
+  expect_equal(sent$styles[[1]]$fill, "#112233")
 })

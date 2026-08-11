@@ -184,7 +184,7 @@ test_that("render_dragged_map accepts dragmapr_state", {
       crs = 3857
     )
   )
-  state <- dragmapr_state(
+  state <- d_state(
     region_offsets = data.frame(region = "B", dx_m = 10, dy_m = 0)
   )
 

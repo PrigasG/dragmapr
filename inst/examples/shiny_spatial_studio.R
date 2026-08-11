@@ -1061,7 +1061,7 @@ ui <- function(request) {
   fluidPage(
     tags$head(
       # Iframe bridge: relays drag state from helper to Shiny inputs
-      tags$script(HTML(dragmapr_iframe_bridge(iframe_selector = "iframe.studio-helper-frame"))),
+      tags$script(HTML(d_iframe_bridge(iframe_selector = "iframe.studio-helper-frame"))),
       # Label-toggle message handler (app-specific, stays inline)
       tags$script(HTML("
       // Use a specific selector so Shiny's own internal iframes (download

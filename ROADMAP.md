@@ -47,7 +47,7 @@ update_label_offset(state, label_id, dx_m, dy_m)
 hierarchy_state(root, children = list())
 ```
 
-Keep established names such as `dragmapr_state()`, `dragmapr_widget()`,
+Keep established names such as `d_state()`, `d_widget()`,
 `drag_map_prototype()`, `prepare_explodemap_input()`,
 `validate_explodemap_input()`, `explodemap_fingerprint()`, and
 `as_dragmapr_state()` unless there is a deliberate breaking API cleanup.
@@ -215,7 +215,7 @@ The user-facing pattern should stay simple:
 ```r
 layout <- explode_grouped(prepared, region_col = "region")
 state <- as_dragmapr_state(layout)
-editor <- dragmapr_edit(layout, state = state)
+editor <- d_edit(layout, state = state)
 ```
 
 ### 5. CRS Decisions
@@ -352,11 +352,11 @@ reset_all(state)
 
 ### 2. Improved State Diff
 
-Expand `dragmapr_state_diff()` so apps can explain what changed without writing
+Expand `d_state_diff()` so apps can explain what changed without writing
 their own offset comparison code.
 
 ```r
-diff <- dragmapr_state_diff(before, after, tolerance = 1)
+diff <- d_state_diff(before, after, tolerance = 1)
 ```
 
 Return:
@@ -672,7 +672,7 @@ Keep these outside the packages:
 ### dragmapr
 
 1. Add safe state mutation helpers.
-2. Improve `dragmapr_state_diff()`.
+2. Improve `d_state_diff()`.
 3. Add state compatibility validation.
 4. Add region connector output.
 5. Add label connector output.

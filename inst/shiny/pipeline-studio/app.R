@@ -429,8 +429,38 @@ hhs_canonical_layout <- function() {
   }
 }
 
+# Label-aware search renders and diagnoses every candidate layout. It is useful
+# for compact state/county layouts, but becomes disproportionately expensive
+# for municipal layers with many features or parent groups.
+OPTIMIZE_MAX_FEATURES <- 1000L
+OPTIMIZE_MAX_GROUPS <- 50L
+
+optimization_limit_message <- function(units) {
+  feature_count <- nrow(units)
+  group_count <- if ("region" %in% names(units)) {
+    length(unique(as.character(units$region)))
+  } else {
+    0L
+  }
+  if (feature_count <= OPTIMIZE_MAX_FEATURES && group_count <= OPTIMIZE_MAX_GROUPS) {
+    return(NULL)
+  }
+  paste0(
+    "Label-aware search was skipped for this large layout (",
+    format(feature_count, big.mark = ","), " features, ",
+    format(group_count, big.mark = ","), " groups). ",
+    "The standard layout was built instead."
+  )
+}
+
 # Compute a grouped layout, with an optional label-aware parameter search.
 compute_layout <- function(units, optimize = FALSE) {
+  limit_message <- if (isTRUE(optimize)) optimization_limit_message(units) else NULL
+  if (!is.null(limit_message)) {
+    out <- explode_grouped(units, region_col = "region", plot = FALSE, quiet = TRUE)
+    out$optimization_notice <- limit_message
+    return(out)
+  }
   if (isTRUE(optimize)) {
     grid <- expand.grid(
       kappa = c(1.4, 2.0),
@@ -795,7 +825,7 @@ server <- function(input, output, session) {
   process_depth <- reactiveVal(0L)
 
   show_process <- function(message, delay = 200L) {
-    process_depth(process_depth() + 1L)
+    process_depth(isolate(process_depth()) + 1L)
     session$sendCustomMessage(
       "pipeline-process-show",
       list(text = message, delay = delay)
@@ -807,7 +837,7 @@ server <- function(input, output, session) {
   }
 
   hide_process <- function() {
-    remaining <- max(0L, process_depth() - 1L)
+    remaining <- max(0L, isolate(process_depth()) - 1L)
     process_depth(remaining)
     if (remaining == 0L) {
       session$sendCustomMessage("pipeline-process-hide", list())
@@ -815,14 +845,32 @@ server <- function(input, output, session) {
   }
 
   run_process <- function(message, task, delay = 200L) {
+    # R executes these jobs synchronously. Queuing another expensive job while
+    # one is pending only makes the overlay appear stuck, so accept one job at
+    # a time and discard duplicate clicks/events until it finishes.
+    if (isolate(process_depth()) > 0L) {
+      showNotification(
+        "A Pipeline Studio task is already running. Please let it finish.",
+        type = "warning",
+        duration = 4
+      )
+      return(invisible(FALSE))
+    }
     show_process(message, delay = delay)
     runner <- function() {
       on.exit(hide_process(), add = TRUE)
-      tryCatch(
-        task(),
-        error = function(e) {
-          showNotification(conditionMessage(e), type = "error", duration = 10)
-        }
+      # `later` callbacks run after the observer that scheduled them has
+      # returned, so they do not have an active reactive consumer. The tasks
+      # intentionally take a point-in-time snapshot of inputs and session
+      # state; isolate supplies the required read context without registering
+      # dependencies on a consumer that no longer exists.
+      isolate(
+        tryCatch(
+          task(),
+          error = function(e) {
+            showNotification(conditionMessage(e), type = "error", duration = 10)
+          }
+        )
       )
     }
     if (requireNamespace("later", quietly = TRUE)) {
@@ -830,7 +878,7 @@ server <- function(input, output, session) {
     } else {
       runner()
     }
-    invisible(NULL)
+    invisible(TRUE)
   }
 
   state_summary <- function(s) {
@@ -933,6 +981,13 @@ server <- function(input, output, session) {
     rv$egen <- rv$egen + 1L
     regions <- sort(unique(as.character(rv$state$region_offsets$region)))
     updateSelectInput(session, "sel_region", choices = regions)
+    if (!is.null(res$layout$optimization_notice)) {
+      showNotification(
+        res$layout$optimization_notice,
+        type = "warning",
+        duration = 8
+      )
+    }
     invisible(TRUE)
   }
 
@@ -987,7 +1042,7 @@ server <- function(input, output, session) {
     state <- validate_dragmapr_state(state)
     keep_regions <- !as.character(state$region_offsets$region) %in% regions
     keep_labels <- !as.character(state$label_offsets$region) %in% regions
-    dragmapr_state(
+    d_state(
       level = state$level,
       region_offsets = state$region_offsets[keep_regions, , drop = FALSE],
       label_offsets = state$label_offsets[keep_labels, , drop = FALSE],
@@ -996,7 +1051,9 @@ server <- function(input, output, session) {
       version = state$version + 1L,
       crs = state$crs,
       geometry_id = state$geometry_id,
-      selected_feature = NULL
+      selected_feature = NULL,
+      styles = if (is.null(state$styles)) NULL else
+        state$styles[!state$styles$region %in% regions, , drop = FALSE]
     )
   }
 
@@ -1093,16 +1150,22 @@ server <- function(input, output, session) {
   })
 
   output$compute_action <- renderUI({
+    busy <- process_depth() > 0L
     if (identical(input$map_source, "UPLOAD")) {
       issues <- prepared_upload_issues()
       actionButton(
         "compute",
-        "Explode uploaded layer",
+        if (busy) "Building..." else "Explode uploaded layer",
         class = "btn-primary w-100 mb-2",
-        disabled = if (length(issues)) "disabled" else NULL
+        disabled = if (busy || length(issues)) "disabled" else NULL
       )
     } else {
-      actionButton("compute", "Render layout", class = "btn-primary w-100 mb-2")
+      actionButton(
+        "compute",
+        if (busy) "Building..." else "Render layout",
+        class = "btn-primary w-100 mb-2",
+        disabled = if (busy) "disabled" else NULL
+      )
     }
   })
 
@@ -1579,12 +1642,12 @@ server <- function(input, output, session) {
   output$editor <- renderDragmapr({
     req(rv$layout)
     rv$egen
-    dragmapr_widget(
+    d_widget(
       rv$layout$sf_grouped,
       region_col = "region",
       state = isolate(rv$draft),
       labels = isTRUE(input$editor_labels),
-      display_options = isolate(dragmapr_display_options(
+      display_options = isolate(d_display_options(
         region_palette = active_palette(),
         show_origin_outlines = isTRUE(input$show_origin),
         show_movement_connectors = isTRUE(input$show_connectors),
@@ -1617,7 +1680,7 @@ server <- function(input, output, session) {
   # Every browser edit rebuilds the draft (not the canonical state).
   observeEvent(input$editor_state, {
     if (!is_current_editor_message(input$editor_state)) return()
-    edit <- dragmapr_widget_state(input$editor_state)
+    edit <- d_widget_state(input$editor_state)
     if (!is.null(edit)) rv$draft <- edit
   })
 

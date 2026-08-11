@@ -6,6 +6,83 @@
 # group-drag boundary belongs to the expanded group and moves the branch.
 # Global relayout is deliberately unsupported: it destroys mental-map stability.
 
+#' Build a renderer-neutral transition plan
+#'
+#' Adds editorial timing semantics to renderer-neutral movement data, including
+#' tables from `explodemap::transition_data()` and
+#' `explodemap::layout_children()`. The browser only needs to interpolate the
+#' supplied anchors according to the returned order and timing columns.
+#'
+#' @param movement Data frame with `feature_id`, original/final anchors,
+#'   movement distance, and optional `animation_order`.
+#' @param duration Per-feature duration in milliseconds.
+#' @param easing Easing identifier carried to the renderer.
+#' @param stagger Delay between successive animation-order values.
+#' @param overshoot Non-negative overshoot parameter.
+#'
+#' @return A `dragmapr_transition_plan` data frame containing the movement
+#'   schema plus `delay_ms`, `duration_ms`, `easing`, and `overshoot`.
+#' @export
+build_transition_plan <- function(movement,
+                                  duration = 650,
+                                  easing = "elastic",
+                                  stagger = 12,
+                                  overshoot = 1.25) {
+  if (is.list(movement) && !is.data.frame(movement) &&
+      is.data.frame(movement$offsets)) {
+    movement <- movement$offsets
+  }
+  if (!is.data.frame(movement)) {
+    stop("`movement` must be a data frame or layout object with `$offsets`.",
+         call. = FALSE)
+  }
+  required <- c(
+    "feature_id", "original_anchor_x", "original_anchor_y",
+    "final_anchor_x", "final_anchor_y"
+  )
+  # Child-layout tables use source/target terminology; align it here.
+  aliases <- c(
+    original_anchor_x = "source_x", original_anchor_y = "source_y",
+    final_anchor_x = "target_x", final_anchor_y = "target_y"
+  )
+  for (name in names(aliases)) {
+    if (!name %in% names(movement) && aliases[[name]] %in% names(movement)) {
+      movement[[name]] <- movement[[aliases[[name]]]]
+    }
+  }
+  missing <- setdiff(required, names(movement))
+  if (length(missing)) {
+    stop("`movement` is missing transition column(s): ",
+         paste(missing, collapse = ", "), call. = FALSE)
+  }
+  .check_number(duration, "duration", positive = TRUE)
+  .check_number(stagger, "stagger", min = 0)
+  .check_number(overshoot, "overshoot", min = 0)
+  if (!is.character(easing) || length(easing) != 1L || is.na(easing) || !nzchar(easing)) {
+    stop("`easing` must be a single non-empty string.", call. = FALSE)
+  }
+  order <- movement$animation_order
+  if (is.null(order)) {
+    order <- rank(as.character(movement$feature_id), ties.method = "first")
+  }
+  order <- suppressWarnings(as.integer(order))
+  if (anyNA(order) || any(order < 1L)) {
+    stop("`animation_order` must contain positive whole numbers.", call. = FALSE)
+  }
+  if (!"distance_m" %in% names(movement)) {
+    movement$distance_m <- sqrt(
+      (movement$final_anchor_x - movement$original_anchor_x)^2 +
+        (movement$final_anchor_y - movement$original_anchor_y)^2
+    )
+  }
+  movement$animation_order <- order
+  movement$delay_ms <- (order - 1L) * stagger
+  movement$duration_ms <- duration
+  movement$easing <- easing
+  movement$overshoot <- overshoot
+  structure(movement, class = c("dragmapr_transition_plan", "data.frame"))
+}
+
 #' Options for local elastic hierarchy transitions
 #'
 #' Builds a validated list of animation and behaviour settings for

@@ -80,7 +80,7 @@ test_that("invalid spatial files produce actionable read errors", {
 })
 
 test_that("dragmapr_iframe_bridge names configured Shiny inputs", {
-  js <- dragmapr_iframe_bridge(region_input = "regions", label_input = "labels")
+  js <- d_iframe_bridge(region_input = "regions", label_input = "labels")
 
   expect_match(js, '"regions"', fixed = TRUE)
   expect_match(js, '"labels"', fixed = TRUE)
@@ -91,9 +91,9 @@ test_that("dragmapr_iframe_bridge names configured Shiny inputs", {
 })
 
 test_that("dragmapr_iframe_bridge respects custom iframe_selector", {
-  js_default  <- dragmapr_iframe_bridge()
-  js_specific <- dragmapr_iframe_bridge(iframe_selector = "iframe.my-map-frame")
-  js_id       <- dragmapr_iframe_bridge(iframe_selector = "#my-helper")
+  js_default  <- d_iframe_bridge()
+  js_specific <- d_iframe_bridge(iframe_selector = "iframe.my-map-frame")
+  js_id       <- d_iframe_bridge(iframe_selector = "#my-helper")
 
   # Default should use plain "iframe" selector
   expect_match(js_default, '"iframe"', fixed = TRUE)
@@ -106,7 +106,7 @@ test_that("dragmapr_iframe_bridge respects custom iframe_selector", {
   expect_match(js_specific, "_dragmaprIframeSelector", fixed = TRUE)
 
   # Empty selector is rejected
-  expect_error(dragmapr_iframe_bridge(iframe_selector = ""), "non-empty CSS selector")
+  expect_error(d_iframe_bridge(iframe_selector = ""), "non-empty CSS selector")
 })
 
 test_that("upload file names are sanitized", {

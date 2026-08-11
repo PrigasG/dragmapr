@@ -7,7 +7,7 @@ editorial composition separate from source geometry while still preserving the
 legacy offset-table workflow:
 
 ```r
-dragmapr_state(
+d_state(
   level = "region",
   region_offsets = region_offsets,
   label_offsets = label_offsets,
@@ -93,7 +93,7 @@ native Shiny/htmlwidget surface:
 dragmaprOutput("map")
 
 output$map <- renderDragmapr({
-  dragmapr_widget(...)
+  d_widget(...)
 })
 ```
 
@@ -159,7 +159,7 @@ rebuild triggers.
 Region and label offsets are parallel tables inside the formal state object:
 
 ```r
-dragmapr_state(
+d_state(
   level = "division",
   region_offsets = ...,
   label_offsets = ...,
@@ -221,9 +221,9 @@ collapse_drag_offsets(
 
 Separate options by whether they require geometry reconstruction:
 
-- `dragmapr_geometry_options(...)`
-- `dragmapr_display_options(...)`
-- `dragmapr_interaction_options(...)`
+- `d_geometry_options(...)`
+- `d_display_options(...)`
+- `d_interaction_options(...)`
 
 This should make it clear which changes are safe to apply through
 `updateDragmapr()` and which require a fresh widget build.
@@ -236,7 +236,7 @@ This should make it clear which changes are safe to apply through
 layout <- explodemap::explode_grouped(...)
 state <- explodemap::as_dragmapr_state(layout)
 
-dragmapr_widget(layout$sf_grouped, region_col = "region", state = state)
+d_widget(layout$sf_grouped, region_col = "region", state = state)
 
 layout2 <- explodemap::update_exploded_layout(layout, state)
 explodemap::focus_map(layout, state = state)

@@ -16,7 +16,7 @@ Description: Creates interactive draggable plots from grouped projected
     groupings and propagate parent-level drag offsets to finer child groupings.
     Automatic starting layouts are provided by suggest_offsets() using
     radial, grid, or directional algorithms. Spatial file diagnostics are
-    available through dragmapr_diagnostics(). When a reproducible static
+    available through d_diagnostics(). When a reproducible static
     image is also needed, render_dragged_map() reconstructs the layout as
     a 'ggplot2' plot from the source geometry plus the exported offset
     tables. Project bundles can be written with write_dragmapr_project()
@@ -42,8 +42,12 @@ Imports:
     tools,
     utils
 Suggests:
+    bslib,
+    dplyr,
+    explodemap,
     glasstabs,
     knitr,
+    later,
     miniUI,
     pkgdown,
     rmarkdown,

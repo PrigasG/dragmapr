@@ -11,6 +11,7 @@ render_dragged_map(
   label_col = region_col,
   label_offsets = NULL,
   state = NULL,
+  styles = NULL,
   labels = NULL,
   label_values = NULL,
   max_labels = Inf,
@@ -73,6 +74,9 @@ render_dragged_map(
 \item{state}{Optional \code{dragmapr_state}. When supplied, its region and label
 offsets seed the static render. Explicit \code{region_offsets} or
 \code{label_offsets} arguments override the corresponding state table.}
+
+\item{styles}{Optional \code{\link[=d_styles]{d_styles()}} table. Defaults to styles stored
+in \code{state}; an explicit table overrides them.}
 
 \item{labels}{Optional label table from \code{make_region_labels()} or
 \code{as_drag_labels()}. Use \code{FALSE} to omit labels from the static render.}

@@ -1,5 +1,53 @@
 # dragmapr 0.3.1
 
+* Cleaned up the public API by renaming every function that began with the
+  redundant `dragmapr_` prefix to the compact `d_` prefix. For example,
+  `dragmapr_state()`, `dragmapr_edit()`, and `dragmapr_widget()` are now
+  `d_state()`, `d_edit()`, and `d_widget()`. The old function names are no
+  longer exported. Serialized class names and state schema identifiers are
+  unchanged, so existing state/project files remain readable.
+* Added the formal spatial-composition contract `compose_offsets()` /
+  `effective_offsets()`. Algorithmic base movement, inherited ancestor
+  movement, and local manual movement remain separately inspectable and sum to
+  canonical effective offsets. `apply_dragmapr_state()` can now materialize all
+  three layers directly into projected `sf` geometry.
+* Hierarchy state is now operational rather than container-only.
+  `d_relationships()` defines normalized parent-child edges with generic
+  `children_of()`, `parent_of()`, `descendants_of()`, `ancestors_of()`, and
+  `hierarchy_path()` queries. Active/parent state, branch movement, inherited
+  effective offsets, and snapshot/restore operations are provided by the new
+  `d_*` hierarchy helpers, unifying branch composition with the existing
+  state and inheritance model.
+* Added lightweight keyed feature styles with `d_styles()` and
+  `merge_dragmapr_styles()`. Fill, stroke, stroke width, opacity, label
+  visibility, and highlight state now round-trip through state schema 1.2.0,
+  the native widget, static rendering, and project bundles; thematic
+  classification remains application-owned.
+* `d_interaction_options()` now controls browser state emission with
+  `state_emit = "end"`, `"throttled"`, or `"continuous"`, plus local live-drag
+  rendering and a throttle interval. Full composition snapshots are emitted at
+  meaningful endpoints by default, while optional live drag messages contain
+  only the changed ID and offset. The widget now preserves real
+  `expanded_groups` instead of emitting an empty placeholder.
+* Added `build_transition_plan()` to align renderer-neutral movement tables
+  from explodemap with dragmapr timing, easing, stagger, and overshoot
+  semantics. Project bundles can now persist `state.json`, `hierarchy.json`,
+  and `styles.csv`, together with schema, CRS, geometry, and package-version
+  provenance.
+* Fixed Pipeline Studio deferred actions after dependency updates. Work queued
+  through `later` now reads Shiny inputs and reactive state inside an isolated
+  reactive context, preventing `Operation not allowed without an active
+  reactive context` during layout builds, uploads, simplification, and state
+  restores. The processing-overlay counter is likewise safe when a deferred
+  callback completes, with server-level regression coverage for the deferred
+  execution path.
+* Pipeline Studio now accepts only one processing job at a time and disables
+  its build action immediately, preventing repeated clicks from queueing
+  several synchronous layouts behind an apparently endless overlay.
+  Label-aware search automatically falls back to the standard layout above
+  1,000 features or 50 parent groups, with an in-app explanation; this keeps
+  large municipal layouts responsive while retaining optimization for smaller
+  layouts.
 * Fixed `keep_spatial_features()` so an empty id vector correctly returns an
   empty `sf` object instead of retaining every feature.
 * Strengthened `sf` validation to reject an active geometry column that is not
@@ -14,8 +62,8 @@
 # dragmapr 0.3.0
 
 * Release A of the Pipeline Studio extraction adds state comparison helpers:
-  `dragmapr_state_diff()` reports changed regions, labels, and interaction
-  fields, while `dragmapr_state_equal()` provides the matching predicate with
+  `d_state_diff()` reports changed regions, labels, and interaction
+  fields, while `d_state_equal()` provides the matching predicate with
   composition/interaction/all comparison modes. `summary.dragmapr_state()` now
   reports moved region and label counts, selected feature, CRS, geometry ID,
   and revision.
@@ -30,9 +78,9 @@
   geography from the live editor and emits `input$<id>_feature_delete`.
   Pipeline Studio exposes this in the Refine tab with source-row inspection
   and Undo/Redo so accidental deletions can be reversed.
-* `dragmapr_widget()` now accepts a direct `region_palette =` argument, matching
+* `d_widget()` now accepts a direct `region_palette =` argument, matching
   `render_dragged_map()` and `updateDragmapr(region_palette = )` while keeping
-  the existing `dragmapr_display_options(region_palette = )` route intact.
+  the existing `d_display_options(region_palette = )` route intact.
 * New `inst/shiny/pipeline-studio` Shiny app (shipped with both dragmapr and
   explodemap) demonstrates the full cross-package workflow on real US geography:
   an explodemap national HHS map and county drill-down, the draggable editor
@@ -47,18 +95,18 @@
   JSON and the widget snapshot. It is preserved as composition metadata;
   restoring the browser to a saved viewport on load is intentionally left for a
   future release (selection restoration is the clean first cut).
-* Every public entry point that accepts `sf` geometry (`dragmapr_widget()`,
-  `dragmapr_edit()`, `apply_offsets()`, `apply_dragmapr_state()`,
+* Every public entry point that accepts `sf` geometry (`d_widget()`,
+  `d_edit()`, `apply_offsets()`, `apply_dragmapr_state()`,
   `render_dragged_map()`) now validates the active sf geometry column up front
   via a shared check, so a malformed `sf` fails with one clear message instead
   of a deep, cryptic error.
-* New `dragmapr_edit()` is a friendly front-door to the interactive editor and
+* New `d_edit()` is a friendly front-door to the interactive editor and
   the composition step of the state-first workflow. It accepts a projected
   `sf`, an explodemap `grouped_exploded_map`, or a `dragmapr_layout` (plus an
-  optional `dragmapr_state`) and returns a configured `dragmapr_widget()`.
-  Capture edits back into a state with `dragmapr_widget_state()`.
+  optional `dragmapr_state`) and returns a configured `d_widget()`.
+  Capture edits back into a state with `d_widget_state()`.
 
-* `dragmapr_state()` gains three optional, back-compatible fields that make a
+* `d_state()` gains three optional, back-compatible fields that make a
   saved composition durable across sessions: `crs` (the projected CRS the
   metre offsets are expressed in, stored as an EPSG integer or WKT string so it
   round-trips through JSON), `geometry_id` (a provenance tag identifying the
@@ -78,14 +126,14 @@
   updates the selection and reports it back to Shiny, and the round-trip state
   snapshot includes all three fields. `updateDragmapr()` gains live
   `selected_feature` updates (pass `NULL` or `""` to clear).
-* New `dragmapr_widget_state()` is the inbound half of the bridge: it
+* New `d_widget_state()` is the inbound half of the bridge: it
   reconstructs a `dragmapr_state` from the `paste0(outputId, "_state")` Shiny
   input the widget emits, so server code can persist, merge, or re-render a
   live composition. The browser's `revision` is preserved as the state
   `version` (the client owns the live counter).
 * New `inst/examples/full_state_roundtrip.R` Shiny app walks the whole state
   contract: an upstream layout state is edited in the native widget, every edit
-  is rebuilt server-side with `dragmapr_widget_state()`, a selection is pushed
+  is rebuilt server-side with `d_widget_state()`, a selection is pushed
   back from R with `updateDragmapr()`, and the live `dragmapr_state` drives both
   a saved JSON file and a static `render_dragged_map()` re-render.
 * `render_dragged_map()` now accepts `state =` a `dragmapr_state`, using its
@@ -171,9 +219,9 @@ Initial CRAN release.
 * `read_offsets()` and `apply_offsets()` handle region offset I/O.
 * `read_dragmapr_sf_upload()`, `read_dragmapr_sf_url()`, and
   `prepare_dragmapr_sf()` read and normalise spatial files for Shiny workflows.
-* `dragmapr_iframe_bridge()` provides the JavaScript bridge for relaying drag
+* `d_iframe_bridge()` provides the JavaScript bridge for relaying drag
   state from the helper iframe back to Shiny inputs.
-* `dragmapr_addin()` registers an RStudio gadget under **Addins > Launch
+* `d_addin()` registers an RStudio gadget under **Addins > Launch
   dragmapr** that embeds the prototype in the viewer pane and assigns
   `region_offsets` and `label_offsets` to the target environment on completion
   (`.GlobalEnv` when launched from the RStudio Addins menu).

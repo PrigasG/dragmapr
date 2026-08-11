@@ -12,6 +12,9 @@ write_dragmapr_project(
   label_offsets = NULL,
   labels = NULL,
   region_palette = NULL,
+  state = NULL,
+  hierarchy = NULL,
+  styles = NULL,
   label_col = region_col,
   title = NULL,
   ...
@@ -38,6 +41,14 @@ and \code{dy_m} columns, or a path to such a CSV.}
 
 \item{region_palette}{Optional named character vector of fill colors (names
 are region values, values are hex strings).}
+
+\item{state}{Optional \code{\link[=d_state]{d_state()}} persisted as \code{state.json}. Its
+offset/style tables supply defaults when explicit arguments are omitted.}
+
+\item{hierarchy}{Optional \code{\link[=d_hierarchy_state]{d_hierarchy_state()}} persisted as
+\code{hierarchy.json}.}
+
+\item{styles}{Optional \code{\link[=d_styles]{d_styles()}} table persisted as \code{styles.csv}.}
 
 \item{label_col}{Column used for default label text. Defaults to
 \code{region_col}.}

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dragmapr cheatsheet</title>
 <style>
-  @page { size: 11in 8.5in landscape; margin: 0.45in; }
+  @page { size: letter landscape; margin: 0.45in; }
   * { box-sizing: border-box; }
   body {
     margin: 0;
@@ -155,7 +155,7 @@ layout <- explode_grouped(
 )
 
 state <- as_dragmapr_state(layout)
-dragmapr_edit(layout, state = state)</code></pre>
+d_edit(layout, state = state)</code></pre>
 <pre><code>focus_map(layout, state = state)
 
 render_dragged_map(
@@ -179,7 +179,7 @@ state <- read_dragmapr_state(
 
       <section>
         <h2>Compare states</h2>
-<pre><code>diff <- dragmapr_state_diff(
+<pre><code>diff <- d_state_diff(
   draft,
   canonical,
   tolerance = 1
@@ -188,7 +188,7 @@ state <- read_dragmapr_state(
 diff$changed_regions
 diff$changed_labels
 
-dragmapr_state_equal(
+d_state_equal(
   draft,
   canonical,
   compare = "composition"
@@ -207,7 +207,7 @@ dragmapr_state_equal(
 
 server <- function(input, output, session) {
   output$map <- renderDragmapr({
-    dragmapr_widget(
+    d_widget(
       my_sf,
       region_col = "region",
       region_palette = palette
@@ -215,7 +215,7 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$map_state, {
-    state <- dragmapr_widget_state(
+    state <- d_widget_state(
       input$map_state
     )
   })
@@ -239,7 +239,7 @@ updateDragmapr(
 
       <section>
         <h2>Labels and notes</h2>
-<pre><code>dragmapr_widget(
+<pre><code>d_widget(
   my_sf,
   region_col = "region",
   labels = FALSE

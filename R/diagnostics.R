@@ -42,8 +42,8 @@
 #'     crs = 3857
 #'   )
 #' )
-#' diag <- dragmapr_diagnostics(poly)
-dragmapr_diagnostics <- function(x, region_col = NULL, quiet = FALSE) {
+#' diag <- d_diagnostics(poly)
+d_diagnostics <- function(x, region_col = NULL, quiet = FALSE) {
   if (!inherits(x, "sf")) stop("`x` must be an sf object.", call. = FALSE)
 
   geom_col  <- attr(x, "sf_column")

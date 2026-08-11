@@ -31,12 +31,12 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   output$map <- renderDragmapr({
-    dragmapr_widget(regions, region_col = "region")
+    d_widget(regions, region_col = "region")
   })
 
   output$state <- renderPrint({
     req(input$map_state)
-    dragmapr_widget_state(input$map_state)
+    d_widget_state(input$map_state)
   })
 }
 
@@ -71,11 +71,11 @@ labels <- as_drag_annotations(
 )
 
 output$map <- renderDragmapr({
-  dragmapr_widget(
+  d_widget(
     regions,
     region_col = "region",
     labels = labels,
-    display_options = dragmapr_display_options(
+    display_options = d_display_options(
       connector_color = "#334155",
       connector_linewidth = 1.3
     )
@@ -95,10 +95,10 @@ posts offset state to its Shiny parent window. The Shiny app can then render a
 preview and expose a PNG download.
 
 ```{r, eval = FALSE}
-current_state <- reactiveVal(dragmapr_state(crs = 3857))
+current_state <- reactiveVal(d_state(crs = 3857))
 
 observeEvent(input$map_state, {
-  current_state(dragmapr_widget_state(input$map_state))
+  current_state(d_widget_state(input$map_state))
 })
 
 output$preview <- renderPlot({
@@ -290,7 +290,7 @@ the live widget, and then apply the same removal to the server-side `sf` object.
 ```{r, eval = FALSE}
 output$feature_rows <- renderTable({
   req(input$map_state)
-  selected <- dragmapr_widget_state(input$map_state)$selected_feature
+  selected <- d_widget_state(input$map_state)$selected_feature
   req(selected)
 
   rows <- spatial_feature_table(source_sf(), key_col = "region")
@@ -344,10 +344,10 @@ object.  Raises a descriptive error on network or format failures.
 only polygon types, assigns a fallback CRS when none is present, and reprojects
 geographic data to the target projected CRS so metre offsets are meaningful.
 
-**`dragmapr_iframe_bridge(...)`** returns a JavaScript string that installs the
+**`d_iframe_bridge(...)`** returns a JavaScript string that installs the
 `postMessage` listener and polling loop needed to relay drag state from the
 helper iframe back to Shiny inputs.  Wrap it in `tags$head(tags$script(HTML(
-dragmapr_iframe_bridge())))` in your UI.  The function accepts `region_input`,
+d_iframe_bridge())))` in your UI.  The function accepts `region_input`,
 `label_input`, `slow_poll_ms`, `fast_poll_ms`, `allowed_origin`, and
 `iframe_selector` arguments to customise the input names, timing, origin check,
 and helper iframe selection.
@@ -357,7 +357,7 @@ library(shiny)
 library(dragmapr)
 
 ui <- fluidPage(
-  tags$head(tags$script(HTML(dragmapr_iframe_bridge()))),
+  tags$head(tags$script(HTML(d_iframe_bridge()))),
   uiOutput("helper")
 )
 

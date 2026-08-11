@@ -202,7 +202,7 @@ prepare_dragmapr_sf <- function(x, target_crs = 3857) {
 #'   other iframes (e.g. Shiny download handlers).
 #'
 #' @return A character string of JavaScript ready for
-#'   `tags$head(tags$script(HTML(dragmapr_iframe_bridge())))`.
+#'   `tags$head(tags$script(HTML(d_iframe_bridge())))`.
 #' @export
 #' @examples
 #' # In a Shiny UI:
@@ -210,12 +210,12 @@ prepare_dragmapr_sf <- function(x, target_crs = 3857) {
 #' library(shiny)
 #' ui <- fluidPage(
 #'   tags$head(tags$script(HTML(
-#'     dragmapr_iframe_bridge(iframe_selector = "#my-helper-frame")
+#'     d_iframe_bridge(iframe_selector = "#my-helper-frame")
 #'   ))),
 #'   uiOutput("helper")  # render tags$iframe(id = "my-helper-frame", ...)
 #' )
 #' }
-dragmapr_iframe_bridge <- function(region_input = "region_csv",
+d_iframe_bridge <- function(region_input = "region_csv",
                                    label_input  = "label_csv",
                                    slow_poll_ms = 2000L,
                                    fast_poll_ms = 500L,

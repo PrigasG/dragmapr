@@ -39,6 +39,9 @@
 #' @param selected_feature Optional single string naming the feature currently
 #'   selected in a dashboard or editor. Carried so a composition can be
 #'   restored with focus intact.
+#' @param styles Optional keyed feature-style table created by
+#'   [d_styles()]. Styles are editorial overrides, not thematic
+#'   classification rules.
 #' @param binding Optional list of binding metadata. When supplied,
 #'   `binding$region_col` and `binding$label_id_col` are used as defaults for
 #'   the corresponding top-level arguments.
@@ -48,7 +51,7 @@
 #'
 #' @return An object of class `"dragmapr_state"`.
 #' @export
-dragmapr_state <- function(level = "region",
+d_state <- function(level = "region",
                            region_col = NULL,
                            label_id_col = NULL,
                            region_offsets = NULL,
@@ -59,8 +62,9 @@ dragmapr_state <- function(level = "region",
                            crs = NULL,
                            geometry_id = NULL,
                            selected_feature = NULL,
+                           styles = NULL,
                            binding = NULL,
-                           schema_version = "1.1.0",
+                           schema_version = "1.2.0",
                            package_version = as.character(utils::packageVersion("dragmapr"))) {
   if (!is.character(level) || length(level) != 1L || is.na(level) || !nzchar(level)) {
     stop("`level` must be a single non-empty string.", call. = FALSE)
@@ -87,6 +91,7 @@ dragmapr_state <- function(level = "region",
   crs <- normalize_state_crs(crs)
   geometry_id <- normalize_state_scalar(geometry_id, "geometry_id")
   selected_feature <- normalize_state_scalar(selected_feature, "selected_feature")
+  styles <- d_styles(styles)
   binding <- normalize_state_binding(binding, region_col, label_id_col, level)
   region_col <- binding$region_col
   label_id_col <- binding$label_id_col
@@ -104,6 +109,7 @@ dragmapr_state <- function(level = "region",
       crs = crs,
       geometry_id = geometry_id,
       selected_feature = selected_feature,
+      styles = styles,
       region_col = region_col,
       label_id_col = label_id_col,
       binding = binding,
@@ -148,6 +154,12 @@ normalize_state_scalar <- function(x, arg) {
   if (is.null(x)) {
     return(NULL)
   }
+  if (is.list(x) && !is.data.frame(x) && length(x) &&
+      all(vapply(x, is.list, logical(1)))) {
+    x <- do.call(rbind, lapply(x, function(row) {
+      as.data.frame(row, stringsAsFactors = FALSE)
+    }))
+  }
   x <- as.character(x)
   if (length(x) != 1L || is.na(x) || !nzchar(x)) {
     stop("`", arg, "` must be NULL or a single non-empty string.", call. = FALSE)
@@ -186,9 +198,9 @@ state_region_col <- function(state, region_col = NULL, required = TRUE) {
 #' @export
 validate_dragmapr_state <- function(state) {
   if (!inherits(state, "dragmapr_state")) {
-    stop("`state` must be created by dragmapr_state().", call. = FALSE)
+    stop("`state` must be created by d_state().", call. = FALSE)
   }
-  dragmapr_state(
+  d_state(
     level = state$level,
     region_offsets = state$region_offsets,
     label_offsets = state$label_offsets,
@@ -198,27 +210,28 @@ validate_dragmapr_state <- function(state) {
     crs = state$crs,
     geometry_id = state$geometry_id,
     selected_feature = state$selected_feature,
+    styles = state$styles %||% NULL,
     region_col = state$region_col %||% state$binding$region_col %||% state$level,
     label_id_col = state$label_id_col %||% state$binding$label_id_col %||% "label_id",
     binding = state$binding,
-    schema_version = state$schema_version %||% "1.1.0",
+    schema_version = state$schema_version %||% "1.2.0",
     package_version = state$package_version %||% "0.0.0"
   )
 }
 
 #' Compare dragmapr states
 #'
-#' `dragmapr_state_diff()` reports composition and optional interaction changes
-#' between two states. `dragmapr_state_equal()` is the corresponding predicate.
+#' `d_state_diff()` reports composition and optional interaction changes
+#' between two states. `d_state_equal()` is the corresponding predicate.
 #'
 #' @param draft,canonical,a,b `dragmapr_state` objects.
 #' @param tolerance Numeric tolerance for offset changes.
 #' @param compare One of `"composition"`, `"interaction"`, or `"all"`.
 #'
-#' @return `dragmapr_state_diff()` returns a `dragmapr_state_diff` object.
-#'   `dragmapr_state_equal()` returns `TRUE` or `FALSE`.
+#' @return `d_state_diff()` returns a `dragmapr_state_diff` object.
+#'   `d_state_equal()` returns `TRUE` or `FALSE`.
 #' @export
-dragmapr_state_diff <- function(draft,
+d_state_diff <- function(draft,
                                 canonical,
                                 tolerance = 1,
                                 compare = c("composition", "interaction", "all")) {
@@ -254,11 +267,16 @@ dragmapr_state_diff <- function(draft,
   selected_feature_changed <- !identical(draft$selected_feature, canonical$selected_feature)
   viewport_changed <- !identical(draft$view, canonical$view)
   expanded_groups_changed <- !setequal(draft$expanded_groups, canonical$expanded_groups)
+  styles_changed <- !identical(
+    as.data.frame(draft$styles),
+    as.data.frame(canonical$styles)
+  )
   geometry_id_changed <- !identical(draft$geometry_id, canonical$geometry_id)
   crs_changed <- !identical(draft$crs, canonical$crs)
   version_changed <- !identical(draft$version, canonical$version)
 
-  composition_changed <- nrow(region_changes) > 0L || nrow(label_changes) > 0L
+  composition_changed <- nrow(region_changes) > 0L || nrow(label_changes) > 0L ||
+    styles_changed
   interaction_changed <- selected_feature_changed || viewport_changed || expanded_groups_changed
   changed <- switch(
     compare,
@@ -286,6 +304,7 @@ dragmapr_state_diff <- function(draft,
       selected_feature_changed = selected_feature_changed,
       viewport_changed = viewport_changed,
       expanded_groups_changed = expanded_groups_changed,
+      styles_changed = styles_changed,
       geometry_id_changed = geometry_id_changed,
       crs_changed = crs_changed,
       version_changed = version_changed,
@@ -304,13 +323,13 @@ dragmapr_state_diff <- function(draft,
   )
 }
 
-#' @rdname dragmapr_state_diff
+#' @rdname d_state_diff
 #' @export
-dragmapr_state_equal <- function(a,
+d_state_equal <- function(a,
                                  b,
                                  tolerance = 1,
                                  compare = c("composition", "interaction", "all")) {
-  !dragmapr_state_diff(a, b, tolerance = tolerance, compare = compare)$changed
+  !d_state_diff(a, b, tolerance = tolerance, compare = compare)$changed
 }
 
 diff_offset_table <- function(draft, canonical, key, tolerance) {
@@ -414,7 +433,7 @@ merge_dragmapr_state <- function(state, update) {
 
   region_offsets <- merge_state_rows(state$region_offsets, update$region_offsets, "region")
   label_offsets <- merge_state_rows(state$label_offsets, update$label_offsets, "label_id")
-  dragmapr_state(
+  d_state(
     level = update$level %||% state$level,
     region_col = update$region_col %||% state$region_col,
     label_id_col = update$label_id_col %||% state$label_id_col,
@@ -425,7 +444,8 @@ merge_dragmapr_state <- function(state, update) {
     version = bump_revision(state$version, update$version),
     crs = update$crs %||% state$crs,
     geometry_id = update$geometry_id %||% state$geometry_id,
-    selected_feature = update$selected_feature %||% state$selected_feature
+    selected_feature = update$selected_feature %||% state$selected_feature,
+    styles = merge_dragmapr_styles(state$styles, update$styles)
   )
 }
 
@@ -459,7 +479,7 @@ snapshot_dragmapr_state <- function(state) {
 
 #' @rdname snapshot_dragmapr_state
 #' @export
-migrate_dragmapr_state <- function(snapshot, target_schema_version = "1.1.0") {
+migrate_dragmapr_state <- function(snapshot, target_schema_version = "1.2.0") {
   if (inherits(snapshot, "dragmapr_state")) {
     snapshot <- snapshot_dragmapr_state(snapshot)
   }
@@ -484,6 +504,7 @@ migrate_dragmapr_state <- function(snapshot, target_schema_version = "1.1.0") {
   snapshot$region_col <- binding$region_col
   snapshot$label_id_col <- binding$label_id_col
   snapshot$binding <- binding
+  snapshot$styles <- snapshot$styles %||% NULL
   snapshot$schema_version <- target_schema_version
   snapshot
 }
@@ -495,7 +516,7 @@ restore_dragmapr_state <- function(snapshot) {
     stop("`snapshot` must be a list.", call. = FALSE)
   }
   snapshot <- migrate_dragmapr_state(snapshot)
-  dragmapr_state(
+  d_state(
     level = snapshot$level %||% "region",
     region_col = snapshot$region_col,
     label_id_col = snapshot$label_id_col,
@@ -507,8 +528,9 @@ restore_dragmapr_state <- function(snapshot) {
     crs = snapshot$crs %||% NULL,
     geometry_id = snapshot$geometry_id %||% NULL,
     selected_feature = snapshot$selected_feature %||% NULL,
+    styles = restore_state_styles(snapshot$styles),
     binding = snapshot$binding %||% NULL,
-    schema_version = snapshot$schema_version %||% "1.1.0",
+    schema_version = snapshot$schema_version %||% "1.2.0",
     package_version = snapshot$package_version %||% "0.0.0"
   )
 }
@@ -536,6 +558,34 @@ restore_state_table <- function(x, type = c("region", "label")) {
     return(NULL)
   }
   x[, required, drop = FALSE]
+}
+
+restore_state_styles <- function(x) {
+  if (is.null(x) || length(x) == 0L) return(NULL)
+  if (is.list(x) && !is.data.frame(x) &&
+      all(vapply(x, is.list, logical(1)))) {
+    x <- do.call(rbind, lapply(x, function(row) {
+      scalar <- function(name, default) {
+        value <- row[[name]]
+        if (is.null(value) || length(value) == 0L) default else value[[1L]]
+      }
+      data.frame(
+        region = as.character(scalar("region", NA_character_)),
+        fill = as.character(scalar("fill", NA_character_)),
+        stroke = as.character(scalar("stroke", NA_character_)),
+        stroke_width = as.numeric(scalar("stroke_width", NA_real_)),
+        opacity = as.numeric(scalar("opacity", NA_real_)),
+        label_visible = as.logical(scalar("label_visible", NA)),
+        highlight = as.logical(scalar("highlight", NA)),
+        stringsAsFactors = FALSE
+      )
+    }))
+  }
+  if (!is.data.frame(x)) {
+    x <- tryCatch(as.data.frame(x, stringsAsFactors = FALSE), error = function(e) NULL)
+  }
+  if (is.null(x) || !"region" %in% names(x)) return(NULL)
+  d_styles(x)
 }
 
 #' Read and write dragmapr state JSON
@@ -576,10 +626,18 @@ read_dragmapr_state <- function(path) {
 #' @param state A `dragmapr_state` object.
 #' @param region_col Column in `x` defining draggable groups. Defaults to the
 #'   binding metadata stored in `state`.
+#' @param base_offsets Optional algorithmic base movement accepted by
+#'   [compose_offsets()].
+#' @param ancestor_offsets Optional inherited movement accepted by
+#'   [compose_offsets()].
 #'
 #' @return An `sf` object with region offsets applied.
 #' @export
-apply_dragmapr_state <- function(x, state, region_col = NULL) {
+apply_dragmapr_state <- function(x,
+                                 state,
+                                 region_col = NULL,
+                                 base_offsets = NULL,
+                                 ancestor_offsets = NULL) {
   state <- validate_dragmapr_state(state)
   region_col <- state_region_col(state, region_col)
   if (!is.null(state$crs) && inherits(x, "sf")) {
@@ -593,7 +651,18 @@ apply_dragmapr_state <- function(x, state, region_col = NULL) {
       )
     }
   }
-  apply_offsets(x, state$region_offsets, region_col = region_col)
+  composed <- compose_offsets(
+    base = base_offsets,
+    state = state,
+    ancestor_offsets = ancestor_offsets
+  )
+  offsets <- data.frame(
+    region = composed$region,
+    dx_m = composed$effective_dx_m,
+    dy_m = composed$effective_dy_m,
+    stringsAsFactors = FALSE
+  )
+  apply_offsets(x, offsets, region_col = region_col)
 }
 
 #' Inherit drag offsets between hierarchy levels
@@ -623,7 +692,7 @@ inherit_drag_offsets <- function(state, from, to, relation) {
     ),
     FUN = mean
   )
-  dragmapr_state(
+  d_state(
     level = to,
     region_col = to,
     label_id_col = state$label_id_col,
@@ -671,7 +740,7 @@ collapse_drag_offsets <- function(state, from, to, relation, method = "centroid"
     )
     offsets <- offsets[, c("region", "dx_m", "dy_m")]
   }
-  dragmapr_state(
+  d_state(
     level = to,
     region_col = to,
     label_id_col = state$label_id_col,

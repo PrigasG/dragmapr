@@ -15,6 +15,8 @@
 #' @param state Optional `dragmapr_state`. When supplied, its region and label
 #'   offsets seed the static render. Explicit `region_offsets` or
 #'   `label_offsets` arguments override the corresponding state table.
+#' @param styles Optional [d_styles()] table. Defaults to styles stored
+#'   in `state`; an explicit table overrides them.
 #' @param labels Optional label table from `make_region_labels()` or
 #'   `as_drag_labels()`. Use `FALSE` to omit labels from the static render.
 #' @param label_values Optional character vector of label IDs to render.
@@ -132,6 +134,7 @@ render_dragged_map <- function(x,
                                label_col = region_col,
                                label_offsets = NULL,
                                state = NULL,
+                               styles = NULL,
                                labels = NULL,
                                label_values = NULL,
                                max_labels = Inf,
@@ -238,6 +241,9 @@ render_dragged_map <- function(x,
     if (is.null(label_offsets)) {
       label_offsets <- state$label_offsets
     }
+    if (is.null(styles)) {
+      styles <- state$styles
+    }
     if (!is.null(state$crs) && inherits(x, "sf")) {
       target <- sf::st_crs(x)
       authored <- tryCatch(sf::st_crs(state$crs), error = function(e) NA)
@@ -250,6 +256,7 @@ render_dragged_map <- function(x,
       }
     }
   }
+  styles <- d_styles(styles)
   if (is.null(region_offsets)) {
     region_offsets <- data.frame(
       region = natural_sort(unique(as.character(x[[region_col]]))),
@@ -307,6 +314,10 @@ render_dragged_map <- function(x,
   if (!is.null(label_values)) {
     base_labels <- base_labels[as.character(base_labels$label_id) %in% label_values, , drop = FALSE]
   }
+  if (nrow(styles)) {
+    hidden <- styles$region[!is.na(styles$label_visible) & !styles$label_visible]
+    base_labels <- base_labels[!as.character(base_labels$region) %in% hidden, , drop = FALSE]
+  }
   anchor_labels <- apply_region_offsets_to_labels(base_labels, region_offsets)
   labels <- apply_label_state(anchor_labels, label_offsets)
   connectors <- if (show_labels) make_connector_data(
@@ -319,6 +330,38 @@ render_dragged_map <- function(x,
   limits <- plot_limits(limit_geometry, if (show_labels) labels else NULL, limit_connectors, padding = label_padding)
 
   regions <- natural_sort(unique(as.character(adjusted[[region_col]])))
+  style_index <- match(as.character(adjusted[[region_col]]), styles$region)
+  styled_regions <- nrow(styles) > 0L
+  if (styled_regions) {
+    adjusted$.drag_stroke <- ifelse(
+      is.na(style_index) | is.na(styles$stroke[style_index]),
+      "white", styles$stroke[style_index]
+    )
+    adjusted$.drag_stroke_width <- ifelse(
+      is.na(style_index) | is.na(styles$stroke_width[style_index]),
+      0.3, styles$stroke_width[style_index]
+    )
+    highlighted <- !is.na(style_index) & !is.na(styles$highlight[style_index]) &
+      styles$highlight[style_index]
+    adjusted$.drag_stroke_width[highlighted] <- pmax(
+      adjusted$.drag_stroke_width[highlighted] * 1.8, 0.8
+    )
+    adjusted$.drag_opacity <- ifelse(
+      is.na(style_index) | is.na(styles$opacity[style_index]),
+      1, styles$opacity[style_index]
+    )
+    fill_rows <- !is.na(styles$fill)
+    if (any(fill_rows)) {
+      fallback <- region_palette
+      if (is.null(fallback)) {
+        fallback <- stats::setNames(
+          grDevices::hcl.colors(length(regions), "Dark 3"), regions
+        )
+      }
+      fallback[styles$region[fill_rows]] <- styles$fill[fill_rows]
+      region_palette <- fallback
+    }
+  }
   legend_breaks <- if (is.null(legend_values)) regions else intersect(legend_values, regions)
   if (length(legend_breaks) == 0L) {
     show_legend <- FALSE
@@ -397,13 +440,25 @@ render_dragged_map <- function(x,
         linewidth = movement_connector_linewidth * 0.25
       )
   }
-  plot <- plot +
+  region_layer <- if (styled_regions) {
+    ggplot2::geom_sf(
+      data = adjusted,
+      ggplot2::aes(
+        fill = factor(.data[[region_col]], levels = regions),
+        color = .data$.drag_stroke,
+        linewidth = .data$.drag_stroke_width,
+        alpha = .data$.drag_opacity
+      )
+    )
+  } else {
     ggplot2::geom_sf(
       data = adjusted,
       ggplot2::aes(fill = factor(.data[[region_col]], levels = regions)),
       color = "white",
       linewidth = 0.3
-    ) +
+    )
+  }
+  plot <- plot + region_layer +
     fill_scale +
     ggplot2::coord_sf(xlim = limits$xlim, ylim = limits$ylim, expand = FALSE) +
     ggplot2::theme_void(base_size = 11) +
@@ -422,6 +477,12 @@ render_dragged_map <- function(x,
       )
     ) +
     ggplot2::labs(title = title)
+  if (styled_regions) {
+    plot <- plot +
+      ggplot2::scale_color_identity() +
+      ggplot2::scale_linewidth_identity() +
+      ggplot2::scale_alpha_identity()
+  }
 
   if (show_labels) {
     uses_label_color <- FALSE
@@ -544,7 +605,7 @@ render_dragged_map <- function(x,
         )
       uses_label_color <- TRUE
     }
-    if (isTRUE(uses_label_color)) {
+    if (isTRUE(uses_label_color) && !styled_regions) {
       plot <- plot + ggplot2::scale_color_identity()
     }
   }

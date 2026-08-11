@@ -8,7 +8,7 @@
 \usage{
 snapshot_dragmapr_state(state)
 
-migrate_dragmapr_state(snapshot, target_schema_version = "1.1.0")
+migrate_dragmapr_state(snapshot, target_schema_version = "1.2.0")
 
 restore_dragmapr_state(snapshot)
 }

@@ -12,18 +12,24 @@
 #' @param connector_color Browser label-connector color.
 #' @param connector_linewidth Browser label-connector width.
 #' @param draggable_regions,draggable_labels Enable region and label dragging.
+#' @param state_emit Browser-to-Shiny drag emission policy. `"end"` sends the
+#'   full canonical state at drag end only; `"throttled"` also sends compact
+#'   live drag events at `throttle_ms`; `"continuous"` sends compact live
+#'   events for every browser drag callback.
+#' @param live_drag Update geometry locally during pointer movement.
+#' @param throttle_ms Minimum milliseconds between compact live drag events.
 #'
 #' @return A named list of options.
 #' @export
-dragmapr_geometry_options <- function(width = 7200, height = 4800) {
+d_geometry_options <- function(width = 7200, height = 4800) {
   width <- positive_scalar(width, "`width`")
   height <- positive_scalar(height, "`height`")
   list(width = width, height = height)
 }
 
-#' @rdname dragmapr_geometry_options
+#' @rdname d_geometry_options
 #' @export
-dragmapr_display_options <- function(region_palette = NULL,
+d_display_options <- function(region_palette = NULL,
                                      show_origin_outlines = FALSE,
                                      show_movement_connectors = FALSE,
                                      show_drag_trail = FALSE,
@@ -45,13 +51,24 @@ dragmapr_display_options <- function(region_palette = NULL,
   )
 }
 
-#' @rdname dragmapr_geometry_options
+#' @rdname d_geometry_options
 #' @export
-dragmapr_interaction_options <- function(draggable_regions = TRUE,
-                                         draggable_labels = TRUE) {
+d_interaction_options <- function(draggable_regions = TRUE,
+                                         draggable_labels = TRUE,
+                                         state_emit = c("end", "throttled", "continuous"),
+                                         live_drag = TRUE,
+                                         throttle_ms = 75) {
+  state_emit <- match.arg(state_emit)
+  throttle_ms <- suppressWarnings(as.numeric(throttle_ms))
+  if (length(throttle_ms) != 1L || !is.finite(throttle_ms) || throttle_ms < 0) {
+    stop("`throttle_ms` must be a non-negative finite number.", call. = FALSE)
+  }
   list(
     draggableRegions = isTRUE(flag_scalar(draggable_regions, "`draggable_regions`")),
-    draggableLabels = isTRUE(flag_scalar(draggable_labels, "`draggable_labels`"))
+    draggableLabels = isTRUE(flag_scalar(draggable_labels, "`draggable_labels`")),
+    stateEmit = state_emit,
+    liveDrag = isTRUE(flag_scalar(live_drag, "`live_drag`")),
+    throttleMs = throttle_ms
   )
 }
 
@@ -63,25 +80,25 @@ dragmapr_interaction_options <- function(draggable_regions = TRUE,
 #' @param labels Show draggable labels, omit labels, or pass a label table.
 #' @param state Optional `dragmapr_state`.
 #' @param region_palette Optional named colour vector passed to
-#'   [dragmapr_display_options()]. This is a convenience alias for users who
+#'   [d_display_options()]. This is a convenience alias for users who
 #'   want widget, proxy, and static-render palettes to share one argument name.
-#' @param geometry_options Options from [dragmapr_geometry_options()].
-#' @param display_options Options from [dragmapr_display_options()].
-#' @param interaction_options Options from [dragmapr_interaction_options()].
+#' @param geometry_options Options from [d_geometry_options()].
+#' @param display_options Options from [d_display_options()].
+#' @param interaction_options Options from [d_interaction_options()].
 #' @param width,height htmlwidget container size.
 #' @param elementId Optional widget element id.
 #'
 #' @return An htmlwidget.
 #' @export
-dragmapr_widget <- function(x,
+d_widget <- function(x,
                             region_col,
                             label_col = region_col,
                             labels = TRUE,
                             state = NULL,
                             region_palette = NULL,
-                            geometry_options = dragmapr_geometry_options(),
-                            display_options = dragmapr_display_options(),
-                            interaction_options = dragmapr_interaction_options(),
+                            geometry_options = d_geometry_options(),
+                            display_options = d_display_options(),
+                            interaction_options = d_interaction_options(),
                             width = "100%",
                             height = "650px",
                             elementId = NULL) {
@@ -91,7 +108,7 @@ dragmapr_widget <- function(x,
     }
     display_options$regionPalette <- as.list(region_palette)
   }
-  payload <- dragmapr_widget_payload(
+  payload <- d_widget_payload(
     x = x,
     region_col = region_col,
     label_col = label_col,
@@ -109,7 +126,7 @@ dragmapr_widget <- function(x,
     height = height,
     package = "dragmapr",
     elementId = elementId,
-    dependencies = dragmapr_widget_dependencies()
+    dependencies = d_widget_dependencies()
   )
 }
 
@@ -119,7 +136,7 @@ dragmapr_widget <- function(x,
 #' of the state-first workflow: compute a layout, edit it, render the edited
 #' state. It accepts the objects produced upstream -- a projected `sf`, an
 #' explodemap `grouped_exploded_map`, or a `dragmapr_layout` -- together with an
-#' optional [dragmapr_state()], and returns a configured [dragmapr_widget()]
+#' optional [d_state()], and returns a configured [d_widget()]
 #' ready to embed in Shiny, R Markdown, or the viewer.
 #'
 #' For an explodemap layout, pass the composed state explicitly so the editor
@@ -128,17 +145,17 @@ dragmapr_widget <- function(x,
 #' ```r
 #' layout <- explodemap::explode_grouped(x, region_col = "region")
 #' state  <- explodemap::as_dragmapr_state(layout)
-#' dragmapr_edit(layout, state = state)
+#' d_edit(layout, state = state)
 #' ```
 #'
 #' To capture edits back into a `dragmapr_state` (to persist, merge, or
 #' re-render them), read the widget's state input in Shiny with
-#' [dragmapr_widget_state()]:
+#' [d_widget_state()]:
 #'
 #' ```r
-#' output$map <- renderDragmapr(dragmapr_edit(layout, state = state))
+#' output$map <- renderDragmapr(d_edit(layout, state = state))
 #' observeEvent(input$map_state, {
-#'   state <- dragmapr_widget_state(input$map_state)
+#'   state <- d_widget_state(input$map_state)
 #' })
 #' ```
 #'
@@ -147,16 +164,16 @@ dragmapr_widget <- function(x,
 #'   region column.
 #' @param region_col Column defining draggable groups. Required when `x` is a
 #'   raw `sf`; inferred from layout objects when omitted.
-#' @param state Optional [dragmapr_state()] giving the initial composition.
-#' @param ... Further arguments passed to [dragmapr_widget()], for example
+#' @param state Optional [d_state()] giving the initial composition.
+#' @param ... Further arguments passed to [d_widget()], for example
 #'   `label_col`, `display_options`, `width`, or `height`.
 #'
 #' @return A `dragmapr` htmlwidget (the interactive editor).
-#' @seealso [dragmapr_widget()], [dragmapr_widget_state()].
+#' @seealso [d_widget()], [d_widget_state()].
 #' @export
-dragmapr_edit <- function(x, region_col = NULL, state = NULL, ...) {
-  editable <- dragmapr_editable_geometry(x, region_col)
-  dragmapr_widget(
+d_edit <- function(x, region_col = NULL, state = NULL, ...) {
+  editable <- d_editable_geometry(x, region_col)
+  d_widget(
     editable$sf,
     region_col = editable$region_col,
     state = state,
@@ -166,7 +183,7 @@ dragmapr_edit <- function(x, region_col = NULL, state = NULL, ...) {
 
 # Duck-type the supported inputs into draggable geometry + a region column,
 # without taking a hard dependency on explodemap's classes.
-dragmapr_editable_geometry <- function(x, region_col) {
+d_editable_geometry <- function(x, region_col) {
   if (inherits(x, "sf")) {
     if (is.null(region_col) || !nzchar(region_col)) {
       stop("`region_col` is required when `x` is an sf object.", call. = FALSE)
@@ -197,7 +214,7 @@ dragmapr_editable_geometry <- function(x, region_col) {
 #'
 #' @param outputId Shiny output id.
 #' @param width,height Output dimensions.
-#' @param expr Expression returning [dragmapr_widget()].
+#' @param expr Expression returning [d_widget()].
 #' @param env Evaluation environment.
 #' @param quoted Is `expr` quoted?
 #'
@@ -225,7 +242,8 @@ renderDragmapr <- function(expr, env = parent.frame(), quoted = FALSE) {
 #'   `selected_feature` can also be updated; pass `NULL` or `""` to clear the
 #'   current selection. Use `remove_features = c(...)` to remove one or more
 #'   feature ids from the live widget, or `delete_selected = TRUE` to remove
-#'   the current selection.
+#'   the current selection. `expanded_groups` and `styles` update the
+#'   hierarchy/style composition without rebuilding geometry.
 #' @param generation Optional widget generation token. When supplied, the
 #'   browser ignores the update unless it targets the active render generation.
 #' @param revision Optional server-side revision token to echo in the widget
@@ -241,7 +259,7 @@ updateDragmapr <- function(session, outputId, ..., generation = NULL, revision =
     stop("`outputId` must be a single non-empty string.", call. = FALSE)
   }
   dots <- list(...)
-  message <- dragmapr_update_message(dots)
+  message <- d_update_message(dots)
   if (!is.null(generation)) {
     message$generation <- generation_scalar(generation, "`generation`")
   }
@@ -256,9 +274,9 @@ updateDragmapr <- function(session, outputId, ..., generation = NULL, revision =
 #'
 #' The native widget reports edits to Shiny through an input named
 #' `paste0(outputId, "_state")`. This function turns that value back into a
-#' [dragmapr_state()] so server code can persist, merge, or re-render the user's
+#' [d_state()] so server code can persist, merge, or re-render the user's
 #' live composition. It is the inbound half of the widget bridge that
-#' [dragmapr_widget()] / [updateDragmapr()] form on the outbound side.
+#' [d_widget()] / [updateDragmapr()] form on the outbound side.
 #'
 #' The browser's monotonic `revision` becomes the state `version` unchanged --
 #' the client owns the live counter, so the server records the edit faithfully
@@ -273,11 +291,11 @@ updateDragmapr <- function(session, outputId, ..., generation = NULL, revision =
 #' @examples
 #' \dontrun{
 #' shiny::observeEvent(input$map_state, {
-#'   state <- dragmapr_widget_state(input$map_state)
+#'   state <- d_widget_state(input$map_state)
 #'   write_dragmapr_state(state, "composition.json")
 #' })
 #' }
-dragmapr_widget_state <- function(value) {
+d_widget_state <- function(value) {
   if (is.null(value)) {
     return(NULL)
   }
@@ -293,7 +311,7 @@ dragmapr_widget_state <- function(value) {
   expanded <- value$expanded_groups
   expanded <- if (is.null(expanded)) character() else as.character(unlist(expanded))
 
-  dragmapr_state(
+  d_state(
     level = value$level %||% "region",
     region_col = value$region_col %||% value$binding$region_col %||% NULL,
     label_id_col = value$label_id_col %||% value$binding$label_id_col %||% NULL,
@@ -305,15 +323,16 @@ dragmapr_widget_state <- function(value) {
     crs = value$crs %||% NULL,
     geometry_id = value$geometry_id %||% NULL,
     selected_feature = selected,
+    styles = restore_state_styles(value$styles),
     binding = value$binding %||% NULL,
-    schema_version = value$schema_version %||% "1.1.0",
+    schema_version = value$schema_version %||% "1.2.0",
     package_version = value$package_version %||% "0.0.0"
   )
 }
 
 # Coerce the offset rows sent by the browser (a list of per-row lists, or a
 # data frame) into a data frame. Returns NULL for an empty/absent table so the
-# dragmapr_state() constructor supplies the correct empty schema.
+# d_state() constructor supplies the correct empty schema.
 widget_rows_to_df <- function(rows) {
   if (is.null(rows) || length(rows) == 0L) {
     return(NULL)
@@ -327,7 +346,7 @@ widget_rows_to_df <- function(rows) {
   )
 }
 
-dragmapr_widget_payload <- function(x, region_col, label_col, labels, state,
+d_widget_payload <- function(x, region_col, label_col, labels, state,
                                     geometry_options, display_options,
                                     interaction_options) {
   validate_dragmapr_sf(x)
@@ -339,7 +358,7 @@ dragmapr_widget_payload <- function(x, region_col, label_col, labels, state,
   }
   if (sf::st_is_longlat(x)) {
     stop(
-      "Project `x` before using dragmapr_widget(). ",
+      "Project `x` before using d_widget(). ",
       "Use prepare_dragmapr_sf(x) or sf::st_transform(x, crs = 3857).",
       call. = FALSE
     )
@@ -361,7 +380,7 @@ dragmapr_widget_payload <- function(x, region_col, label_col, labels, state,
   }
 
   state <- if (is.null(state)) {
-    dragmapr_state(
+    d_state(
       region_col = region_col,
       label_id_col = "label_id",
       region_offsets = data.frame(region = character(), dx_m = numeric(), dy_m = numeric()),
@@ -371,7 +390,7 @@ dragmapr_widget_payload <- function(x, region_col, label_col, labels, state,
     validate_dragmapr_state(state)
   }
   if (!identical(state$region_col, region_col)) {
-    state <- dragmapr_state(
+    state <- d_state(
       level = state$level,
       region_col = region_col,
       label_id_col = state$label_id_col,
@@ -383,6 +402,7 @@ dragmapr_widget_payload <- function(x, region_col, label_col, labels, state,
       crs = state$crs,
       geometry_id = state$geometry_id,
       selected_feature = state$selected_feature,
+      styles = state$styles,
       schema_version = state$schema_version,
       package_version = state$package_version
     )
@@ -391,6 +411,7 @@ dragmapr_widget_payload <- function(x, region_col, label_col, labels, state,
   state_payload <- snapshot_dragmapr_state(state)
   state_payload$region_offsets <- dataframe_records(state_payload$region_offsets)
   state_payload$label_offsets <- dataframe_records(state_payload$label_offsets)
+  state_payload$styles <- dataframe_records(state_payload$styles)
 
   list(
     widgetId = NULL,
@@ -410,7 +431,7 @@ dragmapr_widget_payload <- function(x, region_col, label_col, labels, state,
   )
 }
 
-dragmapr_widget_dependencies <- function() {
+d_widget_dependencies <- function() {
   list(
     htmltools::htmlDependency(
       name = "d3",
@@ -422,7 +443,7 @@ dragmapr_widget_dependencies <- function() {
   )
 }
 
-dragmapr_update_message <- function(dots) {
+d_update_message <- function(dots) {
   if (length(dots) == 0L) {
     return(list(display = list()))
   }
@@ -438,7 +459,9 @@ dragmapr_update_message <- function(dots) {
   composition_allowed <- c(
     selected_feature = "selectedFeature",
     remove_features = "removeFeatures",
-    delete_selected = "deleteSelected"
+    delete_selected = "deleteSelected",
+    expanded_groups = "expandedGroups",
+    styles = "styles"
   )
   unknown <- setdiff(names(dots), c(names(display_allowed), names(composition_allowed)))
   if (length(unknown) > 0L) {
@@ -456,6 +479,11 @@ dragmapr_update_message <- function(dots) {
         value <- remove_features_vector(value)
       } else if (nm == "delete_selected") {
         value <- isTRUE(flag_scalar(value, "`delete_selected`"))
+      } else if (nm == "expanded_groups") {
+        value <- unique(as.character(value %||% character()))
+        value <- value[!is.na(value) & nzchar(value)]
+      } else if (nm == "styles") {
+        value <- dataframe_records(d_styles(value))
       }
       message[[composition_allowed[[nm]]]] <- value
       next

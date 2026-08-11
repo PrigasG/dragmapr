@@ -57,9 +57,39 @@ HTMLWidgets.widget({
 
     function colorFor(region) {
       const palette = ["#2166ac", "#d73027", "#1a9850", "#984ea3", "#ff7f00", "#a65628", "#f781bf", "#999999"];
+      const style = styleFor(region);
+      if (style && style.fill) return style.fill;
       const custom = state.display.regionPalette || {};
       if (custom[region]) return custom[region];
       return palette[state.regions.indexOf(region) % palette.length];
+    }
+
+    function styleFor(region) {
+      return state.styles.get(String(region)) || null;
+    }
+
+    function styleRows() {
+      return Array.from(state.styles.entries()).map(([region, style]) =>
+        Object.assign({region: String(region)}, style)
+      );
+    }
+
+    function compactDrag(eventType, item) {
+      return Object.assign({
+        widget_id: el.id,
+        generation: state.generation,
+        revision: state.revision,
+        event: eventType
+      }, item || {});
+    }
+
+    function emitLiveDrag(item) {
+      const mode = state.interaction.stateEmit || "end";
+      if (mode === "end") return;
+      const now = window.performance ? window.performance.now() : Date.now();
+      if (mode === "throttled" && now - state.lastDragEmit < state.interaction.throttleMs) return;
+      state.lastDragEmit = now;
+      sendInput("drag", compactDrag("drag", item));
     }
 
     function regionRows() {
@@ -106,7 +136,8 @@ HTMLWidgets.widget({
         selected_feature: state.selectedFeature || "",
         region_offsets: regionRows(),
         label_offsets: labelRows(),
-        expanded_groups: [],
+        expanded_groups: state.expandedGroups.slice(),
+        styles: styleRows(),
         view: {
           scale: state.metricScale,
           width: state.geometry.width,
@@ -255,6 +286,7 @@ HTMLWidgets.widget({
       state.labels = (state.labels || []).filter(label => !removeSet.has(String(label.region)));
       removed.forEach(id => {
         state.regionOffsets.delete(id);
+        state.styles.delete(id);
         if (state.selectedFeature === id) state.selectedFeature = "";
       });
       for (const [labelId, offset] of Array.from(state.labelOffsets.entries())) {
@@ -292,26 +324,45 @@ HTMLWidgets.widget({
         .attr("transform", regionTransform)
         .style("fill", colorFor);
 
-      merged.classed("is-selected", region => String(region) === (state.selectedFeature || ""));
+      merged
+        .classed("is-selected", region => String(region) === (state.selectedFeature || ""))
+        .classed("is-highlighted", region => !!(styleFor(region) && styleFor(region).highlight));
 
       merged.selectAll("path")
         .attr("d", state.path)
-        .attr("fill", function() { return colorFor(d3.select(this.parentNode).datum()); });
+        .attr("fill", function() { return colorFor(d3.select(this.parentNode).datum()); })
+        .style("stroke", function() {
+          const style = styleFor(d3.select(this.parentNode).datum());
+          return style && style.stroke ? style.stroke : null;
+        })
+        .style("stroke-width", function() {
+          const style = styleFor(d3.select(this.parentNode).datum());
+          return style && style.stroke_width != null && Number.isFinite(Number(style.stroke_width)) ? Number(style.stroke_width) : null;
+        })
+        .style("opacity", function() {
+          const style = styleFor(d3.select(this.parentNode).datum());
+          return style && style.opacity != null && Number.isFinite(Number(style.opacity)) ? Number(style.opacity) : null;
+        });
 
       if (state.interaction.draggableRegions) {
         const drag = d3.drag()
           .on("start", function(event, region) {
             state.dragMoved = 0;
+            state.lastDragEmit = 0;
             d3.select(this).classed("is-active", true);
-            sendInput("drag_start", snapshot("dragstart", {region: String(region)}));
+            sendInput("drag_start", compactDrag("dragstart", {region: String(region)}));
           })
           .on("drag", function(event, region) {
             const offset = state.regionOffsets.get(String(region));
             state.dragMoved += Math.hypot(event.dx, event.dy);
             offset.dx_m += event.dx / state.metricScale;
             offset.dy_m -= event.dy / state.metricScale;
-            updateLayout();
-            sendInput("drag", snapshot("drag", {region: String(region)}));
+            if (state.interaction.liveDrag) updateLayout();
+            emitLiveDrag({
+              region: String(region),
+              dx_m: offset.dx_m,
+              dy_m: offset.dy_m
+            });
           })
           .on("end", function(event, region) {
             d3.select(this).classed("is-active", false);
@@ -319,6 +370,7 @@ HTMLWidgets.widget({
               setSelection(region);
               sendInput("region_click", snapshot("region_click", {region: String(region)}));
             } else {
+              if (!state.interaction.liveDrag) updateLayout();
               sendInput("drag_end", snapshot("dragend", {region: String(region)}));
             }
           });
@@ -341,7 +393,10 @@ HTMLWidgets.widget({
     }
 
     function renderLabels() {
-      const visibleLabels = state.labels || [];
+      const visibleLabels = (state.labels || []).filter(label => {
+        const style = styleFor(label.region);
+        return !style || style.label_visible !== false;
+      });
       const connectors = state.labelConnectorLayer.selectAll("path.dragmapr-label-connector")
         .data(visibleLabels.filter(d => d.connector !== false), d => String(d.label_id));
       connectors.exit().remove();
@@ -377,9 +432,15 @@ HTMLWidgets.widget({
             const offset = state.labelOffsets.get(String(label.label_id));
             offset.dx_m += event.dx / state.metricScale;
             offset.dy_m -= event.dy / state.metricScale;
-            updateLayout();
+            if (state.interaction.liveDrag) updateLayout();
+            emitLiveDrag({
+              label_id: String(label.label_id),
+              dx_m: offset.dx_m,
+              dy_m: offset.dy_m
+            });
           })
           .on("end", function(event, label) {
+            if (!state.interaction.liveDrag) updateLayout();
             sendInput("drag_end", snapshot("labeldragend", {label_id: String(label.label_id)}));
           });
         merged.call(drag);
@@ -390,6 +451,20 @@ HTMLWidgets.widget({
       Object.assign(state.display, display || {});
       syncBackground();
       state.regionLayer.selectAll("g.dragmapr-region").style("fill", colorFor);
+      state.regionLayer.selectAll("g.dragmapr-region").selectAll("path")
+        .attr("fill", function() { return colorFor(d3.select(this.parentNode).datum()); })
+        .style("stroke", function() {
+          const style = styleFor(d3.select(this.parentNode).datum());
+          return style && style.stroke ? style.stroke : null;
+        })
+        .style("stroke-width", function() {
+          const style = styleFor(d3.select(this.parentNode).datum());
+          return style && style.stroke_width != null && Number.isFinite(Number(style.stroke_width)) ? Number(style.stroke_width) : null;
+        })
+        .style("opacity", function() {
+          const style = styleFor(d3.select(this.parentNode).datum());
+          return style && style.opacity != null && Number.isFinite(Number(style.opacity)) ? Number(style.opacity) : null;
+        });
       state.labelConnectorLayer.selectAll("path.dragmapr-label-connector")
         .style("stroke", state.display.connectorColor)
         .style("stroke-width", state.display.connectorLinewidth);
@@ -438,11 +513,16 @@ HTMLWidgets.widget({
       });
 
       const selected = (x.selectedFeature != null ? x.selectedFeature : statePayload.selected_feature) || "";
+      const styles = new Map((statePayload.styles || []).map(row => {
+        const copy = Object.assign({}, row);
+        delete copy.region;
+        return [String(row.region), copy];
+      }));
 
       state = {
         generation: x.generation,
         revision: Number(x.revision) || 0,
-        schemaVersion: statePayload.schema_version || "1.1.0",
+        schemaVersion: statePayload.schema_version || "1.2.0",
         packageVersion: statePayload.package_version || "0.0.0",
         stateLevel: statePayload.level || "region",
         regionCol: statePayload.region_col || (statePayload.binding && statePayload.binding.region_col) || x.regionCol || statePayload.level || "region",
@@ -450,6 +530,8 @@ HTMLWidgets.widget({
         crs: (x.crs != null ? x.crs : statePayload.crs) || null,
         geometryId: (x.geometryId != null ? x.geometryId : statePayload.geometry_id) || null,
         selectedFeature: String(selected),
+        expandedGroups: (statePayload.expanded_groups || []).map(String),
+        styles: styles,
         geojson: x.geojson || {type: "FeatureCollection", features: []},
         labels: labels,
         grouped: grouped,
@@ -469,10 +551,14 @@ HTMLWidgets.widget({
         }, x.display || {}),
         interaction: Object.assign({
           draggableRegions: true,
-          draggableLabels: true
+          draggableLabels: true,
+          stateEmit: "end",
+          liveDrag: true,
+          throttleMs: 75
         }, x.interaction || {}),
         centroids: new Map(),
-        dragMoved: 0
+        dragMoved: 0,
+        lastDragEmit: 0
       };
     }
 
@@ -538,10 +624,26 @@ HTMLWidgets.widget({
           return;
         }
         applyDisplay((message && message.display) || {});
+        let compositionChanged = false;
         if (message && Object.prototype.hasOwnProperty.call(message, "selectedFeature")) {
           if (setSelection(message.selectedFeature)) {
             sendInput("state", snapshot("selection", {selected_feature: state.selectedFeature || ""}));
           }
+        }
+        if (message && Array.isArray(message.expandedGroups)) {
+          state.expandedGroups = Array.from(new Set(message.expandedGroups.map(String).filter(Boolean)));
+          compositionChanged = true;
+        }
+        if (message && Array.isArray(message.styles)) {
+          state.styles = new Map(message.styles.map(row => {
+            const copy = Object.assign({}, row);
+            delete copy.region;
+            return [String(row.region), copy];
+          }));
+          renderRegions();
+          renderLabels();
+          applyDisplay(state.display);
+          compositionChanged = true;
         }
         if (message && Array.isArray(message.removeFeatures)) {
           removeFeatures(message.removeFeatures, "featuredelete");
@@ -549,6 +651,7 @@ HTMLWidgets.widget({
         if (message && message.deleteSelected === true && state.selectedFeature) {
           removeFeatures([state.selectedFeature], "featuredelete");
         }
+        if (compositionChanged) snapshot("composition");
         sendInput("ack", {
           widget_id: el.id,
           generation: state.generation,

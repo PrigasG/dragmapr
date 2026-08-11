@@ -22,7 +22,7 @@ The test suite was not updated to cover three things changed in 0.1.0:
   `as_drag_annotations(connector = TRUE)`, and assert that all rows in the result
   have `connector == TRUE`.
 
-- **`dragmapr_iframe_bridge(iframe_selector)`** — the new parameter was added to
+- **`d_iframe_bridge(iframe_selector)`** — the new parameter was added to
   `spatial_io.R` but `test-spatial-io.R` does not check it. Add a test that the
   generated JS string contains the selector literal when a custom selector is
   supplied, and that an empty-string selector throws a clear error.
@@ -141,7 +141,7 @@ context for what was just completed.
   `iframe.studio-helper-frame` rather than the first `<iframe>` in the document.
 - Loading veil now dismissed by `dragmapr-ready` postMessage after D3 render,
   not by the iframe `load` event (which races with listener setup).
-- `dragmapr_iframe_bridge()` gains `iframe_selector` parameter.
+- `d_iframe_bridge()` gains `iframe_selector` parameter.
 - Natural / numeric sort applied consistently in R (`make_region_labels`,
   `render_dragged_map`) and in D3 (`naturalCompare`).
 - Label sliders consolidated: only relevant controls shown per label type;

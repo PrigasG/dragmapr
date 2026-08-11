@@ -90,3 +90,41 @@ test_that("render_dragmapr_project gives a useful error for missing region colum
     "wrong_column.*not present in source.gpkg"
   )
 })
+
+test_that("project bundles persist state hierarchy and feature styles", {
+  x <- sf::st_sf(
+    region = c("A", "B"),
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 0)))),
+      sf::st_polygon(list(rbind(c(2, 0), c(3, 0), c(3, 1), c(2, 0)))),
+      crs = 3857
+    )
+  )
+  styles <- d_styles(data.frame(
+    region = c("A", "B"), fill = c("#112233", "#445566"),
+    label_visible = c(TRUE, FALSE)
+  ))
+  state <- d_state(
+    region_col = "region",
+    region_offsets = data.frame(region = "A", dx_m = 10, dy_m = 0),
+    styles = styles
+  )
+  hierarchy <- d_hierarchy_state(
+    root = state,
+    children = list("region:A" = d_state(level = "child")),
+    active_path = "region:A"
+  )
+  path <- tempfile(fileext = ".zip")
+
+  write_dragmapr_project(
+    x, region_col = "region", file = path,
+    state = state, hierarchy = hierarchy
+  )
+  bundle <- read_dragmapr_project(path)
+
+  expect_s3_class(bundle$state, "dragmapr_state")
+  expect_s3_class(bundle$hierarchy, "dragmapr_hierarchy_state")
+  expect_equal(as.data.frame(bundle$styles), as.data.frame(styles))
+  expect_equal(bundle$hierarchy$active_path, "region:A")
+  expect_equal(bundle$state$region_offsets$dx_m, 10)
+})

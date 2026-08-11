@@ -14,6 +14,24 @@ hierarchy_sf <- function() {
   )
 }
 
+test_that("build_transition_plan aligns renderer-neutral movement timing", {
+  movement <- data.frame(
+    feature_id = c("b", "a"), parent_id = "p",
+    original_anchor_x = c(0, 0), original_anchor_y = c(0, 0),
+    final_anchor_x = c(10, 20), final_anchor_y = c(0, 0),
+    animation_order = c(2, 1)
+  )
+
+  plan <- build_transition_plan(
+    movement, duration = 500, easing = "elastic", stagger = 25, overshoot = 1.1
+  )
+
+  expect_s3_class(plan, "dragmapr_transition_plan")
+  expect_equal(plan$delay_ms, c(25, 0))
+  expect_equal(plan$duration_ms, c(500, 500))
+  expect_equal(plan$distance_m, c(10, 20))
+})
+
 test_that("detect_hierarchy_columns ranks parent-child pairs", {
   pairs <- detect_hierarchy_columns(hierarchy_sf())
 
