@@ -2,7 +2,7 @@ test_that("Pipeline Studio deferred work is reactive-safe and single-flight", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("later")
   skip_if_not_installed("bslib")
-  skip_if_not_installed("explodemap")
+  skip_if_not_installed("explodemap", minimum_version = "0.4.0")
 
   app_env <- new.env(parent = globalenv())
   app_file <- system.file("shiny", "pipeline-studio", "app.R", package = "dragmapr")

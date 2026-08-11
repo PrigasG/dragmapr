@@ -44,7 +44,7 @@ Imports:
 Suggests:
     bslib,
     dplyr,
-    explodemap,
+    explodemap (>= 0.4.0),
     glasstabs,
     knitr,
     later,

@@ -49,6 +49,7 @@ handoff
 htmlwidget
 iframe
 iframes
+inspectable
 labelled
 lifecycle
 linetypes
@@ -60,11 +61,13 @@ multiselect
 normalise
 postMessage
 pre
+queueing
 relayout
 renderer
 recomputation
 repositioned
 reprojects
+revalidated
 roadmap
 runnable
 unbloom

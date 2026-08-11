@@ -14,6 +14,10 @@
 
 ## Pipeline Studio compatibility
 
+- Declared the app's `explodemap >= 0.4.0` requirement and added an early,
+  actionable version check. The GitHub Actions matrix installs the matching
+  `explodemap` development release while these coordinated releases are being
+  prepared; `explodemap` 0.4.0 must be available before this dragmapr release.
 - Reviewed the bundled Pipeline Studio after dependency updates exposed a
   deferred Shiny reactive-context error.
 - Deferred layout builds, spatial uploads, vertex simplification, and saved

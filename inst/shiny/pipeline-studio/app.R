@@ -14,6 +14,18 @@
 #   shiny::runApp(system.file("shiny/pipeline-studio", package = "explodemap"))
 #   shiny::runApp(system.file("shiny/pipeline-studio", package = "dragmapr"))
 
+if (!requireNamespace("explodemap", quietly = TRUE) ||
+    utils::compareVersion(
+      as.character(utils::packageVersion("explodemap")),
+      "0.4.0"
+    ) < 0L) {
+  stop(
+    "Pipeline Studio requires explodemap >= 0.4.0. ",
+    "Install or update explodemap before launching the app.",
+    call. = FALSE
+  )
+}
+
 suppressPackageStartupMessages({
   library(shiny)
   library(bslib)

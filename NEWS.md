@@ -1,5 +1,9 @@
 # dragmapr 0.3.1
 
+* Pipeline Studio now declares and checks its `explodemap >= 0.4.0`
+  requirement before launch. This prevents older released `explodemap`
+  versions from failing later with missing spatial-grouping, palette,
+  simplification, state-bridge, or diagnostic functions.
 * Cleaned up the public API by renaming every function that began with the
   redundant `dragmapr_` prefix to the compact `d_` prefix. For example,
   `dragmapr_state()`, `dragmapr_edit()`, and `dragmapr_widget()` are now
