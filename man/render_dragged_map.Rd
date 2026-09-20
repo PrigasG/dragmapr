@@ -193,7 +193,7 @@ saves the plot.}
 \item{width, height, dpi}{Output settings used when \code{file} is supplied.}
 }
 \details{
-\section{Label style mappings}{
+\subsection{Label style mappings}{
 
 The interactive \code{\link[=drag_map_prototype]{drag_map_prototype()}} helper and this static renderer
 expose the same label styling concepts under slightly different argument

@@ -104,7 +104,7 @@ test_that("d_history undo needs two checkpoints and push clears redo", {
   expect_error(d_redo(h), "Nothing to redo")
 
   back <- d_undo(h)
-  expect_equal(back$region_offsets$dx_m, 0)
+  expect_true(d_state_equal(back, s0))
 })
 
 test_that("d_history validates its inputs", {
