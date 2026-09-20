@@ -14,7 +14,8 @@ build_transition_plan(
 }
 \arguments{
 \item{movement}{Data frame with \code{feature_id}, original/final anchors,
-movement distance, and optional \code{animation_order}.}
+movement distance, and optional \code{animation_order} (positive whole numbers;
+fractional values are rejected, not truncated).}
 
 \item{duration}{Per-feature duration in milliseconds.}
 

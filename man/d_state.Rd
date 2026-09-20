@@ -69,7 +69,8 @@ classification rules.}
 the corresponding top-level arguments.}
 
 \item{schema_version}{State schema version. Stored with JSON snapshots so
-future migrations can read older projects.}
+future migrations can read older projects. Must use whole-number
+\code{"major.minor.patch"} components, for example \code{"1.2.0"}.}
 
 \item{package_version}{Package version that created the state.}
 }

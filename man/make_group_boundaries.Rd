@@ -10,7 +10,8 @@ make_group_boundaries(sf_obj, group_col, padding = NULL)
 \item{sf_obj}{An \code{sf} object containing the (expanded) child regions.}
 
 \item{group_col}{Column in \code{sf_obj} identifying the expanded group, usually
-the parent id column.}
+the parent id column. Missing or empty values are ignored; an error is
+raised when no valid group values remain.}
 
 \item{padding}{Single positive number in map units, or \code{NULL} (default) to
 use 2.5 percent of the bounding-box diagonal of \code{sf_obj}.}

@@ -192,6 +192,30 @@ saves the plot.}
 
 \item{width, height, dpi}{Output settings used when \code{file} is supplied.}
 }
+\details{
+\section{Label style mappings}{
+
+The interactive \code{\link[=drag_map_prototype]{drag_map_prototype()}} helper and this static renderer
+expose the same label styling concepts under slightly different argument
+names and units. Use this mapping to carry a styled interactive layout into
+a matching static export:
+
+\tabular{lll}{
+  Interactive (\code{drag_map_prototype()}) \tab Static (\code{render_dragged_map()}) \tab Notes \cr
+  \code{label_text_size} \tab \code{label_size} \tab Pixels become points; the addin uses \code{label_text_size / 3}. \cr
+  \code{label_radius} \tab \code{marker_size} \tab Pixels become points; the addin uses \code{label_radius / 3}. \cr
+  \code{label_marker} \tab \code{show_label_marker} \tab Logical toggle in both. \cr
+  \code{label_marker_shape} \tab \code{label_marker_shape} \tab Same \code{"circle"}/\code{"rect"}/\code{"none"} values. \cr
+  \code{connector_color} \tab \code{connector_color} \tab Same name. \cr
+  \code{connector_linewidth} \tab \code{connector_linewidth} \tab Same name; browser pixels vs. plot units. \cr
+  \code{connector_linetype} \tab \code{connector_linetype} \tab Same values. \cr
+  \code{connector_endpoint} \tab \code{connector_endpoint} \tab Same values. \cr
+  \code{show_legend}, \code{legend_position}, \code{legend_title}, \code{legend_values}, \code{max_legend_keys} \tab Same names \tab Identical spelling. \cr
+  \code{region_palette} \tab \code{region_palette} \tab Same name. \cr
+  \code{map_background} \tab \code{map_background} \tab Same values. \cr
+}
+}
+}
 \value{
 A \code{ggplot} object.
 }

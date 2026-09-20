@@ -26,3 +26,4 @@
 ^inst/notes/office-demo-beamer.*\.md$
 ^Rplots\.pdf$
 ^tests/testthat/Rplots\.pdf$
+^inst/examples/shiny_spatial_studio\.R$

@@ -196,6 +196,31 @@ d_state_equal(
         <p class="note">Use <code>compare = "composition"</code> when selection or
         viewport changes should not count as dirty edits.</p>
       </section>
+
+      <section>
+        <h2>Edit and undo</h2>
+<pre><code>state <- d_nudge(
+  state, "North",
+  dx_m = 500
+)
+
+state <- d_snap_offsets(
+  state,
+  grid = 1000
+)
+
+d_validate_state(state)
+
+h <- d_history()
+d_history_push(h, state)
+state <- d_undo(h)
+state <- d_redo(h)</code></pre>
+        <p class="note"><code>d_nudge()</code> adds a delta to one region or label
+        (<code>target = "label"</code>); <code>d_snap_offsets()</code> rounds every
+        offset to the grid. The history stack has reference semantics, so
+        <code>d_history_push()</code> / <code>d_undo()</code> /
+        <code>d_redo()</code> modify it in place.</p>
+      </section>
     </div>
 
     <div>

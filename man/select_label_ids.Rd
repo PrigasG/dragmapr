@@ -4,15 +4,17 @@
 \alias{select_label_ids}
 \title{Select a readable subset of label IDs}
 \usage{
-select_label_ids(labels, max_labels = 25, prefer = NULL)
+select_label_ids(labels, max_labels = 25, label_prefer = NULL, prefer = NULL)
 }
 \arguments{
 \item{labels}{A drag label table accepted by \code{\link[=as_drag_labels]{as_drag_labels()}}.}
 
 \item{max_labels}{Maximum number of label IDs to return.}
 
-\item{prefer}{Optional label IDs to keep first, for example labels from an
+\item{label_prefer}{Optional label IDs to keep first, for example labels from an
 expanded branch or labels the user has edited.}
+
+\item{prefer}{Deprecated alias for \code{label_prefer}.}
 }
 \value{
 A character vector of label IDs.

@@ -33,10 +33,11 @@ region_connectors <- function(x,
   as_sf <- flag_scalar(as_sf, "`as_sf`")
 
   offsets <- state$region_offsets
-  regions <- natural_sort(unique(as.character(sf_obj[[region_col]])))
+  regions <- unique(as.character(sf_obj[[region_col]]))
+  regions <- natural_sort(regions[!is.na(regions) & nzchar(regions)])
   idx <- match(regions, offsets$region)
-  dx <- ifelse(is.na(idx), 0, offsets$dx_m[idx])
-  dy <- ifelse(is.na(idx), 0, offsets$dy_m[idx])
+  dx <- zero_missing(offsets$dx_m[idx])
+  dy <- zero_missing(offsets$dy_m[idx])
   anchors <- region_anchor_table(sf_obj, region_col)
   anchors <- anchors[match(regions, anchors$region), , drop = FALSE]
   distance <- sqrt(dx^2 + dy^2)
@@ -100,8 +101,8 @@ label_connectors <- function(labels,
   }
 
   idx <- match(labels$label_id, offsets$label_id)
-  dx <- ifelse(is.na(idx), 0, offsets$dx_m[idx])
-  dy <- ifelse(is.na(idx), 0, offsets$dy_m[idx])
+  dx <- zero_missing(offsets$dx_m[idx])
+  dy <- zero_missing(offsets$dy_m[idx])
   type <- connector_type %||% labels$connector_type
   start_x <- ifelse(is.finite(labels$connector_start_x), labels$connector_start_x, labels$x)
   start_y <- ifelse(is.finite(labels$connector_start_y), labels$connector_start_y, labels$y)
@@ -174,6 +175,7 @@ connector_sf_input <- function(x) {
 
 region_anchor_table <- function(x, region_col) {
   keys <- as.character(x[[region_col]])
+  keys <- keys[!is.na(keys) & nzchar(keys)]
   grouped_keys <- natural_sort(unique(keys))
   geoms <- lapply(grouped_keys, function(key) {
     idx <- which(keys == key)

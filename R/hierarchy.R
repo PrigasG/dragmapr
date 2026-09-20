@@ -693,7 +693,7 @@ summarise_spatial_crs <- function(x) {
     "No CRS was found. Assign a projected CRS before editing offsets."
   } else if (isTRUE(longlat)) {
     "This CRS uses longitude and latitude. Reproject before using drag distances as metres."
-  } else if (grepl("metre|meter", units_label, ignore.case = TRUE)) {
+  } else if (crs_units_are_metres(units_label)) {
     "Offsets are interpreted in metres."
   } else {
     paste0("Offsets use this CRS's map units: ", units_label, ".")
@@ -707,6 +707,16 @@ summarise_spatial_crs <- function(x) {
     is_longlat = isTRUE(longlat),
     bounds = if (!is.null(bbox)) unclass(bbox) else NULL,
     message = message
+  )
+}
+
+# Only exact metre/meter spellings count as metres; kilometre, decimetre, and
+# friends must not match.
+crs_units_are_metres <- function(units_label) {
+  grepl(
+    "^\\s*metres?\\s*$|^\\s*meters?\\s*$",
+    units_label,
+    ignore.case = TRUE
   )
 }
 

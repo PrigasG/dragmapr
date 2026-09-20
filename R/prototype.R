@@ -111,8 +111,10 @@
 #'
 #' @return Invisibly returns `file`.
 #' @seealso [render_dragged_map()] for the optional static ggplot2 render after
-#'   dragging; [make_region_labels()] and [as_drag_annotations()] to build
-#'   custom label tables; [prepare_dragmapr_sf()] to project uploaded geometry.
+#'   dragging (its "Label style mappings" section translates interactive
+#'   styling options to static arguments); [make_region_labels()] and
+#'   [as_drag_annotations()] to build custom label tables;
+#'   [prepare_dragmapr_sf()] to project uploaded geometry.
 #' @export
 #' @examples
 #' poly <- sf::st_sf(

@@ -96,6 +96,28 @@
 #'   saves the plot.
 #' @param width,height,dpi Output settings used when `file` is supplied.
 #'
+#' @details
+#' ## Label style mappings
+#'
+#' The interactive [drag_map_prototype()] helper and this static renderer
+#' expose the same label styling concepts under slightly different argument
+#' names and units. Use this mapping to carry a styled interactive layout into
+#' a matching static export:
+#'
+#' | Interactive (`drag_map_prototype()`) | Static (`render_dragged_map()`) | Notes |
+#' |---|---|---|
+#' | `label_text_size` | `label_size` | Pixels become points; the addin uses `label_text_size / 3`. |
+#' | `label_radius` | `marker_size` | Pixels become points; the addin uses `label_radius / 3`. |
+#' | `label_marker` | `show_label_marker` | Logical toggle in both. |
+#' | `label_marker_shape` | `label_marker_shape` | Same `"circle"`/`"rect"`/`"none"` values. |
+#' | `connector_color` | `connector_color` | Same name. |
+#' | `connector_linewidth` | `connector_linewidth` | Same name; browser pixels vs. plot units. |
+#' | `connector_linetype` | `connector_linetype` | Same values. |
+#' | `connector_endpoint` | `connector_endpoint` | Same values. |
+#' | `show_legend`, `legend_position`, `legend_title`, `legend_values`, `max_legend_keys` | Same names | Identical spelling. |
+#' | `region_palette` | `region_palette` | Same name. |
+#' | `map_background` | `map_background` | Same values. |
+#'
 #' @return A `ggplot` object.
 #' @seealso [drag_map_prototype()] for the interactive draggable browser helper
 #'   that produces the offset CSVs; [read_offsets()] and [read_label_state()]
@@ -308,7 +330,7 @@ render_dragged_map <- function(x,
     label_values <- select_label_ids(
       base_labels,
       max_labels = as.integer(max_labels),
-      prefer = label_prefer
+      label_prefer = label_prefer
     )
   }
   if (!is.null(label_values)) {
@@ -841,6 +863,12 @@ make_squiggle_data <- function(connectors, amplitude, waves, n = 80) {
       stringsAsFactors = FALSE
     )
   })
+  # Degenerate connectors contribute NULL rows; when every connector is
+  # degenerate the result must still be the documented typed empty frame.
+  rows <- rows[!vapply(rows, is.null, logical(1L))]
+  if (!length(rows)) {
+    return(data.frame(connector_id = character(), x = numeric(), y = numeric()))
+  }
   do.call(rbind, rows)
 }
 

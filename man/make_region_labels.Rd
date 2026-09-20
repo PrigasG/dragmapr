@@ -25,6 +25,9 @@ A drag label table with \code{label_id}, \code{region}, \code{label}, \code{x}, 
 }
 \description{
 Derive one default label per draggable region
+
+Missing or empty \code{region_col} values are dropped before anchors are derived;
+an error is raised when no valid region values remain.
 }
 \examples{
 poly <- sf::st_sf(

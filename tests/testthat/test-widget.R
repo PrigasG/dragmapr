@@ -41,7 +41,7 @@ test_that("widget preserves hierarchy state and emits compact live drags", {
   expect_false(grepl('sendInput("drag", snapshot("drag"', js, fixed = TRUE))
 })
 
-test_that("dragmapr_widget builds row-oriented payload", {
+test_that("d_widget builds row-oriented payload", {
   x <- sf::st_sf(
     region = "North",
     name = "North label",
@@ -70,7 +70,7 @@ test_that("dragmapr_widget builds row-oriented payload", {
   expect_equal(widget$x$geojson$type, "FeatureCollection")
 })
 
-test_that("dragmapr_widget accepts direct region_palette argument", {
+test_that("d_widget accepts direct region_palette argument", {
   x <- sf::st_sf(
     region = "North",
     geometry = sf::st_sfc(
@@ -153,7 +153,7 @@ test_that("updateDragmapr routes selected_feature as a composition update", {
   expect_error(updateDragmapr(session, "map", generation = NA), "generation")
 })
 
-test_that("dragmapr_edit accepts sf and layout-shaped inputs", {
+test_that("d_edit accepts sf and layout-shaped inputs", {
   poly <- sf::st_sfc(
     sf::st_polygon(list(rbind(c(0, 0), c(4, 0), c(4, 4), c(0, 4), c(0, 0)))),
     crs = 3857
@@ -184,7 +184,7 @@ test_that("dragmapr_edit accepts sf and layout-shaped inputs", {
   expect_error(d_edit(42), "must be a projected sf")
 })
 
-test_that("dragmapr_widget_state ingests a browser state event", {
+test_that("d_widget_state ingests a browser state event", {
   # Shape mirrors the payload the widget sends to input[[id_state]]: rows arrive
   # as a list of per-row lists, revision is the client's counter, and "" means
   # no selection.

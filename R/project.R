@@ -368,8 +368,8 @@ project_smart_connector_labels <- function(labels, label_offsets) {
   }
   offsets <- normalize_label_state(label_offsets, source = "`label_offsets`")
   idx <- match(as.character(labels$label_id), as.character(offsets$label_id))
-  dx <- ifelse(is.na(idx), 0, offsets$dx_m[idx])
-  dy <- ifelse(is.na(idx), 0, offsets$dy_m[idx])
+  dx <- zero_missing(offsets$dx_m[idx])
+  dy <- zero_missing(offsets$dy_m[idx])
   distance <- sqrt(dx^2 + dy^2)
   labels$connector_type <- ifelse(
     distance < 20000,

@@ -200,6 +200,10 @@ d_addin <- function(env = d_global_env()) {
     values <- as.character(values %||% character())
     values <- intersect(values, all_values)
     if (length(values) == length(all_values) && setequal(values, all_values)) {
+      # "All selected" stays NULL: the R render/prototype functions spell
+      # "all" as NULL, and the browser message path below expands NULL to the
+      # explicit group vector. A genuinely empty selection remains an empty
+      # vector so "show none" keeps working.
       NULL
     } else {
       values
@@ -741,10 +745,16 @@ d_addin <- function(env = d_global_env()) {
         "dragmapr-label-data",
         list(labels = if (is.data.frame(label_rows)) rows_for_message(label_rows) else list())
       )
-      session$sendCustomMessage("dragmapr-set-label-values", list(values = label_values))
-      session$sendCustomMessage("dragmapr-set-legend-values", list(values = legend_values))
-      session$sendCustomMessage("dragmapr-set-region-palette", list(palette = as.list(current_palette())))
+      # The parent page only forwards dragmapr-label-options to the helper
+      # iframe (as dragmapr-set-label-options, applied via Object.assign), so
+      # label/legend values and the palette travel inside the options payload.
+      # NULL ("all selected") expands to the explicit group vector; an empty
+      # selection stays empty so the browser hides everything, matching the
+      # R render/prototype functions.
+      all_groups <- region_groups()
       session$sendCustomMessage("dragmapr-label-options", list(options = list(
+        labelValues = if (is.null(label_values)) all_groups else label_values,
+        legendValues = if (is.null(legend_values)) all_groups else legend_values,
         labelMarker = !identical(input$label_marker_shape %||% "rect", "none"),
         labelMarkerShape = input$label_marker_shape %||% "rect",
         labelTextSize = input$label_text_size %||% 11,
@@ -787,7 +797,7 @@ d_addin <- function(env = d_global_env()) {
 
     shiny::observeEvent(input$sf_name, {
       nm <- input$sf_name
-      if (!nzchar(nm)) {
+      if (is.null(nm) || !nzchar(nm)) {
         return()
       }
       x <- tryCatch(get(nm, envir = env, inherits = FALSE), error = function(e) NULL)
@@ -922,7 +932,7 @@ d_addin <- function(env = d_global_env()) {
       nm <- input$sf_name
       region_col <- input$region_col
       label_col <- input$label_col
-      if (!nzchar(nm) || !nzchar(region_col)) {
+      if (is.null(nm) || is.null(region_col) || !nzchar(nm) || !nzchar(region_col)) {
         rv$status <- "Select an sf object and region column first."
         rv$status_class <- "err"
         return()

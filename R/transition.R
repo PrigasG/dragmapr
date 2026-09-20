@@ -14,7 +14,8 @@
 #' supplied anchors according to the returned order and timing columns.
 #'
 #' @param movement Data frame with `feature_id`, original/final anchors,
-#'   movement distance, and optional `animation_order`.
+#'   movement distance, and optional `animation_order` (positive whole numbers;
+#'   fractional values are rejected, not truncated).
 #' @param duration Per-feature duration in milliseconds.
 #' @param easing Easing identifier carried to the renderer.
 #' @param stagger Delay between successive animation-order values.
@@ -65,10 +66,13 @@ build_transition_plan <- function(movement,
   if (is.null(order)) {
     order <- rank(as.character(movement$feature_id), ties.method = "first")
   }
-  order <- suppressWarnings(as.integer(order))
-  if (anyNA(order) || any(order < 1L)) {
+  # Validate before coercion so fractional orders fail loudly instead of being
+  # silently truncated by as.integer().
+  order_num <- suppressWarnings(as.numeric(order))
+  if (anyNA(order_num) || any(order_num < 1) || any(order_num != trunc(order_num))) {
     stop("`animation_order` must contain positive whole numbers.", call. = FALSE)
   }
+  order <- as.integer(order_num)
   if (!"distance_m" %in% names(movement)) {
     movement$distance_m <- sqrt(
       (movement$final_anchor_x - movement$original_anchor_x)^2 +
@@ -379,7 +383,8 @@ build_elastic_transition <- function(child_sf,
 #'
 #' @param sf_obj An `sf` object containing the (expanded) child regions.
 #' @param group_col Column in `sf_obj` identifying the expanded group, usually
-#'   the parent id column.
+#'   the parent id column. Missing or empty values are ignored; an error is
+#'   raised when no valid group values remain.
 #' @param padding Single positive number in map units, or `NULL` (default) to
 #'   use 2.5 percent of the bounding-box diagonal of `sf_obj`.
 #'
@@ -410,7 +415,12 @@ make_group_boundaries <- function(sf_obj, group_col, padding = NULL) {
   .check_number(padding, "padding", min = 0)
 
   ids <- as.character(sf_obj[[group_col]])
-  groups <- split(seq_len(nrow(sf_obj)), ids)
+  keep <- !is.na(ids) & nzchar(ids)
+  if (!any(keep)) {
+    stop("No valid group values found in group_col '", group_col, "'.",
+         call. = FALSE)
+  }
+  groups <- split(seq_len(nrow(sf_obj))[keep], ids[keep])
 
   rows <- lapply(names(groups), function(g) {
     bb <- sf::st_bbox(sf_obj[groups[[g]], , drop = FALSE])
