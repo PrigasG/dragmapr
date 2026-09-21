@@ -55,8 +55,20 @@ test_that("RStudio addin exposes newer helper controls", {
   expect_match(addin_code, "movementConnectorColor = valid_color_or_default", fixed = TRUE)
   expect_match(addin_code, "showDragTrail = isTRUE(input$show_drag_trail)", fixed = TRUE)
 
-  expect_match(addin_code, 'dragmapr-set-label-values', fixed = TRUE)
-  expect_match(addin_code, 'dragmapr-set-legend-values', fixed = TRUE)
+  # Label/legend values and the region palette travel inside the
+  # dragmapr-label-options payload (the parent page has no handlers for the
+  # standalone dragmapr-set-* messages, so those sends were dead).
+  expect_no_match(addin_code, 'sendCustomMessage("dragmapr-set-label-values"', fixed = TRUE)
+  expect_no_match(addin_code, 'sendCustomMessage("dragmapr-set-legend-values"', fixed = TRUE)
+  expect_no_match(addin_code, 'sendCustomMessage("dragmapr-set-region-palette"', fixed = TRUE)
+  expect_match(addin_code, 'session$sendCustomMessage("dragmapr-label-options", list(options = list(', fixed = TRUE)
+  expect_match(addin_code, "labelValues = if (is.null(label_values)) all_groups else label_values", fixed = TRUE)
+  expect_match(addin_code, "legendValues = if (is.null(legend_values)) all_groups else legend_values", fixed = TRUE)
+  expect_match(addin_code, "regionPalette = as.list(current_palette())", fixed = TRUE)
   expect_match(addin_code, "legend_values = visible_region_values", fixed = TRUE)
   expect_match(addin_code, "label_values = visible_region_values", fixed = TRUE)
+
+  # NULL guards before nzchar() on addin inputs.
+  expect_match(addin_code, "if (is.null(nm) || !nzchar(nm))", fixed = TRUE)
+  expect_match(addin_code, "if (is.null(nm) || is.null(region_col) || !nzchar(nm) || !nzchar(region_col))", fixed = TRUE)
 })

@@ -21,3 +21,12 @@ read_dragmapr_state(path)
 \description{
 Read and write dragmapr state JSON
 }
+\examples{
+state <- d_state(
+  region_offsets = data.frame(region = "A", dx_m = 10, dy_m = -5)
+)
+path <- tempfile(fileext = ".json")
+write_dragmapr_state(state, path)
+restored <- read_dragmapr_state(path)
+d_state_equal(state, restored)
+}

@@ -46,7 +46,8 @@
 #'   `binding$region_col` and `binding$label_id_col` are used as defaults for
 #'   the corresponding top-level arguments.
 #' @param schema_version State schema version. Stored with JSON snapshots so
-#'   future migrations can read older projects.
+#'   future migrations can read older projects. Must use whole-number
+#'   `"major.minor.patch"` components, for example `"1.2.0".
 #' @param package_version Package version that created the state.
 #'
 #' @return An object of class `"dragmapr_state"`.
@@ -95,7 +96,7 @@ d_state <- function(level = "region",
   binding <- normalize_state_binding(binding, region_col, label_id_col, level)
   region_col <- binding$region_col
   label_id_col <- binding$label_id_col
-  schema_version <- normalize_state_scalar(schema_version, "schema_version")
+  schema_version <- normalize_schema_version(schema_version, "schema_version")
   package_version <- normalize_state_scalar(package_version, "package_version")
 
   structure(
@@ -167,6 +168,27 @@ normalize_state_scalar <- function(x, arg) {
   x
 }
 
+# Schema versions use whole-number "major.minor.patch" components (e.g.
+# "1.2.0"). Fractional or malformed components are rejected explicitly instead
+# of being carried silently into snapshots.
+normalize_schema_version <- function(x, arg) {
+  x <- normalize_state_scalar(x, arg)
+  if (is.null(x)) {
+    return(NULL)
+  }
+  parts <- strsplit(x, ".", fixed = TRUE)[[1L]]
+  whole <- suppressWarnings(as.integer(parts))
+  if (length(parts) != 3L || anyNA(whole) || any(whole < 0L) ||
+      any(parts != as.character(whole))) {
+    stop(
+      "`", arg, "` must use whole-number 'major.minor.patch' components, ",
+      "for example \"1.2.0\".",
+      call. = FALSE
+    )
+  }
+  x
+}
+
 normalize_state_binding <- function(binding = NULL,
                                     region_col = NULL,
                                     label_id_col = NULL,
@@ -217,6 +239,24 @@ validate_dragmapr_state <- function(state) {
     schema_version = state$schema_version %||% "1.2.0",
     package_version = state$package_version %||% "0.0.0"
   )
+}
+
+#' Validate a dragmapr state
+#'
+#' `d_validate_state()` checks a [d_state()] and returns `TRUE` when it is
+#' valid, throwing an informative error otherwise. It is the `d_`-prefixed
+#' predicate form of [validate_dragmapr_state()], convenient for assertions
+#' and `stopifnot()`.
+#'
+#' @param state A `dragmapr_state` object.
+#'
+#' @return `TRUE` for a valid state.
+#' @export
+#' @examples
+#' d_validate_state(d_state())
+d_validate_state <- function(state) {
+  validate_dragmapr_state(state)
+  TRUE
 }
 
 #' Compare dragmapr states
@@ -453,6 +493,13 @@ merge_state_rows <- function(base, update, key) {
   if (nrow(update) == 0L) {
     return(base)
   }
+  # Never let missing or empty keys from an update inject NA rows or silently
+  # drop base rows during the merge.
+  update_keys <- as.character(update[[key]])
+  update <- update[!is.na(update_keys) & nzchar(update_keys), , drop = FALSE]
+  if (nrow(update) == 0L) {
+    return(base)
+  }
   kept <- base[!base[[key]] %in% update[[key]], , drop = FALSE]
   out <- rbind(kept, update)
   out[order(out[[key]]), , drop = FALSE]
@@ -463,7 +510,7 @@ merge_state_rows <- function(base, update, key) {
 #' @param state A `dragmapr_state` object.
 #' @param snapshot A list previously returned by `snapshot_dragmapr_state()`.
 #' @param target_schema_version Schema version to migrate snapshots to before
-#'   restoring.
+#'   restoring. Must use whole-number `"major.minor.patch"` components.
 #'
 #' @return `snapshot_dragmapr_state()` returns a plain list.
 #'   `restore_dragmapr_state()` returns a `dragmapr_state`.
@@ -486,8 +533,11 @@ migrate_dragmapr_state <- function(snapshot, target_schema_version = "1.2.0") {
   if (!is.list(snapshot)) {
     stop("`snapshot` must be a list.", call. = FALSE)
   }
-  target_schema_version <- normalize_state_scalar(target_schema_version, "target_schema_version")
-  current <- snapshot$schema_version %||% "1.0.0"
+  target_schema_version <- normalize_schema_version(target_schema_version, "target_schema_version")
+  current <- normalize_schema_version(
+    snapshot$schema_version %||% "1.0.0",
+    "snapshot$schema_version"
+  )
   if (utils::compareVersion(current, target_schema_version) > 0L) {
     stop(
       "State schema version ", current, " is newer than this package supports (",
@@ -596,6 +646,14 @@ restore_state_styles <- function(x) {
 #' @return `write_dragmapr_state()` invisibly returns `path`;
 #'   `read_dragmapr_state()` returns a `dragmapr_state`.
 #' @export
+#' @examples
+#' state <- d_state(
+#'   region_offsets = data.frame(region = "A", dx_m = 10, dy_m = -5)
+#' )
+#' path <- tempfile(fileext = ".json")
+#' write_dragmapr_state(state, path)
+#' restored <- read_dragmapr_state(path)
+#' d_state_equal(state, restored)
 write_dragmapr_state <- function(state, path) {
   state <- validate_dragmapr_state(state)
   if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
@@ -651,9 +709,9 @@ apply_dragmapr_state <- function(x,
       )
     }
   }
-  composed <- compose_offsets(
-    base = base_offsets,
-    state = state,
+  composed <- effective_offsets(
+    state,
+    base_offsets = base_offsets,
     ancestor_offsets = ancestor_offsets
   )
   offsets <- data.frame(
@@ -679,8 +737,8 @@ inherit_drag_offsets <- function(state, from, to, relation) {
   relation <- validate_offset_relation(relation, from, to)
   parent_offsets <- state$region_offsets
   match_idx <- match(as.character(relation[[from]]), parent_offsets$region)
-  row_dx <- ifelse(is.na(match_idx), 0, parent_offsets$dx_m[match_idx])
-  row_dy <- ifelse(is.na(match_idx), 0, parent_offsets$dy_m[match_idx])
+  row_dx <- zero_missing(parent_offsets$dx_m[match_idx])
+  row_dy <- zero_missing(parent_offsets$dy_m[match_idx])
 
   out <- stats::aggregate(
     cbind(dx_m, dy_m) ~ region,
@@ -1021,8 +1079,10 @@ state_key_vector <- function(x, arg) {
 
 update_offset_table <- function(offsets, key, id, dx_m, dy_m, mode, extra) {
   idx <- match(id, as.character(offsets[[key]]))
-  current_dx <- if (is.na(idx)) 0 else offsets$dx_m[[idx]]
-  current_dy <- if (is.na(idx)) 0 else offsets$dy_m[[idx]]
+  # Incremental updates treat a missing row or missing value as zero movement,
+  # routed through zero_missing() for consistent NA handling.
+  current_dx <- zero_missing(offsets$dx_m[idx])
+  current_dy <- zero_missing(offsets$dy_m[idx])
   dx <- if (is.null(dx_m)) current_dx else numeric_offset_scalar(dx_m, "dx_m")
   dy <- if (is.null(dy_m)) current_dy else numeric_offset_scalar(dy_m, "dy_m")
   if (identical(mode, "increment")) {

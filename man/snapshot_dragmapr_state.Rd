@@ -18,7 +18,7 @@ restore_dragmapr_state(snapshot)
 \item{snapshot}{A list previously returned by \code{snapshot_dragmapr_state()}.}
 
 \item{target_schema_version}{Schema version to migrate snapshots to before
-restoring.}
+restoring. Must use whole-number \code{"major.minor.patch"} components.}
 }
 \value{
 \code{snapshot_dragmapr_state()} returns a plain list.

@@ -1,0 +1,96 @@
+---
+title: "Editing state: nudge, snap, and undo"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Editing state: nudge, snap, and undo}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+A `dragmapr_state` is an editable composition object: region and label
+offsets can be adjusted from R as well as in the browser. This vignette
+covers the small scripted-editing helpers -- nudging one offset, snapping a
+whole layout to a grid, validating a state, and keeping an undo/redo history
+while you work.
+
+```{r}
+library(dragmapr)
+
+state <- d_state(
+  region_offsets = data.frame(
+    region = c("A", "B"),
+    dx_m = c(1234, -567),
+    dy_m = c(89, 42)
+  )
+)
+```
+
+## Nudge one offset
+
+`d_nudge()` adds a delta on top of the current offset, like dragging a
+region or label slightly in the browser. It returns an updated state with a
+bumped version; the input state is unchanged.
+
+```{r}
+nudged <- d_nudge(state, "A", dx_m = 500, dy_m = -100)
+nudged$region_offsets
+
+label_state <- d_state(
+  label_offsets = data.frame(
+    label_id = "lbl-a", region = "A", dx_m = 10, dy_m = 20
+  )
+)
+d_nudge(label_state, "lbl-a", dx_m = -5, target = "label")$label_offsets
+```
+
+## Snap a layout to a grid
+
+`d_snap_offsets()` rounds every region and label offset to the nearest
+multiple of `grid`, tidying a hand-dragged layout into even increments.
+
+```{r}
+snapped <- d_snap_offsets(state, grid = 1000)
+snapped$region_offsets
+```
+
+## Validate a state
+
+`d_validate_state()` returns `TRUE` for a valid state and throws an
+informative error otherwise, so it works directly in assertions.
+
+```{r}
+d_validate_state(snapped)
+```
+
+## Undo and redo
+
+`d_history()` creates an undo/redo stack. Push a checkpoint after each
+meaningful edit; `d_undo()` steps back and `d_redo()` steps forward. Pushing
+a new checkpoint clears the redo stack, like a text editor.
+
+```{r}
+h <- d_history()
+d_history_push(h, state)
+d_history_push(h, nudged)
+d_history_push(h, snapped)
+
+back <- d_undo(h)  # nudged offsets again
+back$region_offsets$dx_m
+
+fwd <- d_redo(h)   # snapped offsets again
+fwd$region_offsets$dx_m
+
+# Branching clears the redo stack.
+branched <- d_nudge(back, "B", dx_m = 2000)
+d_history_push(h, branched)
+```
+
+The history object has reference semantics, so the push/undo/redo calls
+modify it in place -- reassignment is optional.

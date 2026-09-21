@@ -17,6 +17,12 @@
 #'
 #' @return A data frame with `region`, separate base/inherited/manual columns,
 #'   and `effective_dx_m`/`effective_dy_m`.
+#'
+#' @details
+#' `effective_offsets()` is the state-first alias for this composition path.
+#' Every caller that needs effective offsets goes through one of these two
+#' forms, so algorithmic, inherited, and manual layers always combine
+#' identically.
 #' @export
 compose_offsets <- function(base = NULL,
                             state,

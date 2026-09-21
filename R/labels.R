@@ -1,5 +1,8 @@
 #' Derive one default label per draggable region
 #'
+#' Missing or empty `region_col` values are dropped before anchors are derived;
+#' an error is raised when no valid region values remain.
+#'
 #' @param x An `sf` object in a projected CRS.
 #' @param region_col Column defining draggable groups.
 #' @param label_col Column used for label text. Defaults to `region_col`.
@@ -43,9 +46,16 @@ make_region_labels <- function(x,
   }
   point <- match.arg(point)
 
-  regions <- natural_sort(unique(as.character(x[[region_col]])))
+  regions <- unique(as.character(x[[region_col]]))
+  regions <- natural_sort(regions[!is.na(regions) & nzchar(regions)])
+  if (!length(regions)) {
+    stop("No valid region values found in region_col '", region_col, "'.",
+         call. = FALSE)
+  }
   rows <- lapply(regions, function(region) {
-    idx <- as.character(x[[region_col]]) == region
+    # `%in%` (not `==`) so missing keys yield FALSE rather than NA, which
+    # would otherwise inject NA geometries into st_union().
+    idx <- which(as.character(x[[region_col]]) %in% region)
     geom <- sf::st_union(sf::st_geometry(x)[idx])
     anchor <- if (point == "centroid") {
       sf::st_centroid(geom)
@@ -436,8 +446,9 @@ normalize_label_state <- function(state, source) {
 #'
 #' @param labels A drag label table accepted by [as_drag_labels()].
 #' @param max_labels Maximum number of label IDs to return.
-#' @param prefer Optional label IDs to keep first, for example labels from an
+#' @param label_prefer Optional label IDs to keep first, for example labels from an
 #'   expanded branch or labels the user has edited.
+#' @param prefer Deprecated alias for `label_prefer`.
 #'
 #' @return A character vector of label IDs.
 #' @export
@@ -447,7 +458,13 @@ normalize_label_state <- function(state, source) {
 #'   label = c("A", "B", "C"), x = 1:3, y = 1:3
 #' ))
 #' select_label_ids(labels, max_labels = 2)
-select_label_ids <- function(labels, max_labels = 25, prefer = NULL) {
+select_label_ids <- function(labels, max_labels = 25, label_prefer = NULL, prefer = NULL) {
+  if (!is.null(prefer)) {
+    warning("`prefer` is deprecated; use `label_prefer` instead.", call. = FALSE)
+    if (is.null(label_prefer)) {
+      label_prefer <- prefer
+    }
+  }
   labels <- normalize_labels(labels)
 
   max_labels <- suppressWarnings(as.integer(max_labels))
@@ -460,12 +477,12 @@ select_label_ids <- function(labels, max_labels = 25, prefer = NULL) {
     return(character())
   }
 
-  if (is.null(prefer) || length(prefer) == 0L) {
-    prefer <- character()
+  if (is.null(label_prefer) || length(label_prefer) == 0L) {
+    label_prefer <- character()
   }
-  prefer <- unique(as.character(prefer))
-  prefer <- intersect(prefer[nzchar(prefer)], ids)
-  rest <- setdiff(ids, prefer)
+  label_prefer <- unique(as.character(label_prefer))
+  label_prefer <- intersect(label_prefer[nzchar(label_prefer)], ids)
+  rest <- setdiff(ids, label_prefer)
 
-  utils::head(unique(c(prefer, rest)), max_labels)
+  utils::head(unique(c(label_prefer, rest)), max_labels)
 }

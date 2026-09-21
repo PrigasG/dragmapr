@@ -40,3 +40,9 @@ movement (for example from \code{explodemap}), inherited ancestor movement, and
 local manual edits remain separately inspectable while their sum becomes the
 effective movement applied to geometry.
 }
+\details{
+\code{effective_offsets()} is the state-first alias for this composition path.
+Every caller that needs effective offsets goes through one of these two
+forms, so algorithmic, inherited, and manual layers always combine
+identically.
+}

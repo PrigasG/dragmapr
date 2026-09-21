@@ -1,3 +1,64 @@
+# dragmapr (unreleased)
+
+## New features
+
+* Added scripted state editing helpers: `d_nudge()` adds a delta to one
+  region or label offset, `d_snap_offsets()` rounds every offset to the
+  nearest grid multiple, and `d_validate_state()` returns `TRUE` for valid
+  states (throwing an informative error otherwise).
+* Added an undo/redo history stack for offset states: `d_history()` creates
+  the stack, `d_history_push()` records checkpoints, and `d_undo()` /
+  `d_redo()` step backwards and forwards. Pushing a new checkpoint clears the
+  redo stack.
+
+## Fixes and hardening
+
+* Incremental offset updates (`update_region_offset()`,
+  `inherit_drag_offsets()`, connector builders) now route missing values
+  through `zero_missing()` for consistent `NA` treatment.
+* State merges strip missing/empty update keys so they cannot inject `NA`
+  rows or silently drop base rows.
+* `apply_dragmapr_state()` now composes through `effective_offsets()`,
+  keeping a single composition path with `compose_offsets()`.
+* `make_region_labels()`, `region_connectors()`, and `make_group_boundaries()`
+  ignore missing/empty region/group keys instead of letting them reach
+  grouping joins; `make_group_boundaries()` errors clearly when no valid
+  groups remain.
+* `make_squiggle_data()` returns the documented typed empty frame when every
+  connector is degenerate instead of untyped `NULL`.
+* `build_transition_plan()` validates `animation_order` as positive whole
+  numbers before coercion, so fractional orders fail loudly instead of being
+  silently truncated.
+* `select_label_ids()` gains `label_prefer` (the old `prefer` argument still
+  works with a deprecation warning), matching `render_dragged_map()`.
+* Schema versions are validated as whole-number `major.minor.patch`
+  components in `d_state()` and `migrate_dragmapr_state()`; fractional or
+  malformed versions are rejected.
+* `summarise_spatial_crs()` only reports metres for exact metre/meter unit
+  spellings; kilometre/decimetre-style units now fall through to the generic
+  map-units message.
+* The addin guards `NULL` inputs before `nzchar()` in the dataset picker and
+  render observers, and routes label/legend values plus the region palette
+  through the already-wired `dragmapr-label-options` message instead of the
+  three dead `dragmapr-set-*` custom messages the parent page never forwards.
+  Selection semantics are unchanged: all-selected stays `NULL` (every group)
+  for the R render/prototype functions and expands to the explicit group
+  vector for the browser, while a genuinely empty selection keeps hiding
+  everything.
+* `write_dragmapr_state()` documentation gains a tempfile write/read
+  round-trip example.
+
+## Documentation
+
+* `render_dragged_map()` documents the interactive/static label-style
+  mappings (for example `label_text_size` to `label_size`, with the addin's
+  divide-by-three pixels-to-points convention).
+* New `editing-state` vignette covering `d_nudge()`, `d_snap_offsets()`,
+  `d_validate_state()`, and the undo/redo history.
+* The spelling test moved from `tests/spelling.R` to
+  `tests/testthat/test-spelling.R`; `inst/examples/shiny_spatial_studio.R`
+  is now excluded from the source tarball via `.Rbuildignore`.
+
 # dragmapr 0.3.1
 
 * Pipeline Studio now declares and checks its `explodemap >= 0.4.0`

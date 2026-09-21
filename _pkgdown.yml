@@ -36,6 +36,8 @@ navbar:
       menu:
       - text: State-first workflow
         href: articles/state-first-workflow.html
+      - text: Editing state (nudge, snap, undo)
+        href: articles/editing-state.html
       - text: Basic draggable map
         href: articles/getting-started.html
       - text: Dragmap demo video
@@ -68,6 +70,13 @@ reference:
   contents:
   - d_edit
   - d_state
+  - d_validate_state
+  - d_nudge
+  - d_snap_offsets
+  - d_history
+  - d_history_push
+  - d_undo
+  - d_redo
   - d_state_diff
   - d_state_equal
   - summary.dragmapr_state
@@ -208,6 +217,7 @@ articles:
   navbar: ~
   contents:
   - state-first-workflow
+  - editing-state
   - getting-started
   - dragmap-demo
   - hhs-placeholder-shapes-demo
