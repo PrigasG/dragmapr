@@ -53,7 +53,9 @@ make_region_labels <- function(x,
          call. = FALSE)
   }
   rows <- lapply(regions, function(region) {
-    idx <- as.character(x[[region_col]]) == region
+    # `%in%` (not `==`) so missing keys yield FALSE rather than NA, which
+    # would otherwise inject NA geometries into st_union().
+    idx <- which(as.character(x[[region_col]]) %in% region)
     geom <- sf::st_union(sf::st_geometry(x)[idx])
     anchor <- if (point == "centroid") {
       sf::st_centroid(geom)

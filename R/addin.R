@@ -789,7 +789,7 @@ d_addin <- function(env = d_global_env()) {
     shiny::observeEvent(input$refresh_objects, {
       choices <- sf_choices()
       selected <- input$sf_name
-      if (!selected %in% unname(choices)) {
+      if (is.null(selected) || !selected %in% unname(choices)) {
         selected <- unname(choices[[1]])
       }
       shiny::updateSelectInput(session, "sf_name", choices = choices, selected = selected)

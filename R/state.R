@@ -534,7 +534,10 @@ migrate_dragmapr_state <- function(snapshot, target_schema_version = "1.2.0") {
     stop("`snapshot` must be a list.", call. = FALSE)
   }
   target_schema_version <- normalize_schema_version(target_schema_version, "target_schema_version")
-  current <- snapshot$schema_version %||% "1.0.0"
+  current <- normalize_schema_version(
+    snapshot$schema_version %||% "1.0.0",
+    "snapshot$schema_version"
+  )
   if (utils::compareVersion(current, target_schema_version) > 0L) {
     stop(
       "State schema version ", current, " is newer than this package supports (",

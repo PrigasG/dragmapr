@@ -175,11 +175,15 @@ connector_sf_input <- function(x) {
 
 region_anchor_table <- function(x, region_col) {
   keys <- as.character(x[[region_col]])
-  keys <- keys[!is.na(keys) & nzchar(keys)]
-  grouped_keys <- natural_sort(unique(keys))
+  valid <- !is.na(keys) & nzchar(keys)
+  grouped_keys <- natural_sort(unique(keys[valid]))
+  geom_all <- sf::st_geometry(x)
   geoms <- lapply(grouped_keys, function(key) {
-    idx <- which(keys == key)
-    suppressWarnings(sf::st_union(sf::st_geometry(x)[idx]))[[1L]]
+    # Index against the original rows: `valid` keeps the row positions of
+    # the filtered keys so missing keys cannot shift later regions onto
+    # the wrong geometries.
+    idx <- which(valid & keys == key)
+    suppressWarnings(sf::st_union(geom_all[idx]))[[1L]]
   })
   grouped <- sf::st_sf(
     region = grouped_keys,

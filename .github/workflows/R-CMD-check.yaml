@@ -42,6 +42,14 @@ jobs:
         if: matrix.config.os == 'macos-latest'
         run: echo "RSPM=https://packagemanager.posit.co/cran/2026-09-15" >> "$GITHUB_ENV"
 
+      # Workaround 2026-09-21: PPM's macOS binary for xfun 0.61 is still
+      # corrupt at the pinned snapshot, so install xfun from source (pure R,
+      # no compilation) before pak resolves dependencies; pak then sees the
+      # required version already installed and never downloads the bad .tgz.
+      - name: Install xfun from source on macOS
+        if: matrix.config.os == 'macos-latest'
+        run: Rscript -e 'install.packages("xfun", type = "source", repos = "https://packagemanager.posit.co/cran/2026-09-15")'
+
       - uses: r-lib/actions/setup-r@v2
         with:
           r-version: ${{ matrix.config.r }}

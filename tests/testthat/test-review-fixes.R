@@ -160,3 +160,31 @@ test_that("write/read_dragmapr_state round-trips through a tempfile", {
   restored <- read_dragmapr_state(path)
   expect_true(d_state_equal(s, restored))
 })
+
+test_that("region_anchor_table anchors regions on their own geometries", {
+  # fix_sf() puts row i's rectangle at x in [i, i + 0.9]; with keys
+  # c("A", NA, "B"), region B must anchor on row 3 (x in [3, 3.9]),
+  # not on row 2's geometry.
+  anchors <- region_anchor_table(fix_sf(c("A", NA, "B")), "region")
+
+  expect_equal(sort(as.character(anchors$region)), c("A", "B"))
+  bx <- anchors$x[anchors$region == "B"]
+  expect_true(bx >= 3 && bx <= 3.9)
+})
+
+test_that("make_region_labels anchors on the right geometry with missing keys", {
+  labels <- make_region_labels(fix_sf(c("A", NA, "B")), region_col = "region")
+
+  bx <- labels$x[labels$label_id == "B"]
+  expect_true(bx >= 3 && bx <= 3.9)
+})
+
+test_that("migrate_dragmapr_state normalizes the snapshot schema version", {
+  snap <- snapshot_dragmapr_state(d_state())
+  snap$schema_version <- "1.2"
+
+  expect_error(
+    migrate_dragmapr_state(snap),
+    "major.minor.patch"
+  )
+})
