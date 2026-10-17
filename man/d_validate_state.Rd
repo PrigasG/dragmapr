@@ -19,5 +19,12 @@ predicate form of \code{\link[=validate_dragmapr_state]{validate_dragmapr_state(
 and \code{stopifnot()}.
 }
 \examples{
-d_validate_state(d_state())
+d_validate_state(d_state())  # TRUE
+
+# Informative errors make it usable directly in assertions
+try(d_validate_state("not a state"))
+}
+\seealso{
+\code{\link[=validate_dragmapr_state]{validate_dragmapr_state()}} for the underlying validator,
+\code{\link[=d_state]{d_state()}} for constructing states.
 }

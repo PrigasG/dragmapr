@@ -51,7 +51,18 @@
 #' @param package_version Package version that created the state.
 #'
 #' @return An object of class `"dragmapr_state"`.
+#' @seealso [d_validate_state()] for checking a state, [d_nudge()] for
+#'   scripted edits.
 #' @export
+#' @examples
+#' # Empty state
+#' d_state()
+#'
+#' # With offsets, validated before use
+#' state <- d_state(
+#'   region_offsets = data.frame(region = "A", dx_m = 10, dy_m = -5)
+#' )
+#' d_validate_state(state)
 d_state <- function(level = "region",
                            region_col = NULL,
                            label_id_col = NULL,
@@ -251,9 +262,14 @@ validate_dragmapr_state <- function(state) {
 #' @param state A `dragmapr_state` object.
 #'
 #' @return `TRUE` for a valid state.
+#' @seealso [validate_dragmapr_state()] for the underlying validator,
+#'   [d_state()] for constructing states.
 #' @export
 #' @examples
-#' d_validate_state(d_state())
+#' d_validate_state(d_state())  # TRUE
+#'
+#' # Informative errors make it usable directly in assertions
+#' try(d_validate_state("not a state"))
 d_validate_state <- function(state) {
   validate_dragmapr_state(state)
   TRUE
@@ -650,6 +666,7 @@ restore_state_styles <- function(x) {
 #' state <- d_state(
 #'   region_offsets = data.frame(region = "A", dx_m = 10, dy_m = -5)
 #' )
+#' d_validate_state(state)  # TRUE: safe to persist
 #' path <- tempfile(fileext = ".json")
 #' write_dragmapr_state(state, path)
 #' restored <- read_dragmapr_state(path)

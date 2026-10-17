@@ -91,6 +91,14 @@ accepts a projected `sf`, an explodemap `grouped_exploded_map`, or a
 d_edit(regions, region_col = "region", state = state)
 ```
 
+Or edit programmatically from R — no browser needed:
+
+```{r compose-scripted, eval = FALSE}
+state <- d_nudge(state, "East", dx_m = 10000)
+state <- d_snap_offsets(state, grid = 5000)
+d_validate_state(state)
+```
+
 Inside Shiny, the widget reports every edit through an input named
 `paste0(outputId, "_state")`. Rebuild a `dragmapr_state` from it with
 `d_widget_state()` so the server always holds the live composition:

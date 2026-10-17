@@ -27,8 +27,8 @@ d_redo(history)
 }
 \description{
 \code{d_history()} creates an undo/redo stack for \code{dragmapr_state} objects. Push
-a checkpoint with \code{\link[=d_history]{d_history_push()}} after each meaningful edit, then step
-backwards with \code{\link[=d_history]{d_undo()}} and forwards with \code{\link[=d_history]{d_redo()}}. Pushing a new
+a checkpoint with \code{\link[=d_history_push]{d_history_push()}} after each meaningful edit, then step
+backwards with \code{\link[=d_undo]{d_undo()}} and forwards with \code{\link[=d_redo]{d_redo()}}. Pushing a new
 checkpoint clears the redo stack, matching familiar editor behaviour.
 }
 \details{
@@ -47,4 +47,7 @@ back <- d_undo(h) # s0 offsets again
 fwd <- d_redo(h)  # s1 offsets again
 d_state_equal(back, s0)
 d_state_equal(fwd, s1)
+}
+\seealso{
+\code{\link[=d_state]{d_state()}} for constructing states, \code{\link[=d_nudge]{d_nudge()}} for scripted edits.
 }

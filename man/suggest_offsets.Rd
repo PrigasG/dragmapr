@@ -65,6 +65,11 @@ poly <- sf::st_sf(
 suggest_offsets(poly, region_col = "region", method = "radial")
 suggest_offsets(poly, region_col = "region", method = "horizontal")
 suggest_offsets(poly, region_col = "region", method = "grid")
+
+# Tidy suggested offsets into even increments: build a state, then snap
+offsets <- suggest_offsets(poly, region_col = "region", method = "radial")
+state <- d_state(region_offsets = offsets)
+d_snap_offsets(state, grid = 10000)$region_offsets
 }
 \seealso{
 \code{\link[=drag_map_prototype]{drag_map_prototype()}} to open the interactive helper with the

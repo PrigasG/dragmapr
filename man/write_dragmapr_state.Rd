@@ -25,6 +25,7 @@ Read and write dragmapr state JSON
 state <- d_state(
   region_offsets = data.frame(region = "A", dx_m = 10, dy_m = -5)
 )
+d_validate_state(state)  # TRUE: safe to persist
 path <- tempfile(fileext = ".json")
 write_dragmapr_state(state, path)
 restored <- read_dragmapr_state(path)

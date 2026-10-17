@@ -30,6 +30,20 @@ Unknown ids gain a new row, matching \code{\link[=update_region_offset]{update_r
 state <- d_state(
   region_offsets = data.frame(region = "A", dx_m = 10, dy_m = 0)
 )
+# Nudge a region: the scripted equivalent of dragging slightly in the browser
 state <- d_nudge(state, "A", dx_m = 5)
+# Nudges chain; each returns an updated state with a bumped version
+state <- d_nudge(state, "A", dy_m = -3)
 state$region_offsets
+
+# Nudge a label instead with target = "label"
+ls <- d_state(
+  label_offsets = data.frame(label_id = "L1", region = "A", dx_m = 0, dy_m = 0)
+)
+d_nudge(ls, "L1", dx_m = 100, target = "label")$label_offsets
+}
+\seealso{
+\code{\link[=d_snap_offsets]{d_snap_offsets()}} for tidying offsets to a grid,
+\code{\link[=d_history]{d_history()}} for undoable editing, \code{\link[=update_region_offset]{update_region_offset()}} for the
+lower-level setter.
 }
