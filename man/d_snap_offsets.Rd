@@ -26,3 +26,7 @@ state <- d_state(
 state <- d_snap_offsets(state, grid = 1000)
 state$region_offsets
 }
+\seealso{
+\code{\link[=d_nudge]{d_nudge()}} for scripted offset adjustments,
+\code{\link[=suggest_offsets]{suggest_offsets()}} for generating candidate offsets.
+}

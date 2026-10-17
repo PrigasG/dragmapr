@@ -13,13 +13,25 @@
 #' @param target One of `"region"` (default) or `"label"`.
 #'
 #' @return An updated `dragmapr_state` with a bumped version.
+#' @seealso [d_snap_offsets()] for tidying offsets to a grid,
+#'   [d_history()] for undoable editing, [update_region_offset()] for the
+#'   lower-level setter.
 #' @export
 #' @examples
 #' state <- d_state(
 #'   region_offsets = data.frame(region = "A", dx_m = 10, dy_m = 0)
 #' )
+#' # Nudge a region: the scripted equivalent of dragging slightly in the browser
 #' state <- d_nudge(state, "A", dx_m = 5)
+#' # Nudges chain; each returns an updated state with a bumped version
+#' state <- d_nudge(state, "A", dy_m = -3)
 #' state$region_offsets
+#'
+#' # Nudge a label instead with target = "label"
+#' ls <- d_state(
+#'   label_offsets = data.frame(label_id = "L1", region = "A", dx_m = 0, dy_m = 0)
+#' )
+#' d_nudge(ls, "L1", dx_m = 100, target = "label")$label_offsets
 d_nudge <- function(state,
                     id,
                     dx_m = 0,
@@ -50,6 +62,8 @@ d_nudge <- function(state,
 #'   multiple of `grid`.
 #'
 #' @return An updated `dragmapr_state` with a bumped version.
+#' @seealso [d_nudge()] for scripted offset adjustments,
+#'   [suggest_offsets()] for generating candidate offsets.
 #' @export
 #' @examples
 #' state <- d_state(

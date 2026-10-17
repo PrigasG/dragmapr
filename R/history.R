@@ -14,6 +14,7 @@
 #' @return `d_history()` returns a `dragmapr_history` object;
 #'   `d_history_push()` returns the history invisibly; `d_undo()` and
 #'   `d_redo()` return the restored `dragmapr_state`.
+#' @seealso [d_state()] for constructing states, [d_nudge()] for scripted edits.
 #' @export
 #' @examples
 #' h <- d_history()

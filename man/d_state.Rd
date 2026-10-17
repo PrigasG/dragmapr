@@ -70,7 +70,7 @@ the corresponding top-level arguments.}
 
 \item{schema_version}{State schema version. Stored with JSON snapshots so
 future migrations can read older projects. Must use whole-number
-\code{"major.minor.patch"} components, for example \code{"1.2.0"}.}
+\code{"major.minor.patch"} components, for example `"1.2.0".}
 
 \item{package_version}{Package version that created the state.}
 }
@@ -91,4 +91,18 @@ recorded in \code{region_col}, while \code{level} remains the human geography le
 label. For durable round-trips prefer a stable code (e.g. a FIPS/ISO id)
 over a display name, and record which geometry the state was composed
 against with \code{geometry_id}.
+}
+\examples{
+# Empty state
+d_state()
+
+# With offsets, validated before use
+state <- d_state(
+  region_offsets = data.frame(region = "A", dx_m = 10, dy_m = -5)
+)
+d_validate_state(state)
+}
+\seealso{
+\code{\link[=d_validate_state]{d_validate_state()}} for checking a state, \code{\link[=d_nudge]{d_nudge()}} for
+scripted edits.
 }
